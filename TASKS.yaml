@@ -1024,7 +1024,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Trickle ICE and route diagnostics
-  status: todo
+  status: done
   goal: Complete trickle ICE handling and record selected candidate/route diagnostics.
   user_visible_behaviour: Complete trickle ICE handling and record selected candidate/route diagnostics.
   depends_on:

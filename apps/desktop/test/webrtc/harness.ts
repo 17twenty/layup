@@ -81,21 +81,8 @@ async function run(): Promise<Record<string, unknown>> {
   );
   const gotTrack = await waitFor(() => receivedTrackKind === 'video', 'the video track to arrive');
 
-  // Which route did ICE actually choose?
-  const stats = await peers.a.pc.getStats();
-  let route = 'unknown';
-  let bytesSent = 0;
-  stats.forEach((report: { type: string; state?: string; localCandidateId?: string; bytesSent?: number }) => {
-    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-      route = 'succeeded';
-      bytesSent = report.bytesSent ?? 0;
-    }
-  });
-  stats.forEach((report: { type: string; candidateType?: string }) => {
-    if (report.type === 'local-candidate' && report.candidateType) {
-      route = `${route}:${report.candidateType}`;
-    }
-  });
+  // Which route did ICE actually choose? Read through the production module.
+  const diagnostics = await peers.a.diagnostics();
 
   clearInterval(paint);
   for (const track of stream.getTracks()) track.stop();
@@ -106,8 +93,12 @@ async function run(): Promise<Record<string, unknown>> {
     connected,
     gotTrack,
     receivedTrackKind,
-    route,
-    bytesSent,
+    route: diagnostics.route,
+    relayed: diagnostics.relayed,
+    localCandidateType: diagnostics.localCandidateType,
+    remoteCandidateType: diagnostics.remoteCandidateType,
+    rttMs: diagnostics.rttMs,
+    bytesSent: diagnostics.bytesSent ?? 0,
     offers: relayed.filter((entry) => entry.endsWith(SIGNAL_OFFER)).length,
     answers: relayed.filter((entry) => entry.endsWith(SIGNAL_ANSWER)).length,
     candidates: relayed.filter((entry) => entry.endsWith(SIGNAL_CANDIDATE)).length,

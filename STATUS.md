@@ -6,37 +6,35 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0305
-- completed: 32
+- next task: P1-0306
+- completed: 33
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0304 direct 1:1 WebRTC peer connection
+- task: P1-0305 trickle ICE and route diagnostics
 - result: done
-- tests: `npm test` (137 passed incl. 10 peer cases), `make test-webrtc` -> WEBRTC OK (real Chromium, real track)
+- tests: `npm test` (142 passed incl. 5 diagnostics cases), `make test-webrtc` -> WEBRTC OK with route diagnostics
 - evidence:
-  - `apps/desktop/src/core/peer-connection.ts` - perfect negotiation (polite/impolite derived
-    from the two membership ids, so both sides agree with no extra round trip), trickle ICE,
-    automatic renegotiation, explicit `signal.bye` teardown, and a state object that explains a
-    failure instead of hanging
-  - 10 unit tests drive the logic against a fake RTCPeerConnection: offer/answer, candidate
-    relay, glare resolution both ways, forced-relay configuration, single goodbye, teardown on
-    a remote goodbye
-  - real proof (`make test-webrtc`): two connections built by the *production* module negotiate
-    inside a real Electron/Chromium window and a real canvas-captured video track flows across:
-    `{connected: true, gotTrack: true, receivedTrackKind: "video", route: "succeeded:host",
-    bytesSent: 1756, offers: 1, answers: 1, candidates: 2}`
-  - wired into CI (`xvfb-run npm run test:webrtc`) beside the boundary proof
+  - trickle ICE was already in the peer module (candidates relayed as discovered, end-of-
+    candidates not relayed); this task adds the diagnostics that make a connection explainable
+  - `apps/desktop/src/core/ice-diagnostics.ts` classifies the *selected* candidate pair as
+    direct / reflexive / relay / unknown, with candidate types, transport, RTT, available
+    outgoing bitrate and byte counters; `describeRoute` gives the UI a plain phrase
+  - handles both ways browsers expose the selected pair (transport.selectedCandidatePairId and
+    a succeeded pair) and says "unknown" rather than guessing (5 unit tests)
+  - `peer.diagnostics()` reads it from live stats, and the real Electron harness now reports
+    through the production module: `route: "direct", relayed: false, localCandidateType: "host",
+    remoteCandidateType: "host", rttMs: 0, bytesSent: 1758`
 
 ## Recent runs
 
-- P1-0210 done - menu/tray pending attention
 - P1-0301 done - enumerate and preview capture sources
 - P1-0302 done - capture permission onboarding
 - P1-0303 done - WebRTC signalling protocol
 - P1-0304 done - direct 1:1 WebRTC peer connection
+- P1-0305 done - trickle ICE and route diagnostics
 
 ## Known issues / decisions needed
 

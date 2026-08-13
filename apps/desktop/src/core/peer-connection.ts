@@ -8,6 +8,8 @@
  * argument, so the negotiation logic is testable without a browser and runs
  * unchanged in Electron.
  */
+import { readRouteDiagnostics, type RouteDiagnostics } from './ice-diagnostics';
+
 export const SIGNAL_OFFER = 'signal.offer';
 export const SIGNAL_ANSWER = 'signal.answer';
 export const SIGNAL_CANDIDATE = 'signal.candidate';
@@ -71,6 +73,8 @@ export interface PeerConnection {
   negotiate(): Promise<void>;
   /** Handles one relayed signalling message. */
   accept(type: string, message: SignalMessage): Promise<void>;
+  /** Which route ICE actually chose, read from live stats. */
+  diagnostics(): Promise<RouteDiagnostics>;
   addTrack(track: MediaStreamTrack, stream: MediaStream): RTCRtpSender;
   removeTrack(sender: RTCRtpSender): void;
   createDataChannel(label: string, init?: RTCDataChannelInit): RTCDataChannel;
@@ -226,6 +230,10 @@ export function createPeerConnection(options: PeerConnectionOptions): PeerConnec
         default:
           log.warn('unknown signalling message', { type });
       }
+    },
+
+    async diagnostics() {
+      return readRouteDiagnostics(await pc.getStats());
     },
 
     addTrack: (track, stream) => pc.addTrack(track, stream),
