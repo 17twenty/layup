@@ -901,7 +901,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Enumerate and preview capture sources
-  status: todo
+  status: done
   goal: Use Electron desktop capture to enumerate screens/windows, preview a chosen source and start/stop cleanly.
   user_visible_behaviour: Use Electron desktop capture to enumerate screens/windows, preview a chosen source and start/stop
     cleanly.

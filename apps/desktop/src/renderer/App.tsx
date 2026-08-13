@@ -6,6 +6,7 @@ import { RealtimeStatus } from './RealtimeStatus';
 import { PeopleGrid } from './people/PeopleGrid';
 import { LayupPanel } from './layup/LayupPanel';
 import { HappeningNow } from './layup/HappeningNow';
+import { CapturePicker } from './capture/CapturePicker';
 import { Invitations } from './requests/Invitations';
 import type { IdentityResponse, LayupStateResponse } from '../shared/ipc';
 
@@ -77,6 +78,7 @@ export function App() {
         }}
       />
       <LayupPanel />
+      <CapturePicker />
 
       <footer className="shell__footer">
         <Identity />

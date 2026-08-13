@@ -6,35 +6,36 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0301
-- completed: 28
+- next task: P1-0302
+- completed: 29
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0210 menu/tray pending attention
+- task: P1-0301 enumerate and preview capture sources
 - result: done
-- tests: `npm test` (110 passed incl. 5 attention cases), typecheck/lint green, boundary OK
+- tests: `npm test` (119 passed incl. 9 capture cases), typecheck/lint green, boundary OK
 - evidence:
-  - `apps/desktop/src/main/attention.ts` - badge, tooltip and a single dock bounce / frame
-    flash while a request is pending; wired to the requests supervisor so it always reflects
-    current state rather than a stream of events
-  - no repeated OS notification for repeated clicks: alerting is keyed on request id, and
-    repeated clicks collapse upstream into one request
-    (`does not alert again while the same request stays pending`)
-  - the badge and tooltip clear on accept, decline or expiry; a genuinely new request (new id)
-    alerts again, including after an earlier one was resolved
-  - outgoing requests never raise OS attention - your own waiting is not an interruption
-  - 5 unit tests drive an injected surface, so the rules are proven without Electron
+  - `apps/desktop/src/main/capture.ts` - `desktopCapturer` runs in the privileged process and
+    the renderer receives only a description (id, name, kind, display id, preview), never a
+    capture handle; it then asks Chromium for the stream by id
+  - untitled windows (OS artefacts) are dropped, empty thumbnails are omitted, screens sort
+    first, and the log line carries counts only - never window names, never pixels
+    (`never logs window names or pixels`)
+  - `useLocalCapture` + `CapturePicker`: pick a source, live preview, stop cleanly. Stop
+    releases every track, and unmounting releases capture too, so the OS recording indicator
+    never stays lit
+  - a refused capture shows the reason instead of a blank frame
+  - 4 main-process tests + 5 renderer tests
 
 ## Recent runs
 
-- P1-0206 done - organisation-open layups and Happening Now
 - P1-0207 done - link-join layups
 - P1-0208 done - incoming invitation experience
 - P1-0209 done - invite while already in a layup
 - P1-0210 done - menu/tray pending attention
+- P1-0301 done - enumerate and preview capture sources
 
 ## Known issues / decisions needed
 

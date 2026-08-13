@@ -25,6 +25,7 @@ const controlState = {
 
 const goodHandlers: Handlers = {
   'app:info': () => ({ appVersion: '0.1.0', protocolVersion: 1, platform: 'darwin' }),
+  'capture:sources': () => ({ sources: [] }),
   'control:status': () => controlState,
   'identity:current': () => ({ devUser: 'nick', resolved: false }),
   'realtime:status': () => ({ status: 'idle' as const, attempt: 0 }),
@@ -76,6 +77,7 @@ describe('main IPC boundary', () => {
     registerIpcHandlers(ipc.target, goodHandlers);
     expect([...ipc.registered.keys()]).toEqual([
       'app:info',
+      'capture:sources',
       'control:status',
       'identity:current',
       'realtime:status',

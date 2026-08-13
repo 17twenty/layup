@@ -59,6 +59,10 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
     app: {
       info: () => invoke('app:info', undefined),
     },
+    capture: {
+      /** Screens and windows that could be shared. */
+      sources: () => invoke('capture:sources', undefined),
+    },
     control: {
       /** Current connection state of the Go control plane. */
       status: () => invoke('control:status', undefined),

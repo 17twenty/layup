@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, desktopCapturer, ipcMain, shell } from 'electron';
 import * as path from 'node:path';
 import { PROTOCOL_VERSION } from '@layup/protocol';
 import { registerIpcHandlers, type Handlers } from './ipc';
@@ -11,6 +11,7 @@ import { createControlClient } from '../core/control-client';
 import { createLayupSupervisor } from './layups';
 import { createRequestsSupervisor } from './requests';
 import { createAttentionController } from './attention';
+import { createCaptureService } from './capture';
 import { secureWebPreferences } from './window';
 
 /**
@@ -124,6 +125,11 @@ realtime.client.on('hello.ok', () => {
   });
 });
 
+const capture = createCaptureService({
+  desktopCapturer,
+  log: log.with({ component: 'capture' }),
+});
+
 function buildHandlers(): Handlers {
   return {
     'app:info': () => ({
@@ -131,6 +137,7 @@ function buildHandlers(): Handlers {
       protocolVersion: PROTOCOL_VERSION,
       platform: process.platform as 'darwin' | 'win32' | 'linux',
     }),
+    'capture:sources': () => capture.listSources().then((sources) => ({ sources })),
     'control:status': () => control.status(),
     'identity:current': () => control.identity(),
     'realtime:status': () => realtime.state(),

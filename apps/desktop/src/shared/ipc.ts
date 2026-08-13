@@ -177,8 +177,22 @@ export const openLayupsResponse = isObject({
 });
 export type OpenLayupsResponse = ReturnType<typeof openLayupsResponse>;
 
+export const captureSourceShape = isObject({
+  id: isString,
+  name: isString,
+  kind: isEnum(['screen', 'window'] as const),
+  thumbnailDataUrl: optional(isString),
+  displayId: optional(isString),
+});
+
+export const captureSourcesResponse = isObject({
+  sources: isArrayOf(captureSourceShape, { max: 200 }),
+});
+export type CaptureSourcesResponse = ReturnType<typeof captureSourcesResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
+  'capture:sources': channel(isVoid, captureSourcesResponse),
   'control:status': channel(isVoid, controlStatusResponse),
   'identity:current': channel(isVoid, identityResponse),
   'realtime:status': channel(isVoid, realtimeStateResponse),
