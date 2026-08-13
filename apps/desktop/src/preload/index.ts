@@ -1,11 +1,11 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
+import { createLayupApi } from './api';
 
 /**
- * Preload bridge. Everything the renderer can reach is enumerated here and
- * nowhere else. No Node, filesystem, shell or native handles cross this line.
+ * Preload bridge. Everything the renderer can reach is enumerated in api.ts and
+ * nowhere else. No Node, filesystem, shell or native handle crosses this line.
  */
-const api = {
-  protocolVersion: 1,
-} as const;
-
-contextBridge.exposeInMainWorld('layup', api);
+contextBridge.exposeInMainWorld(
+  'layup',
+  createLayupApi((channel, payload) => ipcRenderer.invoke(channel, payload)),
+);

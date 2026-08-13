@@ -49,7 +49,7 @@ tasks:
   plan: PLAN-1
   phase: A
   title: Harden Electron process boundary
-  status: todo
+  status: done
   goal: Configure context isolation, disabled renderer Node integration and a narrow typed preload bridge.
   user_visible_behaviour: Configure context isolation, disabled renderer Node integration and a narrow typed preload bridge.
   depends_on:

@@ -6,27 +6,34 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0002
-- completed: 1
+- next task: P1-0003
+- completed: 2
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0001 bootstrap repository and pin toolchains
+- task: P1-0002 harden Electron process boundary
 - result: done
-- tests: `npm test` (1 passed), `make build-go`, `make lint-go`, `make test-go`, `npm run typecheck`, `npm run lint`, `npm run build` - all green
+- tests: `npm test` (18 passed), `npm run typecheck`, `npm run lint`, `npm run build`, `make test-boundary` - all green
 - metrics: none (no budget defined)
 - evidence:
-  - toolchain pinned: `.tool-versions`, `mise.toml` (node 26.5.0, go 1.26.4), `packageManager: npm@11.17.0`
-  - desktop: `apps/desktop` builds main/preload via tsc and renderer via Vite; `npm run dev` launches Electron
-  - control: `services/control` builds; `go run ./cmd/control` prints `layup-control dev (protocol v1)`
-  - protocol boundary: `protocol/VERSION`, `protocol/go`, `protocol/ts` (`@layup/protocol`)
-  - root commands: `make help|check|build|test|lint|typecheck`
+  - `apps/desktop/src/main/window.ts` - contextIsolation on, nodeIntegration off, sandbox on,
+    webviewTag off, insecure content off; asserted by `src/main/window.test.ts`
+  - `apps/desktop/src/shared/ipc.ts` - the only declared renderer->main surface, request and
+    response validated in both directions
+  - `apps/desktop/src/shared/validate.ts` - dependency-free validators; unknown properties are
+    rejected, not ignored (`src/shared/validate.test.ts`)
+  - `apps/desktop/src/preload/api.ts` - enumerated bridge, no generic invoke, bundled for a
+    sandboxed preload (`vite.preload.config.ts`)
+  - real-window proof `make test-boundary`: renderer sees `require/process/module/global/Buffer`
+    as `undefined`, `window.layup` keys exactly `['app','protocolVersion']`, smuggled payload
+    discarded -> `BOUNDARY OK`
 
 ## Recent runs
 
 1. P1-0001 done - workspace, toolchain pins, root developer commands.
+2. P1-0002 done - hardened Electron boundary, validated IPC, real-window boundary proof.
 
 ## Known issues / decisions needed
 

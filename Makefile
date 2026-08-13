@@ -58,6 +58,10 @@ test-js: ## Run TypeScript unit tests
 test-go: ## Run Go tests
 	@for m in $(GO_MODULES); do echo "==> test $$m"; (cd $$m && go test ./...) || exit 1; done
 
+.PHONY: test-boundary
+test-boundary: build-js ## Prove the Electron renderer boundary in a real window
+	npm run test:boundary --workspace apps/desktop
+
 .PHONY: check
 check: typecheck lint test build ## Full local gate: typecheck, lint, test, build
 

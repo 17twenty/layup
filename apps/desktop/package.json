@@ -6,13 +6,15 @@
   "main": "dist/main/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer",
     "build:main": "tsc -p tsconfig.node.json",
+    "build:preload": "vite build --config vite.preload.config.ts",
     "build:renderer": "vite build",
     "start": "npm run build && electron .",
-    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.preload.json && tsc -p tsconfig.web.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:boundary": "electron test/boundary/main.cjs"
   },
   "dependencies": {
     "@layup/protocol": "*",
