@@ -5,7 +5,7 @@ import { App } from './App';
 describe('bootstrap shell', () => {
   it('renders the product identity and the protocol version', () => {
     Object.defineProperty(window, 'layup', {
-      value: { protocolVersion: 1, app: { info: vi.fn() }, control: { status: vi.fn(async () => undefined) } },
+      value: { protocolVersion: 1, app: { info: vi.fn() }, control: { status: vi.fn(async () => undefined) }, identity: { current: vi.fn(async () => undefined) } },
       configurable: true,
       writable: true,
     });

@@ -363,7 +363,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Development user and organisation directory
-  status: todo
+  status: done
   goal: Add deterministic development identities/organisation directory suitable for running two or more local clients.
   user_visible_behaviour: Add deterministic development identities/organisation directory suitable for running two or more
     local clients.

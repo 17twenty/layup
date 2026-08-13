@@ -18,7 +18,19 @@ function harness(states: ControlConnectionState[]) {
   const log = createLogger({ level: 'debug', write: (line) => lines.push(line) });
   let clock = 0;
   const probe = vi.fn(async () => states.shift() ?? state());
-  const client: ControlClient = { baseUrl: 'http://127.0.0.1:8787', probe, apiGet: async () => ({}) as never };
+  const client: ControlClient = {
+    baseUrl: 'http://127.0.0.1:8787',
+    probe,
+    apiGet: async () => ({}) as never,
+    me: async () => ({
+      user: { id: 'usr_devkarlx', displayName: 'Karl' },
+      organisation: { id: 'org_devlayup', name: 'Layup Development' },
+    }),
+    directory: async () => ({
+      organisation: { id: 'org_devlayup', name: 'Layup Development' },
+      users: [{ id: 'usr_devkarlx', displayName: 'Karl' }],
+    }),
+  };
   const supervisor = createControlSupervisor({
     log,
     client,
@@ -59,6 +71,17 @@ describe('control supervisor', () => {
     expect(messages[0].controlStatus).toBe('unreachable');
     expect(messages[1].level).toBe('INFO');
     expect(messages[1].controlStatus).toBe('connected');
+  });
+
+  it('resolves the development identity from the control plane', async () => {
+    const h = harness([state()]);
+    const identity = await h.supervisor.identity();
+    expect(identity).toMatchObject({
+      devUser: 'nick',
+      resolved: true,
+      userId: 'usr_devkarlx',
+      organisationName: 'Layup Development',
+    });
   });
 
   it('shares a single in-flight probe between concurrent callers', async () => {

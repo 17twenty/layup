@@ -7,6 +7,7 @@
  * renderer nor a buggy handler can push unchecked data across the boundary.
  */
 import {
+  isBoolean,
   isEnum,
   isFiniteNumber,
   isInteger,
@@ -47,9 +48,22 @@ export const controlStatusResponse = isObject({
 });
 export type ControlStatusResponse = ReturnType<typeof controlStatusResponse>;
 
+/** Mirrors IdentityState in main/control.ts. */
+export const identityResponse = isObject({
+  devUser: isString,
+  resolved: isBoolean,
+  userId: optional(isString),
+  displayName: optional(isString),
+  organisationId: optional(isString),
+  organisationName: optional(isString),
+  detail: optional(isString),
+});
+export type IdentityResponse = ReturnType<typeof identityResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'control:status': channel(isVoid, controlStatusResponse),
+  'identity:current': channel(isVoid, identityResponse),
 } as const;
 
 export type IpcChannels = typeof ipcChannels;

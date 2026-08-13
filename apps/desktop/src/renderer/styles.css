@@ -53,3 +53,18 @@ body {
 .status__url {
   color: var(--muted);
 }
+
+.identity {
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+
+.identity--unresolved {
+  color: #f0805a;
+}
+
+.identity__handle {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}

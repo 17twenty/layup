@@ -26,6 +26,7 @@ app.whenReady().then(async () => {
       detail: 'boundary harness does not run a control service',
       checkedAtMs: 0,
     }),
+    'identity:current': () => ({ devUser: 'nick', resolved: false, detail: 'no control service' }),
   });
 
   const win = new BrowserWindow({
@@ -74,7 +75,7 @@ app.whenReady().then(async () => {
   expect(
     'window.layup keys',
     JSON.stringify(probe.layupKeys),
-    JSON.stringify(['app', 'control', 'protocolVersion']),
+    JSON.stringify(['app', 'control', 'identity', 'protocolVersion']),
   );
   expect('app:info protocolVersion', probe.appInfo && probe.appInfo.protocolVersion, 1);
   expect('discards smuggled payload', probe.smuggledPayloadDiscarded, true);

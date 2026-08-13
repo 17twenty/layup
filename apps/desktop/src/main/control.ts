@@ -4,6 +4,25 @@ import type { Logger } from './logging';
 /** Where the control plane lives. Overridable for self-hosted deployments. */
 export const DEFAULT_CONTROL_URL = 'http://127.0.0.1:8787';
 
+/**
+ * PLAN-1 identity is a development handle, chosen with LAYUP_DEV_USER. Running
+ * two clients on one machine is `LAYUP_DEV_USER=nick` and `LAYUP_DEV_USER=karl`.
+ * There are no secrets to configure - real identity is PLAN-2.
+ */
+export const DEFAULT_DEV_USER = 'nick';
+
+/** The identity this desktop is running as, as far as the server agrees. */
+export interface IdentityState {
+  devUser: string;
+  resolved: boolean;
+  userId?: string;
+  displayName?: string;
+  organisationId?: string;
+  organisationName?: string;
+  /** Why the identity could not be resolved, when resolved is false. */
+  detail?: string;
+}
+
 export interface ControlSupervisorOptions {
   baseUrl?: string;
   log: Logger;
@@ -11,12 +30,15 @@ export interface ControlSupervisorOptions {
   /** Probes closer together than this reuse the last answer. */
   minIntervalMs?: number;
   now?: () => number;
+  devUser?: string;
 }
 
 export interface ControlSupervisor {
   /** Latest connection state, probing only when the cached one is stale. */
   status(): Promise<ControlConnectionState>;
   lastState(): ControlConnectionState | undefined;
+  /** Who this desktop is running as. */
+  identity(): Promise<IdentityState>;
 }
 
 /**
@@ -25,16 +47,43 @@ export interface ControlSupervisor {
  */
 export function createControlSupervisor(options: ControlSupervisorOptions): ControlSupervisor {
   const baseUrl = options.baseUrl ?? DEFAULT_CONTROL_URL;
-  const client = options.client ?? createControlClient({ baseUrl });
+  const devUser = options.devUser ?? DEFAULT_DEV_USER;
+  const client = options.client ?? createControlClient({ baseUrl, devUser });
   const minIntervalMs = options.minIntervalMs ?? 1000;
   const now = options.now ?? (() => Date.now());
 
   let last: ControlConnectionState | undefined;
   let lastProbeAt = Number.NEGATIVE_INFINITY;
   let inFlight: Promise<ControlConnectionState> | undefined;
+  let identityState: IdentityState | undefined;
 
   return {
     lastState: () => last,
+
+    async identity() {
+      if (identityState?.resolved) return identityState;
+      try {
+        const me = await client.me();
+        identityState = {
+          devUser,
+          resolved: true,
+          userId: me.user.id,
+          displayName: me.user.displayName,
+          organisationId: me.organisation.id,
+          organisationName: me.organisation.name,
+        };
+        options.log.info('identity resolved', {
+          devUser,
+          userId: me.user.id,
+          organisationId: me.organisation.id,
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        // An unresolved identity is a normal state while the server is down.
+        identityState = { devUser, resolved: false, detail };
+      }
+      return identityState;
+    },
 
     async status() {
       if (last && now() - lastProbeAt < minIntervalMs) return last;

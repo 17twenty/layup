@@ -11,6 +11,7 @@ import {
   PROTOCOL_HEADER,
   PROTOCOL_VERSION,
   ValidationError,
+  isArrayOf,
   isFiniteNumber,
   isInteger,
   isObject,
@@ -56,7 +57,54 @@ export interface ControlClientOptions {
   /** Requests are abandoned after this long; an unreachable server must not hang the UI. */
   timeoutMs?: number;
   now?: () => number;
+  /**
+   * PLAN-1 development identity: a handle ("karl") or user id. There is no
+   * password or token yet - the server resolves it against its directory and
+   * decides the organisation itself.
+   */
+  devUser?: string;
 }
+
+/** Header carrying the PLAN-1 development identity. */
+export const DEV_USER_HEADER = 'X-Layup-Dev-User';
+
+export interface DirectoryUser {
+  id: string;
+  displayName: string;
+  avatarUrl?: string;
+  statusMessage?: string;
+}
+
+export interface DirectoryOrganisation {
+  id: string;
+  name: string;
+}
+
+export interface DirectorySnapshot {
+  organisation: DirectoryOrganisation;
+  users: DirectoryUser[];
+}
+
+export interface MeSnapshot {
+  user: DirectoryUser;
+  organisation: DirectoryOrganisation;
+}
+
+const userShape = isObject({
+  id: isString,
+  displayName: isString,
+  avatarUrl: optional(isString),
+  statusMessage: optional(isString),
+});
+
+const organisationShape = isObject({ id: isString, name: isString });
+
+const directoryShape = isObject({
+  organisation: organisationShape,
+  users: isArrayOf(userShape, { max: 500 }),
+});
+
+const meShape = isObject({ user: userShape, organisation: organisationShape });
 
 export class ControlRequestError extends Error {
   readonly status: number;
@@ -76,6 +124,10 @@ export interface ControlClient {
   probe(): Promise<ControlConnectionState>;
   /** Versioned API call. Throws ControlRequestError on a non-2xx response. */
   apiGet<T>(path: string): Promise<T>;
+  /** Who the control plane thinks this desktop is. */
+  me(): Promise<MeSnapshot>;
+  /** The people in this organisation. */
+  directory(): Promise<DirectorySnapshot>;
 }
 
 export function createControlClient(options: ControlClientOptions): ControlClient {
@@ -152,11 +204,24 @@ export function createControlClient(options: ControlClientOptions): ControlClien
       return { ...common, status: 'connected' };
     },
 
+    async me(): Promise<MeSnapshot> {
+      const envelope = await this.apiGet<{ payload?: unknown }>('/api/me');
+      return meShape(envelope.payload, 'identity.me');
+    },
+
+    async directory(): Promise<DirectorySnapshot> {
+      const envelope = await this.apiGet<{ payload?: unknown }>('/api/directory');
+      return directoryShape(envelope.payload, 'directory.users');
+    },
+
     async apiGet<T>(path: string): Promise<T> {
-      const response = await withTimeout(`${baseUrl}${path}`, {
-        method: 'GET',
-        headers: { [PROTOCOL_HEADER]: String(PROTOCOL_VERSION), Accept: 'application/json' },
-      });
+      const headers: Record<string, string> = {
+        [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
+        Accept: 'application/json',
+      };
+      if (options.devUser) headers[DEV_USER_HEADER] = options.devUser;
+
+      const response = await withTimeout(`${baseUrl}${path}`, { method: 'GET', headers });
       if (!response.ok) {
         const body = await response.json().catch(() => undefined);
         const code = extractErrorCode(body);

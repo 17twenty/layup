@@ -11,6 +11,8 @@ import (
 	"github.com/layup-app/layup/protocol"
 	"github.com/layup-app/layup/services/control/internal/buildinfo"
 	"github.com/layup-app/layup/services/control/internal/config"
+	"github.com/layup-app/layup/services/control/internal/directory"
+	"github.com/layup-app/layup/services/control/internal/domain"
 )
 
 // Clock lets tests control time without sleeping.
@@ -23,12 +25,16 @@ type Server struct {
 	now       Clock
 	startedAt time.Time
 	mux       *http.ServeMux
+	directory directory.Directory
+	layups    *domain.LayupService
 }
 
 // Options configures a Server. Zero values fall back to production defaults.
 type Options struct {
-	Logger *slog.Logger
-	Now    Clock
+	Logger    *slog.Logger
+	Now       Clock
+	Directory directory.Directory
+	Layups    *domain.LayupService
 }
 
 // New builds a Server with every route registered.
@@ -41,12 +47,22 @@ func New(cfg config.Config, opts Options) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
+	dir := opts.Directory
+	if dir == nil {
+		dir = directory.NewDev()
+	}
+	layups := opts.Layups
+	if layups == nil {
+		layups = domain.NewLayupService(domain.NewMemoryRepository(), domain.LayupServiceOptions{Logger: log})
+	}
 	s := &Server{
 		cfg:       cfg,
 		log:       log,
 		now:       now,
 		startedAt: now(),
 		mux:       http.NewServeMux(),
+		directory: dir,
+		layups:    layups,
 	}
 	s.routes()
 	return s
@@ -57,10 +73,17 @@ func (s *Server) routes() {
 	// protocol version this build cannot serve.
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)
 
-	// Everything under /api/ must declare a supported protocol version.
-	api := http.NewServeMux()
-	api.HandleFunc("GET /api/protocol", s.handleProtocolInfo)
-	s.mux.Handle("/api/", s.requireProtocolVersion(api))
+	// Versioned but unauthenticated: how a client learns what we speak.
+	public := http.NewServeMux()
+	public.HandleFunc("GET /api/protocol", s.handleProtocolInfo)
+
+	// Everything else additionally requires a resolvable identity.
+	authed := http.NewServeMux()
+	authed.HandleFunc("GET /api/me", s.handleMe)
+	authed.HandleFunc("GET /api/directory", s.handleDirectory)
+	public.Handle("/api/", s.requireIdentity(authed))
+
+	s.mux.Handle("/api/", s.requireProtocolVersion(public))
 }
 
 // ServeHTTP makes Server a plain http.Handler.

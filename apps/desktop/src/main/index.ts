@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as path from 'node:path';
 import { PROTOCOL_VERSION } from '@layup/protocol';
 import { registerIpcHandlers, type Handlers } from './ipc';
-import { createControlSupervisor, DEFAULT_CONTROL_URL } from './control';
+import { createControlSupervisor, DEFAULT_CONTROL_URL, DEFAULT_DEV_USER } from './control';
 import { createLogger, newCorrelationId } from './logging';
 import { secureWebPreferences } from './window';
 
@@ -21,6 +21,7 @@ const log = createLogger({
 
 const control = createControlSupervisor({
   baseUrl: process.env.LAYUP_CONTROL_URL || DEFAULT_CONTROL_URL,
+  devUser: process.env.LAYUP_DEV_USER || DEFAULT_DEV_USER,
   log: log.with({ component: 'control-client' }),
 });
 
@@ -32,6 +33,7 @@ function buildHandlers(): Handlers {
       platform: process.platform as 'darwin' | 'win32' | 'linux',
     }),
     'control:status': () => control.status(),
+    'identity:current': () => control.identity(),
   };
 }
 

@@ -41,6 +41,10 @@ export function createLayupApi(invoker: Invoker) {
       /** Current connection state of the Go control plane. */
       status: () => invoke('control:status', undefined),
     },
+    identity: {
+      /** Who this desktop is running as (PLAN-1 development identity). */
+      current: () => invoke('identity:current', undefined),
+    },
   } as const;
 }
 
