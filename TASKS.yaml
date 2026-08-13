@@ -1119,7 +1119,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Publish and render shared desktop
-  status: todo
+  status: done
   goal: Publish the selected screen track to the peer and render it remotely.
   user_visible_behaviour: Publish the selected screen track to the peer and render it remotely.
   depends_on:

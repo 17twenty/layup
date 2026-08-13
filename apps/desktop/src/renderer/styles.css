@@ -301,3 +301,107 @@ body {
   font-size: 13px;
   margin: 0 0 8px;
 }
+
+/* Shared screen */
+.screen {
+  border: 1px solid #23262e;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.screen__video {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+  display: block;
+}
+
+.screen__caption,
+.screen__empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+/* Capture picker */
+.capture__sources {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.capture__source {
+  width: 100%;
+  text-align: left;
+  background: #161920;
+  border: 1px solid #23262e;
+  border-radius: 8px;
+  padding: 8px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+}
+
+.capture__source--active {
+  border-color: var(--accent);
+}
+
+.capture__source img {
+  width: 100%;
+  border-radius: 4px;
+  display: block;
+}
+
+.capture__kind,
+.happening__item .tile__presence {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.capture__preview video {
+  width: 100%;
+  max-width: 480px;
+  border-radius: 8px;
+  background: #000;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.capture__permission {
+  border: 1px solid #4a3b2b;
+  background: #201a14;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+/* Happening now */
+.happening__list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.happening__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #23262e;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.happening h2 {
+  margin: 0;
+  font-size: 16px;
+}

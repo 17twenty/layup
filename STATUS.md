@@ -6,41 +6,39 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0308
-- completed: 35 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0309
+- completed: 36 of 68 (phases A, B and C complete; D in progress)
 - blocked: 0
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0307 forced TURN test mode
+- task: P1-0308 publish and render shared desktop
 - result: done
-- tests: `npm test` (148 passed incl. 6 ICE cases), `make test-webrtc` -> WEBRTC OK with both scenarios, boundary OK
+- tests: `npm test` (162 passed incl. 14 session/screen cases), `make test-webrtc` -> WEBRTC OK with decoded 320x240 screen share
 - evidence:
-  - two independent switches, both surfaced as `forcedBy`: `LAYUP_FORCE_RELAY` on the control
-    service (organisation policy, sent to every client) and on a desktop (that client only)
-  - `apps/desktop/src/main/ice.ts` fetches ICE servers + short-lived TURN credentials, caches
-    them until they are close to expiring, and keeps forcing relay even when the control plane
-    is unreachable - failing loudly beats quietly going direct (6 unit tests)
-  - deterministic proof that the mode is real (`make test-webrtc`, second scenario):
-    `{iceTransportPolicy: "relay", connected: false, hostCandidatesGathered: 0}` - with no TURN
-    reachable, relay-only gathers no host candidates and does not connect. If `forceRelay` were
-    ignored these peers would connect exactly like the direct scenario, so this is the guard
-    that stops a relay test passing vacuously
-  - the direct scenario still reports `route: "direct", relayed: false, rttMs: 1`
-  - `test/network/README.md` documents both switches, the automated halves, and the compose
-    procedure for verifying a real relayed session (pass condition: `route: "relay"`,
-    `relayed: true`, `forcedBy: "policy"`)
-  - the redaction rule caught `hasTurnCredential` as a field name; renamed to `turnAuthIssued`
-    rather than weakening the rule - the credential itself is never logged
+  - `apps/desktop/src/core/session.ts` owns a layup's peer connections and what is published on
+    them: publish/unpublish the shared desktop, route relayed signalling to the right peer,
+    render what each peer sends, and report per-peer connection state (10 unit tests)
+  - exactly one shared desktop per peer (ADR-0007): re-sharing calls `replaceTrack` rather than
+    adding a second sender, and a peer that joins after sharing started receives it
+  - stopping the share replaces the track with null - the peer connection and the layup survive
+    (`stops publishing without touching the peer connection`)
+  - real proof in Chromium (`make test-webrtc`, third scenario): a captured stream is published
+    through the session, arrives at the far side, and **decodes** into a video element at
+    `320x240` - `{received: true, decoded: true, inbound: {width: 320, height: 240},
+    route: "direct", connectedAfterUnpublish: true}`. Decoding is asserted because a track that
+    arrives but never decodes is a black screen share
+  - `SharedScreen` renders the presenter's stream, names them, flags a reconnecting presenter,
+    and treats "nobody is sharing" as a normal state rather than an error (4 renderer tests)
 
 ## Recent runs
 
-- P1-0304 done - direct 1:1 WebRTC peer connection
 - P1-0305 done - trickle ICE and route diagnostics
 - P1-0306 done - coturn configuration and ephemeral credentials
 - cleanup - ADR conformance check, dead code removal, docs corrected
 - P1-0307 done - forced TURN test mode
+- P1-0308 done - publish and render shared desktop
 
 ## Evidence index
 

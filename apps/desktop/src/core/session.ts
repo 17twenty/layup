@@ -1,0 +1,210 @@
+/**
+ * One layup's media session, as seen by this desktop.
+ *
+ * It owns the peer connections for the layup and what is published on them.
+ * It lives in the renderer because RTCPeerConnection is a DOM API, and it is
+ * framework-free so the rules are testable without React.
+ *
+ * PLAN-1 is 1:1, so there is normally exactly one peer, but nothing here
+ * assumes that: business semantics must not depend on media topology
+ * (ARCHITECTURE.md §3.3).
+ */
+import {
+  SIGNAL_ANSWER,
+  SIGNAL_BYE,
+  SIGNAL_CANDIDATE,
+  SIGNAL_OFFER,
+  createPeerConnection,
+  type PeerConnection,
+  type PeerState,
+  type SignalMessage,
+} from './peer-connection';
+import type { RouteDiagnostics } from './ice-diagnostics';
+
+/** Everything a peer publishes to us, or we publish to them. */
+export interface RemoteMedia {
+  membershipId: string;
+  userId?: string;
+  displayName?: string;
+  /** The shared desktop, when that peer is presenting. */
+  screen?: MediaStream;
+  connection: PeerState;
+}
+
+export interface SessionPeer {
+  membershipId: string;
+  peer: PeerConnection;
+  media: RemoteMedia;
+}
+
+export interface SessionOptions {
+  layupId: string;
+  localMembershipId: string;
+  sendSignal: (type: string, payload: SignalMessage) => void;
+  createRTCPeerConnection: (config: RTCConfiguration) => RTCPeerConnection;
+  iceServers?: RTCIceServer[];
+  forceRelay?: boolean;
+  onChange?: (peers: RemoteMedia[]) => void;
+  log?: {
+    debug(message: string, fields?: Record<string, unknown>): void;
+    info(message: string, fields?: Record<string, unknown>): void;
+    warn(message: string, fields?: Record<string, unknown>): void;
+  };
+}
+
+export interface Session {
+  /** Opens a connection to a membership, or returns the existing one. */
+  connect(membershipId: string, options?: { initiate?: boolean }): SessionPeer;
+  /** Routes one relayed signalling message to the right peer. */
+  handleSignal(type: string, message: SignalMessage): Promise<void>;
+  /** Publishes the local screen to every peer. Replaces any previous share. */
+  publishScreen(stream: MediaStream): void;
+  /** Stops publishing the local screen. The layup itself is unaffected. */
+  unpublishScreen(): void;
+  /** What each peer is sending us. */
+  remotes(): RemoteMedia[];
+  /** The stream this desktop is publishing, if any. */
+  localScreen(): MediaStream | undefined;
+  diagnostics(): Promise<Record<string, RouteDiagnostics>>;
+  /** Closes one peer, e.g. when they leave the layup. */
+  disconnect(membershipId: string, reason?: string): void;
+  close(reason?: string): void;
+}
+
+const noopLog = { debug: () => {}, info: () => {}, warn: () => {} };
+
+export function createSession(options: SessionOptions): Session {
+  const log = options.log ?? noopLog;
+  const peers = new Map<string, SessionPeer>();
+  // One sender per peer, so re-sharing replaces the track instead of adding a
+  // second one - exactly one shared desktop exists per layup (ADR-0007).
+  const screenSenders = new Map<string, RTCRtpSender>();
+  let localScreen: MediaStream | undefined;
+
+  const publish = () => options.onChange?.(remotes());
+  const remotes = () => [...peers.values()].map((entry) => entry.media);
+
+  function connect(membershipId: string, connectOptions: { initiate?: boolean } = {}): SessionPeer {
+    const existing = peers.get(membershipId);
+    if (existing) return existing;
+
+    const media: RemoteMedia = {
+      membershipId,
+      connection: { connection: 'new', ice: 'new', signalling: 'stable', connected: false },
+    };
+
+    const peer = createPeerConnection({
+      layupId: options.layupId,
+      localMembershipId: options.localMembershipId,
+      remoteMembershipId: membershipId,
+      sendSignal: options.sendSignal,
+      createPeerConnection: options.createRTCPeerConnection,
+      ...(options.iceServers ? { iceServers: options.iceServers } : {}),
+      ...(options.forceRelay ? { forceRelay: true } : {}),
+      log,
+      onTrack: (event) => {
+        // The shared desktop arrives as a video track on its own stream.
+        const [stream] = event.streams;
+        if (stream) media.screen = stream;
+        event.track.addEventListener('ended', () => {
+          if (media.screen === stream) {
+            media.screen = undefined;
+            publish();
+          }
+        });
+        log.info('remote track received', { membershipId, kind: event.track.kind });
+        publish();
+      },
+      onStateChange: (state) => {
+        media.connection = state;
+        publish();
+      },
+    });
+
+    const entry: SessionPeer = { membershipId, peer, media };
+    peers.set(membershipId, entry);
+
+    // Whoever is already publishing keeps publishing to a peer that arrives later.
+    if (localScreen) attachScreen(entry, localScreen);
+    if (connectOptions.initiate) void peer.negotiate();
+
+    publish();
+    return entry;
+  }
+
+  function attachScreen(entry: SessionPeer, stream: MediaStream) {
+    const [track] = stream.getVideoTracks();
+    if (!track) return;
+    const sender = screenSenders.get(entry.membershipId);
+    if (sender) {
+      // Replacing the track keeps the same m-line and avoids renegotiation.
+      void sender.replaceTrack(track);
+      return;
+    }
+    screenSenders.set(entry.membershipId, entry.peer.addTrack(track, stream));
+  }
+
+  return {
+    connect,
+    remotes,
+    localScreen: () => localScreen,
+
+    async handleSignal(type, message) {
+      const from = message.fromMembershipId;
+      if (!from || message.layupId !== options.layupId) return;
+      // An offer from someone we have not met yet opens the connection: the
+      // callee never initiates, so a glare needs no extra rule here.
+      const entry = peers.get(from) ?? connect(from);
+      await entry.peer.accept(type, message);
+      if (type === SIGNAL_BYE) peers.delete(from);
+    },
+
+    publishScreen(stream) {
+      localScreen = stream;
+      for (const entry of peers.values()) attachScreen(entry, stream);
+      log.info('publishing shared desktop', { peers: peers.size });
+      publish();
+    },
+
+    unpublishScreen() {
+      localScreen = undefined;
+      for (const [membershipId, sender] of screenSenders) {
+        // Null keeps the transceiver in place, so re-sharing does not have to
+        // renegotiate from scratch.
+        void sender.replaceTrack(null);
+        log.debug('stopped publishing to peer', { membershipId });
+      }
+      log.info('stopped sharing the desktop');
+      publish();
+    },
+
+    async diagnostics() {
+      const out: Record<string, RouteDiagnostics> = {};
+      for (const [membershipId, entry] of peers) {
+        out[membershipId] = await entry.peer.diagnostics();
+      }
+      return out;
+    },
+
+    disconnect(membershipId, reason) {
+      const entry = peers.get(membershipId);
+      if (!entry) return;
+      entry.peer.close(reason ?? 'they left the layup');
+      peers.delete(membershipId);
+      screenSenders.delete(membershipId);
+      publish();
+    },
+
+    close(reason) {
+      for (const [membershipId, entry] of peers) {
+        entry.peer.close(reason ?? 'leaving the layup');
+        screenSenders.delete(membershipId);
+      }
+      peers.clear();
+      localScreen = undefined;
+      publish();
+    },
+  };
+}
+
+export const SIGNAL_TYPES = [SIGNAL_OFFER, SIGNAL_ANSWER, SIGNAL_CANDIDATE, SIGNAL_BYE] as const;

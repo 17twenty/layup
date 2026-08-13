@@ -12,6 +12,7 @@ import {
   createPeerConnection,
   type SignalMessage,
 } from '../../src/core/peer-connection';
+import { createSession } from '../../src/core/session';
 
 declare global {
   interface Window {
@@ -174,7 +175,83 @@ async function runForcedRelay(): Promise<Record<string, unknown>> {
   };
 }
 
+/**
+ * Screen publish and render, through the session module.
+ *
+ * Proves the whole shared-desktop path in real Chromium: one side publishes a
+ * captured stream, the other receives it, and the frames actually decode into a
+ * <video> element with real dimensions. A track that arrives but never decodes
+ * is a black screen share, which is the failure this catches.
+ */
+async function runScreenShare(): Promise<Record<string, unknown>> {
+  const sessions: Record<string, ReturnType<typeof createSession>> = {};
+  const make = (id: 'a' | 'b', remote: 'a' | 'b') =>
+    createSession({
+      layupId: 'lay_screenshare',
+      localMembershipId: `mem_${id}`,
+      sendSignal: (type, payload) => {
+        void sessions[remote]?.handleSignal(type, { ...payload, fromMembershipId: `mem_${id}` });
+      },
+      createRTCPeerConnection: (config) => new RTCPeerConnection(config),
+      iceServers: [],
+    });
+  sessions.a = make('a', 'b');
+  sessions.b = make('b', 'a');
+
+  // Stand-in for desktop capture: a canvas that visibly changes every frame.
+  const canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 240;
+  const context = canvas.getContext('2d');
+  let frame = 0;
+  const paint = setInterval(() => {
+    if (!context) return;
+    frame += 1;
+    context.fillStyle = frame % 2 === 0 ? '#5b8def' : '#101216';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }, 33);
+  const captured = canvas.captureStream(30);
+
+  sessions.a.connect('mem_b', { initiate: true });
+  sessions.a.publishScreen(captured);
+
+  const received = await waitFor(
+    () => Boolean(sessions.b?.remotes()[0]?.screen),
+    'the shared desktop to arrive',
+  );
+
+  // Decode it for real.
+  const video = document.createElement('video');
+  video.autoplay = true;
+  video.muted = true;
+  video.srcObject = sessions.b.remotes()[0]?.screen ?? null;
+  document.body.appendChild(video);
+  await video.play().catch(() => undefined);
+  const decoded = await waitFor(() => video.videoWidth > 0 && video.videoHeight > 0, 'frames to decode');
+
+  const diagnostics = await sessions.b.diagnostics();
+  const inbound = { width: video.videoWidth, height: video.videoHeight };
+
+  // Stopping the share must not tear down the layup's connection.
+  sessions.a.unpublishScreen();
+  const stillConnected = sessions.a.remotes()[0]?.connection.connected === true;
+
+  clearInterval(paint);
+  for (const track of captured.getTracks()) track.stop();
+  sessions.a.close();
+  sessions.b.close();
+
+  return {
+    received,
+    decoded,
+    inbound,
+    route: diagnostics.mem_a?.route ?? 'unknown',
+    connectedAfterUnpublish: stillConnected,
+  };
+}
+
 window.__layupWebRTC = (async () => ({
   direct: await run(),
   forcedRelayWithoutTurn: await runForcedRelay(),
+  screenShare: await runScreenShare(),
 }))();

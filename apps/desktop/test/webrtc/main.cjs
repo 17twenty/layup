@@ -60,6 +60,14 @@ app.whenReady().then(async () => {
   if (relay.connected) failures.push('relay-only connected with no TURN server - the policy was ignored');
   if (relay.hostCandidatesGathered !== 0) failures.push('relay-only gathered host candidates');
 
+  // The shared desktop must arrive *and* decode: a track that never decodes is
+  // a black screen share.
+  const share = result.screenShare ?? {};
+  if (!share.received) failures.push('the shared desktop never arrived at the far side');
+  if (!share.decoded) failures.push('the shared desktop arrived but never decoded a frame');
+  if (!(share.inbound && share.inbound.width > 0)) failures.push('decoded video had no dimensions');
+  if (!share.connectedAfterUnpublish) failures.push('stopping the share tore down the connection');
+
   if (failures.length > 0) {
     console.error('WEBRTC FAILURES:\n' + failures.map((f) => ` - ${f}`).join('\n'));
     app.exit(1);
