@@ -1,0 +1,2191 @@
+schema_version: 1
+active_plan: PLAN-1
+tasks:
+- id: P1-0001
+  plan: PLAN-1
+  phase: A
+  title: Bootstrap repository and pin toolchains
+  status: todo
+  goal: Create the Electron/React/TypeScript desktop workspace, Go control service module, root developer commands and pinned
+    toolchain versions.
+  user_visible_behaviour: Create the Electron/React/TypeScript desktop workspace, Go control service module, root developer
+    commands and pinned toolchain versions.
+  depends_on: []
+  allowed_paths:
+  - apps/desktop/**
+  - services/control/**
+  - protocol/**
+  - README.md
+  - .gitignore
+  - package.json
+  - pnpm-lock.yaml
+  - pnpm-workspace.yaml
+  - go.work
+  - Makefile
+  - Taskfile.yml
+  - mise.toml
+  - .tool-versions
+  non_goals:
+  - Implement product UI beyond a bootstrap shell.
+  - Add database or WebRTC.
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Desktop dev/build command exists.
+  - Go service builds.
+  - Root command can run component checks.
+  - Toolchain/package-manager versions are pinned and documented.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0002
+  plan: PLAN-1
+  phase: A
+  title: Harden Electron process boundary
+  status: todo
+  goal: Configure context isolation, disabled renderer Node integration and a narrow typed preload bridge.
+  user_visible_behaviour: Configure context isolation, disabled renderer Node integration and a narrow typed preload bridge.
+  depends_on:
+  - P1-0001
+  allowed_paths:
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Context isolation on; Node integration off; no arbitrary shell/filesystem/native bridge.
+  acceptance:
+  - Renderer cannot access Node globals directly.
+  - Preload exposes only an explicitly typed API.
+  - IPC payload validation pattern exists and has a test.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0001-electron-first.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0003
+  plan: PLAN-1
+  phase: A
+  title: Control service health and config
+  status: todo
+  goal: Add Go config loading and /healthz plus build/version metadata.
+  user_visible_behaviour: Add Go config loading and /healthz plus build/version metadata.
+  depends_on:
+  - P1-0001
+  allowed_paths:
+  - services/control/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - GET /healthz returns success.
+  - Invalid config fails fast with useful error.
+  - Build/version metadata is available.
+  performance: No new regression beyond ordinary test noise.
+  observability: Structured startup log includes version and listen address, not secrets.
+  adrs:
+  - docs/adr/0002-go-control-plane.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0004
+  plan: PLAN-1
+  phase: A
+  title: Shared protocol version contract
+  status: todo
+  goal: Define a protocol version/envelope shared conceptually by desktop and Go service and reject unsupported versions.
+  user_visible_behaviour: Define a protocol version/envelope shared conceptually by desktop and Go service and reject unsupported
+    versions.
+  depends_on:
+  - P1-0002
+  - P1-0003
+  allowed_paths:
+  - protocol/**
+  - apps/desktop/**
+  - services/control/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Introduce protocol version and common event envelope.
+  security: Reject malformed/unversioned boundary messages rather than coercing them.
+  acceptance:
+  - Desktop sends/advertises protocol version.
+  - Server exposes/validates protocol version.
+  - Mismatch has deterministic error path.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0005
+  plan: PLAN-1
+  phase: A
+  title: Structured logging baseline
+  status: todo
+  goal: Add structured logging to desktop main process and Go control service with correlation/session fields.
+  user_visible_behaviour: Add structured logging to desktop main process and Go control service with correlation/session fields.
+  depends_on:
+  - P1-0001
+  allowed_paths:
+  - apps/desktop/**
+  - services/control/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Both components emit machine-parseable logs.
+  - A request/session correlation field can be attached.
+  - Secrets and raw media/input are excluded by convention/tests where practical.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0006
+  plan: PLAN-1
+  phase: A
+  title: CI build and test matrix
+  status: todo
+  goal: Create CI that builds/tests Go and desktop on Linux plus packaging/build checks for macOS and Windows runners where
+    available.
+  user_visible_behaviour: Create CI that builds/tests Go and desktop on Linux plus packaging/build checks for macOS and Windows
+    runners where available.
+  depends_on:
+  - P1-0001
+  allowed_paths:
+  - .github/**
+  - apps/desktop/**
+  - services/control/**
+  - package.json
+  - Makefile
+  - Taskfile.yml
+  non_goals:
+  - Code signing/notarisation.
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - CI runs unit tests and static checks.
+  - Desktop target build jobs exist for macOS, Windows and Linux.
+  - Go tests run.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0007
+  plan: PLAN-1
+  phase: A
+  title: Desktop-to-control smoke path
+  status: todo
+  goal: Make the desktop call the configured control service health endpoint and surface connection state in a developer/status
+    view.
+  user_visible_behaviour: Make the desktop call the configured control service health endpoint and surface connection state
+    in a developer/status view.
+  depends_on:
+  - P1-0002
+  - P1-0003
+  - P1-0004
+  allowed_paths:
+  - apps/desktop/**
+  - services/control/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - With server running, desktop reports connected.
+  - With server unavailable, desktop reports a useful disconnected state.
+  - Automated smoke test covers success/failure.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0008
+  plan: PLAN-1
+  phase: A
+  title: Latency benchmark harness skeleton
+  status: todo
+  goal: Create a repeatable harness and result schema for timestamped interaction/media benchmarks before real media is implemented.
+  user_visible_behaviour: Create a repeatable harness and result schema for timestamped interaction/media benchmarks before
+    real media is implemented.
+  depends_on:
+  - P1-0001
+  allowed_paths:
+  - test/latency/**
+  - benchmarks/**
+  - scripts/**
+  - README.md
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Harness emits machine-readable JSON results.
+  - Result schema includes scenario, timestamps/latency percentile slots and environment metadata.
+  - A synthetic test proves result generation.
+  performance: Harness overhead must be documented so later measurements can account for it.
+  observability: Benchmark JSON is the evidence artefact.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0101
+  plan: PLAN-1
+  phase: B
+  title: Domain IDs and core types
+  status: todo
+  goal: Implement User, Organisation, Layup and Membership domain types with stable opaque IDs.
+  user_visible_behaviour: Implement User, Organisation, Layup and Membership domain types with stable opaque IDs.
+  depends_on:
+  - P1-0003
+  allowed_paths:
+  - services/control/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Introduce serialisable identifiers/domain DTOs where needed.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Core types compile and have validation tests.
+  - Membership IDs are independent from User IDs.
+  - Layup supports zero/one creator_membership_id.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0102
+  plan: PLAN-1
+  phase: B
+  title: Layup lifecycle service
+  status: todo
+  goal: Implement create, join, leave and end-on-final-membership semantics using an in-memory repository.
+  user_visible_behaviour: Implement create, join, leave and end-on-final-membership semantics using an in-memory repository.
+  depends_on:
+  - P1-0101
+  allowed_paths:
+  - services/control/**
+  non_goals:
+  - Production database.
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - First membership activates layup.
+  - Layup remains active while any membership remains.
+  - Final membership leaving ends layup.
+  - No owner requirement exists for active layup.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0103
+  plan: PLAN-1
+  phase: B
+  title: Creator privilege devolution invariant
+  status: todo
+  goal: Implement creator authority scoped to the original membership and permanently lost when it leaves.
+  user_visible_behaviour: Implement creator authority scoped to the original membership and permanently lost when it leaves.
+  depends_on:
+  - P1-0102
+  allowed_paths:
+  - services/control/**
+  non_goals: []
+  forbidden:
+  - Moderator/host role.
+  - Creator reassignment by user ID.
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Original creator membership has creator privilege while active.
+  - Creator leaving does not elect/assign a replacement.
+  - Layup remains active if others remain.
+  - Same User rejoining gets a new ordinary membership with no creator privilege.
+  - Regression tests explicitly cover all four statements.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0004-membership-scoped-creator.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0104
+  plan: PLAN-1
+  phase: B
+  title: Development user and organisation directory
+  status: todo
+  goal: Add deterministic development identities/organisation directory suitable for running two or more local clients.
+  user_visible_behaviour: Add deterministic development identities/organisation directory suitable for running two or more
+    local clients.
+  depends_on:
+  - P1-0101
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  non_goals:
+  - OIDC/SAML.
+  - Enterprise directory sync.
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - At least four deterministic users can be selected/configured in development.
+  - All belong to a deterministic development organisation.
+  - Production-looking secrets are not required.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0105
+  plan: PLAN-1
+  phase: B
+  title: Presence state model
+  status: todo
+  goal: Implement personal and activity presence as orthogonal state.
+  user_visible_behaviour: Implement personal and activity presence as orthogonal state.
+  depends_on:
+  - P1-0104
+  - P1-0102
+  allowed_paths:
+  - services/control/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Add presence snapshot/update messages.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Personal states AVAILABLE/AWAY/DND/OFFLINE exist.
+  - Activity can represent none/private/open layup independently.
+  - Private activity can be redacted for outsiders.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0106
+  plan: PLAN-1
+  phase: B
+  title: Realtime WebSocket envelope
+  status: todo
+  goal: Implement authenticated/dev-identified WSS connection, event envelope, reconnect-safe subscription and heartbeat.
+  user_visible_behaviour: Implement authenticated/dev-identified WSS connection, event envelope, reconnect-safe subscription
+    and heartbeat.
+  depends_on:
+  - P1-0004
+  - P1-0104
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Authenticate/identify connection according to PLAN-1 dev identity mechanism; never trust client-supplied organisation
+    IDs.
+  acceptance:
+  - Desktop maintains a realtime connection.
+  - Heartbeat detects broken connection.
+  - Reconnect re-subscribes without duplicate handlers.
+  - Malformed events are rejected safely.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0107
+  plan: PLAN-1
+  phase: B
+  title: Presence publication and fan-out
+  status: todo
+  goal: Publish presence/activity changes to relevant organisation clients.
+  user_visible_behaviour: Publish presence/activity changes to relevant organisation clients.
+  depends_on:
+  - P1-0105
+  - P1-0106
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Two running clients see each other transition online/offline.
+  - Layup activity changes update without polling.
+  - Private layup details are not leaked in presence payloads.
+  performance: Presence updates should not require per-second polling.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0108
+  plan: PLAN-1
+  phase: B
+  title: People home grid
+  status: todo
+  goal: Implement the People-first home surface backed by realtime directory/presence data.
+  user_visible_behaviour: Implement the People-first home surface backed by realtime directory/presence data.
+  depends_on:
+  - P1-0107
+  allowed_paths:
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - People tiles render name, personal presence and activity state.
+  - Available/Away/DND/busy states are visually distinguishable.
+  - No New Meeting wizard is the primary UI.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0109
+  plan: PLAN-1
+  phase: B
+  title: Logical layup create/join/leave API
+  status: todo
+  goal: Expose control-plane commands and desktop state for creating, joining and leaving a logical layup without media.
+  user_visible_behaviour: Expose control-plane commands and desktop state for creating, joining and leaving a logical layup
+    without media.
+  depends_on:
+  - P1-0102
+  - P1-0106
+  - P1-0108
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Add layup/membership commands and events.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Two clients can enter the same logical layup.
+  - Membership list updates realtime.
+  - Leaving updates presence/activity.
+  - Creator-devolution behaviour is visible in API state.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0110
+  plan: PLAN-1
+  phase: B
+  title: Creator devolution end-to-end test
+  status: todo
+  goal: Add an e2e test proving creator leaves, layup survives, nobody inherits authority and former creator rejoins ordinarily.
+  user_visible_behaviour: Add an e2e test proving creator leaves, layup survives, nobody inherits authority and former creator
+    rejoins ordinarily.
+  depends_on:
+  - P1-0103
+  - P1-0109
+  allowed_paths:
+  - test/e2e/**
+  - services/control/**
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Automated test uses distinct membership IDs.
+  - No participant has creator privilege after creator leaves.
+  - Former creator rejoin does not restore privilege.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0201
+  plan: PLAN-1
+  phase: C
+  title: Join request domain and lifecycle
+  status: todo
+  goal: Implement unified invite/knock request types and PENDING/ACCEPTED/DECLINED/EXPIRED/CANCELLED lifecycle.
+  user_visible_behaviour: Implement unified invite/knock request types and PENDING/ACCEPTED/DECLINED/EXPIRED/CANCELLED lifecycle.
+  depends_on:
+  - P1-0109
+  allowed_paths:
+  - services/control/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Add JoinRequest DTOs/events.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Request state transitions are validated.
+  - Terminal states cannot be re-accepted.
+  - Expiry is deterministic/testable.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0202
+  plan: PLAN-1
+  phase: C
+  title: Invite available person to new layup
+  status: todo
+  goal: Clicking an available person sends an invitation; acceptance atomically creates the layup and both memberships.
+  user_visible_behaviour: Clicking an available person sends an invitation; acceptance atomically creates the layup and both
+    memberships.
+  depends_on:
+  - P1-0201
+  - P1-0108
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Requester can invite from People tile.
+  - Recipient sees requester identity and accept/decline.
+  - Accept creates one layup and two memberships atomically.
+  - Media is not started by the initial click.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0203
+  plan: PLAN-1
+  phase: C
+  title: Invite person into existing layup
+  status: todo
+  goal: A participant can invite a person into the layup they are currently in.
+  user_visible_behaviour: A participant can invite a person into the layup they are currently in.
+  depends_on:
+  - P1-0202
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Recipient sees existing layup context permitted by visibility.
+  - Accept joins existing layup rather than creating another.
+  - Decline leaves current memberships unchanged.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0204
+  plan: PLAN-1
+  phase: C
+  title: Knock on private layup
+  status: todo
+  goal: Clicking a person in a private layup creates a knock against that layup without exposing private details to requester.
+  user_visible_behaviour: Clicking a person in a private layup creates a knock against that layup without exposing private
+    details to requester.
+  depends_on:
+  - P1-0201
+  - P1-0108
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Requester sees pending/waiting state.
+  - Current layup members can accept/decline according to current policy.
+  - Outsider does not receive private title/participant list.
+  - One acceptance admits requester exactly once.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0205
+  plan: PLAN-1
+  phase: C
+  title: Collapse, cancel and expire requests
+  status: todo
+  goal: Prevent notification spam by collapsing duplicate pending requests and supporting sender cancel/automatic expiry.
+  user_visible_behaviour: Prevent notification spam by collapsing duplicate pending requests and supporting sender cancel/automatic
+    expiry.
+  depends_on:
+  - P1-0202
+  - P1-0204
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Duplicate requester/target knock reuses or focuses one pending request.
+  - Sender can cancel.
+  - Expired request disappears and cannot later be accepted.
+  - Repeated clicks do not create repeated recipient notifications.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0206
+  plan: PLAN-1
+  phase: C
+  title: Organisation-open layups and Happening Now
+  status: todo
+  goal: Implement ORGANISATION visibility, discovery and a lightweight Happening Now surface.
+  user_visible_behaviour: Implement ORGANISATION visibility, discovery and a lightweight Happening Now surface.
+  depends_on:
+  - P1-0109
+  - P1-0108
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Organisation-visible layup can set a title.
+  - Organisation members can discover it.
+  - Happening Now shows title, permitted participants/count/current presenter placeholder and Join.
+  - Private layups never appear.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0207
+  plan: PLAN-1
+  phase: C
+  title: Link-join layups
+  status: todo
+  goal: Implement LINK visibility and signed/opaque invitation links appropriate for PLAN-1.
+  user_visible_behaviour: Implement LINK visibility and signed/opaque invitation links appropriate for PLAN-1.
+  depends_on:
+  - P1-0201
+  - P1-0109
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Use unguessable/signed opaque token; do not treat possession as authority beyond configured link policy.
+  acceptance:
+  - A valid link opens/targets the intended layup.
+  - Invalid/expired link fails usefully.
+  - Link token does not expose raw internal IDs unnecessarily.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0208
+  plan: PLAN-1
+  phase: C
+  title: Incoming invitation experience
+  status: todo
+  goal: Create the prominent in-app incoming request card and accept/decline interactions.
+  user_visible_behaviour: Create the prominent in-app incoming request card and accept/decline interactions.
+  depends_on:
+  - P1-0202
+  - P1-0203
+  - P1-0204
+  allowed_paths:
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Incoming request is visually obvious without taking over the whole app.
+  - Accept/decline state updates immediately.
+  - Context is privacy-filtered by request type/visibility.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0209
+  plan: PLAN-1
+  phase: C
+  title: Invite while already in a layup
+  status: todo
+  goal: When invited while already in a layup, offer Join theirs / Invite them here / Decline without graph merging.
+  user_visible_behaviour: When invited while already in a layup, offer Join theirs / Invite them here / Decline without graph
+    merging.
+  depends_on:
+  - P1-0203
+  - P1-0208
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Join theirs leaves current layup then joins target with predictable ordering.
+  - Invite them here creates a new invitation to current layup.
+  - No literal room merge occurs.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0210
+  plan: PLAN-1
+  phase: C
+  title: Menu/tray pending attention
+  status: todo
+  goal: Add a non-spammy OS-level menu/tray attention state while an incoming request is pending.
+  user_visible_behaviour: Add a non-spammy OS-level menu/tray attention state while an incoming request is pending.
+  depends_on:
+  - P1-0208
+  allowed_paths:
+  - apps/desktop/**
+  non_goals:
+  - Wave/nudge feature.
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Pending invitation/knock changes menu/tray attention state.
+  - State clears on accept/decline/expiry.
+  - No repeated OS notification is emitted for duplicate clicks.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0301
+  plan: PLAN-1
+  phase: D
+  title: Enumerate and preview capture sources
+  status: todo
+  goal: Use Electron desktop capture to enumerate screens/windows, preview a chosen source and start/stop cleanly.
+  user_visible_behaviour: Use Electron desktop capture to enumerate screens/windows, preview a chosen source and start/stop
+    cleanly.
+  depends_on:
+  - P1-0002
+  allowed_paths:
+  - apps/desktop/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Screens and windows can be selected.
+  - Local preview works.
+  - Start/stop/restart does not duplicate tracks.
+  - Source disappearance has a useful failure state.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0001-electron-first.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0302
+  plan: PLAN-1
+  phase: D
+  title: Capture permission onboarding
+  status: todo
+  goal: Implement platform-aware screen-recording permission detection/onboarding where APIs allow.
+  user_visible_behaviour: Implement platform-aware screen-recording permission detection/onboarding where APIs allow.
+  depends_on:
+  - P1-0301
+  allowed_paths:
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - macOS denial/missing permission is detected or clearly surfaced.
+  - User receives actionable guidance rather than blank capture.
+  - Permission handling does not weaken Electron sandbox boundary.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0303
+  plan: PLAN-1
+  phase: D
+  title: WebRTC signalling protocol
+  status: todo
+  goal: Add offer/answer/trickle-ICE signalling scoped to an active layup and participant membership.
+  user_visible_behaviour: Add offer/answer/trickle-ICE signalling scoped to an active layup and participant membership.
+  depends_on:
+  - P1-0106
+  - P1-0109
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Add WebRTC offer/answer/ICE/renegotiation messages.
+  security: Authorise every signalling message against active membership; never trust client layup ID alone.
+  acceptance:
+  - Offer/answer/candidates route only between authorised memberships in same layup.
+  - Malformed signalling does not crash server.
+  - Disconnected membership cannot continue signalling.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0304
+  plan: PLAN-1
+  phase: D
+  title: Direct 1:1 WebRTC peer connection
+  status: todo
+  goal: Establish a direct peer connection between two active layup memberships before adding media.
+  user_visible_behaviour: Establish a direct peer connection between two active layup memberships before adding media.
+  depends_on:
+  - P1-0303
+  allowed_paths:
+  - apps/desktop/**
+  - test/network/**
+  non_goals: []
+  forbidden:
+  - SFU.
+  - Go media proxy.
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Two clients reach connected peer state.
+  - Connection state is visible in developer diagnostics.
+  - Disconnect closes peer resources.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0003-p2p-and-coturn.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0305
+  plan: PLAN-1
+  phase: D
+  title: Trickle ICE and route diagnostics
+  status: todo
+  goal: Complete trickle ICE handling and record selected candidate/route diagnostics.
+  user_visible_behaviour: Complete trickle ICE handling and record selected candidate/route diagnostics.
+  depends_on:
+  - P1-0304
+  allowed_paths:
+  - apps/desktop/**
+  - services/control/**
+  - protocol/**
+  - test/network/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - ICE candidates are exchanged incrementally.
+  - Selected candidate pair/type is surfaced in diagnostics.
+  - ICE failure has a useful error state.
+  performance: No new regression beyond ordinary test noise.
+  observability: Record route/candidate type and ICE state without credential leakage.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0306
+  plan: PLAN-1
+  phase: D
+  title: coturn configuration and ephemeral credentials
+  status: todo
+  goal: Add self-hosted coturn development deployment/config and control-plane issuance of short-lived TURN credentials.
+  user_visible_behaviour: Add self-hosted coturn development deployment/config and control-plane issuance of short-lived TURN
+    credentials.
+  depends_on:
+  - P1-0305
+  allowed_paths:
+  - deploy/compose/**
+  - services/control/**
+  - apps/desktop/**
+  - test/network/**
+  non_goals: []
+  forbidden:
+  - Custom TURN server.
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Development coturn starts from repo deployment config.
+  - Desktop receives time-limited credentials from control service.
+  - Secrets are not committed/logged.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0003-p2p-and-coturn.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0307
+  plan: PLAN-1
+  phase: D
+  title: Forced TURN test mode
+  status: todo
+  goal: Add deterministic config/test mode that forces relay so TURN is continuously verifiable.
+  user_visible_behaviour: Add deterministic config/test mode that forces relay so TURN is continuously verifiable.
+  depends_on:
+  - P1-0306
+  allowed_paths:
+  - apps/desktop/**
+  - test/network/**
+  - deploy/compose/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Forced-relay session connects through TURN.
+  - Diagnostics prove relay candidate selected.
+  - Automated/manual test instructions exist.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0308
+  plan: PLAN-1
+  phase: D
+  title: Publish and render shared desktop
+  status: todo
+  goal: Publish the selected screen track to the peer and render it remotely.
+  user_visible_behaviour: Publish the selected screen track to the peer and render it remotely.
+  depends_on:
+  - P1-0301
+  - P1-0304
+  allowed_paths:
+  - apps/desktop/**
+  - test/e2e/**
+  - test/latency/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Receiver renders host screen.
+  - Stopping share removes remote screen without ending layup.
+  - Restarting share re-establishes one active track.
+  performance: Do not add application buffering beyond WebRTC/render requirements.
+  observability: Expose source resolution, send FPS/bitrate where available.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0309
+  plan: PLAN-1
+  phase: D
+  title: Single active screen-share domain
+  status: todo
+  goal: Tie screen publication to ScreenShare domain state and enforce zero-or-one active shared desktop per layup.
+  user_visible_behaviour: Tie screen publication to ScreenShare domain state and enforce zero-or-one active shared desktop
+    per layup.
+  depends_on:
+  - P1-0308
+  - P1-0109
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - At most one active ScreenShare exists.
+  - Presenter stopping/leaving clears active share only.
+  - Layup remains active with no share.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0007-single-active-screen.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0310
+  plan: PLAN-1
+  phase: D
+  title: Minimal camera and microphone tracks
+  status: todo
+  goal: Add camera/audio capture and peer publication after membership is accepted.
+  user_visible_behaviour: Add camera/audio capture and peer publication after membership is accepted.
+  depends_on:
+  - P1-0304
+  - P1-0202
+  allowed_paths:
+  - apps/desktop/**
+  - services/control/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Never activate camera/microphone merely from sending a knock/invite.
+  acceptance:
+  - Camera and microphone begin only after accepted membership.
+  - Mute/camera state can be changed locally.
+  - Media devices are released on leave.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0311
+  plan: PLAN-1
+  phase: D
+  title: Join AV default policy
+  status: todo
+  goal: 'Implement default camera/microphone policy: participants 1-4 camera+mic on; participant 5+ camera on and mic muted,
+    subject to stricter local/org policy.'
+  user_visible_behaviour: 'Implement default camera/microphone policy: participants 1-4 camera+mic on; participant 5+ camera
+    on and mic muted, subject to stricter local/org policy.'
+  depends_on:
+  - P1-0310
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Expose effective join media policy.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Joining resulting count <=4 defaults mic on/camera on.
+  - Joining as participant 5+ defaults mic muted/camera on.
+  - A stricter personal preference remains stricter.
+  - Policy is testable without requiring five real cameras.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0312
+  plan: PLAN-1
+  phase: D
+  title: Baseline media/network benchmark
+  status: todo
+  goal: Record first real-machine LAN, ordinary-NAT and forced-TURN benchmark results using the benchmark schema.
+  user_visible_behaviour: Record first real-machine LAN, ordinary-NAT and forced-TURN benchmark results using the benchmark
+    schema.
+  depends_on:
+  - P1-0307
+  - P1-0308
+  - P1-0310
+  - P1-0008
+  allowed_paths:
+  - test/latency/**
+  - test/network/**
+  - benchmarks/**
+  - scripts/**
+  - STATUS.md
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - LAN result JSON exists.
+  - Ordinary NAT result JSON exists.
+  - Forced TURN result JSON exists.
+  - Results record route and available latency/bitrate/FPS metrics.
+  performance: Measure rather than assert the final target; flag obvious runaway buffering or unusable latency.
+  observability: Benchmark artefacts are committed or linked according to repository policy.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0401
+  plan: PLAN-1
+  phase: E
+  title: WebRTC data-channel abstraction
+  status: todo
+  goal: Create semantic data-channel setup for cursor-fast, annotation-fast and input-reliable without implementing input
+    yet.
+  user_visible_behaviour: Create semantic data-channel setup for cursor-fast, annotation-fast and input-reliable without implementing
+    input yet.
+  depends_on:
+  - P1-0304
+  allowed_paths:
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Introduce versioned channel message envelopes.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Channels have documented ordered/reliability settings.
+  - Reconnect recreates channels once.
+  - Channel errors surface in diagnostics.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0008-data-plane-semantics.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0402
+  plan: PLAN-1
+  phase: E
+  title: Normalised cursor protocol
+  status: todo
+  goal: Define cursor presence/move messages using display ID, normalised coordinates and sequence numbers.
+  user_visible_behaviour: Define cursor presence/move messages using display ID, normalised coordinates and sequence numbers.
+  depends_on:
+  - P1-0401
+  - P1-0309
+  allowed_paths:
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Add cursor.move/presence messages.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Coordinates are normalised rather than receiver pixels.
+  - Out-of-range/malformed coordinates are rejected/clamped intentionally.
+  - Sequence numbers permit stale update rejection.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0403
+  plan: PLAN-1
+  phase: E
+  title: Cursor sender coalescing
+  status: todo
+  goal: Send local collaborative cursor motion over cursor-fast with event coalescing/latest-wins semantics.
+  user_visible_behaviour: Send local collaborative cursor motion over cursor-fast with event coalescing/latest-wins semantics.
+  depends_on:
+  - P1-0402
+  allowed_paths:
+  - apps/desktop/**
+  - test/latency/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - High-frequency local pointer movement does not create an unbounded queue.
+  - Latest position wins under artificial backpressure.
+  - Cursor events are not routed through Go control plane.
+  performance: Synthetic stress test demonstrates bounded queue/memory.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0404
+  plan: PLAN-1
+  phase: E
+  title: Remote cursor overlay and interpolation
+  status: todo
+  goal: Render remote synthetic cursors locally, independently of video FPS, with interpolation/smoothing.
+  user_visible_behaviour: Render remote synthetic cursors locally, independently of video FPS, with interpolation/smoothing.
+  depends_on:
+  - P1-0403
+  - P1-0308
+  allowed_paths:
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Remote cursor does not move local OS cursor.
+  - Cursor is positioned correctly over scaled remote screen.
+  - Interpolation does not visibly lag far behind latest packet.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0405
+  plan: PLAN-1
+  phase: E
+  title: Participant cursor identity
+  status: todo
+  goal: Associate cursor overlay with membership identity/name and stable per-session visual differentiation.
+  user_visible_behaviour: Associate cursor overlay with membership identity/name and stable per-session visual differentiation.
+  depends_on:
+  - P1-0404
+  - P1-0109
+  allowed_paths:
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Multiple participant cursors are distinguishable.
+  - Leaving participant removes cursor promptly.
+  - Rejoining membership does not incorrectly reuse stale cursor state.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0406
+  plan: PLAN-1
+  phase: E
+  title: Drawing protocol
+  status: todo
+  goal: Define stroke begin/points/end/clear messages on annotation-fast with membership attribution.
+  user_visible_behaviour: Define stroke begin/points/end/clear messages on annotation-fast with membership attribution.
+  depends_on:
+  - P1-0401
+  - P1-0309
+  allowed_paths:
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Add stroke.begin/points/end/clear.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Stroke events can be reconstructed in order within a stroke.
+  - Malformed/oversized stroke messages are bounded/rejected.
+  - Events do not flow through Go control plane.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0407
+  plan: PLAN-1
+  phase: E
+  title: Drawing overlay
+  status: todo
+  goal: Render collaborative vector drawing above shared screen using the drawing protocol.
+  user_visible_behaviour: Render collaborative vector drawing above shared screen using the drawing protocol.
+  depends_on:
+  - P1-0406
+  allowed_paths:
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Remote stroke appears without altering encoded screen pixels.
+  - Clear action removes annotations.
+  - Overlay tracks resizing/scaling of shared screen.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0408
+  plan: PLAN-1
+  phase: E
+  title: Presenter drawing safety toggle
+  status: todo
+  goal: Add presenter-owned allow-drawing state and enforce it at receive/application boundary.
+  user_visible_behaviour: Add presenter-owned allow-drawing state and enforce it at receive/application boundary.
+  depends_on:
+  - P1-0407
+  - P1-0309
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Presenter sovereignty over their shared machine/session surface.
+  acceptance:
+  - Presenter can disable drawing immediately.
+  - Disabled participant drawing events are ignored/rejected, not merely hidden.
+  - Re-enabling permits new strokes.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0005-presenter-sovereignty.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0409
+  plan: PLAN-1
+  phase: E
+  title: Cursor and drawing stress benchmark
+  status: todo
+  goal: Stress at least four synthetic participants sending cursor/drawing traffic while screen video is active.
+  user_visible_behaviour: Stress at least four synthetic participants sending cursor/drawing traffic while screen video is
+    active.
+  depends_on:
+  - P1-0405
+  - P1-0408
+  - P1-0312
+  allowed_paths:
+  - test/latency/**
+  - benchmarks/**
+  - scripts/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Four synthetic cursors are exercised.
+  - Drawing traffic is exercised.
+  - No unbounded cursor queue/memory growth.
+  - Video/interaction metrics are captured before/after stress.
+  performance: Flag material degradation for human review rather than hiding it.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0501
+  plan: PLAN-1
+  phase: F
+  title: Native helper protocol and authentication
+  status: todo
+  goal: Define a minimal authenticated local IPC protocol between Electron main and native input helper.
+  user_visible_behaviour: Define a minimal authenticated local IPC protocol between Electron main and native input helper.
+  depends_on:
+  - P1-0002
+  allowed_paths:
+  - native/input-helper/**
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Use local socket/pipe authentication/unguessable session secret or equivalent; validate every command.
+  acceptance:
+  - Protocol has explicit version and allowed commands.
+  - Unauthenticated/unknown command is rejected.
+  - Renderer cannot invoke helper except through narrow main/preload flow.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0006-native-input-helper.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0502
+  plan: PLAN-1
+  phase: F
+  title: Native helper lifecycle
+  status: todo
+  goal: Start/stop/reconnect the helper from Electron main and surface capability/permission state.
+  user_visible_behaviour: Start/stop/reconnect the helper from Electron main and surface capability/permission state.
+  depends_on:
+  - P1-0501
+  allowed_paths:
+  - native/input-helper/**
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Helper starts once and exits with desktop.
+  - Crash/restart is detected.
+  - Permission/capability state is visible without exposing raw privileged API.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0503
+  plan: PLAN-1
+  phase: F
+  title: macOS pointer injection
+  status: todo
+  goal: Implement macOS pointer move/click/right-click/wheel primitives in helper with required Accessibility permission handling.
+  user_visible_behaviour: Implement macOS pointer move/click/right-click/wheel primitives in helper with required Accessibility
+    permission handling.
+  depends_on:
+  - P1-0502
+  allowed_paths:
+  - native/input-helper/**
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Injection remains helper-only.
+  acceptance:
+  - Pointer can be positioned and clicked in a test app.
+  - Right-click and wheel work.
+  - Missing Accessibility permission produces actionable state.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0504
+  plan: PLAN-1
+  phase: F
+  title: macOS keyboard injection
+  status: todo
+  goal: Implement macOS keyboard/modifier primitives with key-up cleanup.
+  user_visible_behaviour: Implement macOS keyboard/modifier primitives with key-up cleanup.
+  depends_on:
+  - P1-0503
+  allowed_paths:
+  - native/input-helper/**
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Text and common modifiers/shortcuts can be injected in a test app.
+  - Every key-down has deterministic cleanup path.
+  - Raw typed contents are not persisted/logged.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0505
+  plan: PLAN-1
+  phase: F
+  title: Windows pointer injection
+  status: todo
+  goal: Implement Windows pointer move/click/right-click/wheel primitives and document integrity-boundary limitations.
+  user_visible_behaviour: Implement Windows pointer move/click/right-click/wheel primitives and document integrity-boundary
+    limitations.
+  depends_on:
+  - P1-0502
+  allowed_paths:
+  - native/input-helper/**
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Pointer/click/right-click/wheel work in normal integrity test app.
+  - Failure against unsupported elevated boundary is surfaced usefully.
+  - No renderer injection path exists.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0506
+  plan: PLAN-1
+  phase: F
+  title: Windows keyboard injection
+  status: todo
+  goal: Implement Windows keyboard/modifier primitives with key-up cleanup.
+  user_visible_behaviour: Implement Windows keyboard/modifier primitives with key-up cleanup.
+  depends_on:
+  - P1-0505
+  allowed_paths:
+  - native/input-helper/**
+  - apps/desktop/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Text and common modifiers/shortcuts can be injected in normal test app.
+  - Key-up cleanup exists on disconnect/abort.
+  - Typed contents are not persisted/logged.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0507
+  plan: PLAN-1
+  phase: F
+  title: Reliable remote-input protocol
+  status: todo
+  goal: Implement versioned pointer/key events over input-reliable and validate membership/presenter grant context.
+  user_visible_behaviour: Implement versioned pointer/key events over input-reliable and validate membership/presenter grant
+    context.
+  depends_on:
+  - P1-0401
+  - P1-0502
+  allowed_paths:
+  - apps/desktop/**
+  - protocol/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: Add pointer/key/control/lease messages.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Pointer/key action messages use ordered/reliable channel.
+  - Malformed/replayed-invalid state is rejected.
+  - Cursor-fast remains separate.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0008-data-plane-semantics.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0508
+  plan: PLAN-1
+  phase: F
+  title: Presenter remote-control grants
+  status: todo
+  goal: Add presenter allow-control toggle plus per-membership pointer/keyboard grants and immediate revoke.
+  user_visible_behaviour: Add presenter allow-control toggle plus per-membership pointer/keyboard grants and immediate revoke.
+  depends_on:
+  - P1-0507
+  - P1-0309
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Presenter sovereignty; grants bound to active screen share and membership.
+  acceptance:
+  - Presenter can enable/disable remote control.
+  - Presenter can revoke one participant.
+  - Turning global control off revokes all grants immediately.
+  - No creator/moderator authority is required.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs:
+  - docs/adr/0005-presenter-sovereignty.md
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0509
+  plan: PLAN-1
+  phase: F
+  title: Remote click and wheel path
+  status: todo
+  goal: Map synthetic cursor coordinates to presenter screen and inject permitted click/right-click/double-click/wheel actions.
+  user_visible_behaviour: Map synthetic cursor coordinates to presenter screen and inject permitted click/right-click/double-click/wheel
+    actions.
+  depends_on:
+  - P1-0503
+  - P1-0505
+  - P1-0507
+  - P1-0508
+  allowed_paths:
+  - apps/desktop/**
+  - native/input-helper/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Permitted remote click targets expected scaled location.
+  - Wheel works.
+  - Revoked participant actions are dropped.
+  - Synthetic cursor movement alone never moves OS pointer.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0510
+  plan: PLAN-1
+  phase: F
+  title: Pointer drag lease
+  status: todo
+  goal: Implement exclusive short pointer lease across mouse-down/move/up so overlapping destructive drags do not fight.
+  user_visible_behaviour: Implement exclusive short pointer lease across mouse-down/move/up so overlapping destructive drags
+    do not fight.
+  depends_on:
+  - P1-0509
+  allowed_paths:
+  - apps/desktop/**
+  - native/input-helper/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Mouse-down acquires lease for membership.
+  - Other destructive pointer actions are held/rejected while lease active.
+  - Mouse-up/disconnect/timeout releases lease.
+  - No stuck mouse button remains.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0511
+  plan: PLAN-1
+  phase: F
+  title: Keyboard focus lease
+  status: todo
+  goal: Implement short keyboard/focus lease renewed by typing and released on inactivity/disconnect.
+  user_visible_behaviour: Implement short keyboard/focus lease renewed by typing and released on inactivity/disconnect.
+  depends_on:
+  - P1-0504
+  - P1-0506
+  - P1-0507
+  - P1-0508
+  allowed_paths:
+  - apps/desktop/**
+  - native/input-helper/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Typing grants/renews one short lease.
+  - Competing participant keys are handled predictably.
+  - Inactivity/disconnect releases lease.
+  - Held modifiers are cleaned up.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0512
+  plan: PLAN-1
+  phase: F
+  title: Local-input priority and stuck-input cleanup
+  status: todo
+  goal: Detect/handle local presenter input as priority and guarantee cleanup of held remote key/button state on abnormal
+    end.
+  user_visible_behaviour: Detect/handle local presenter input as priority and guarantee cleanup of held remote key/button
+    state on abnormal end.
+  depends_on:
+  - P1-0510
+  - P1-0511
+  allowed_paths:
+  - apps/desktop/**
+  - native/input-helper/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Presenter local interaction preempts/releases remote destructive lease according to documented rule.
+  - Disconnect cleans every tracked held key/button.
+  - Helper crash/restart cleanup path is tested as far as platform permits.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0513
+  plan: PLAN-1
+  phase: F
+  title: Emergency revoke
+  status: todo
+  goal: Add unmistakable remote-control indicator and local emergency revoke that immediately disables all remote input grants/leases.
+  user_visible_behaviour: Add unmistakable remote-control indicator and local emergency revoke that immediately disables all
+    remote input grants/leases.
+  depends_on:
+  - P1-0508
+  - P1-0512
+  allowed_paths:
+  - apps/desktop/**
+  - native/input-helper/**
+  - services/control/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Emergency revoke must not depend on remote peer cooperation.
+  acceptance:
+  - Remote-control enabled state is clearly visible to presenter.
+  - One local action/shortcut revokes all grants immediately.
+  - Active pointer/keyboard leases and held inputs are released.
+  - Remote peers observe revoked state.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0514
+  plan: PLAN-1
+  phase: F
+  title: Editor remote-control integration test
+  status: todo
+  goal: Prove a remote participant can use a normal editor via click, select/drag, type, scroll and shortcuts while presenter
+    can revoke.
+  user_visible_behaviour: Prove a remote participant can use a normal editor via click, select/drag, type, scroll and shortcuts
+    while presenter can revoke.
+  depends_on:
+  - P1-0509
+  - P1-0510
+  - P1-0511
+  - P1-0513
+  allowed_paths:
+  - test/e2e/**
+  - benchmarks/**
+  - scripts/**
+  - STATUS.md
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Click into editor works.
+  - Typing works.
+  - Selection/drag works.
+  - Scroll and at least one modifier shortcut work.
+  - Emergency revoke immediately prevents further input.
+  - Evidence/limitations recorded for macOS and Windows where runners/hardware allow.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0601
+  plan: PLAN-1
+  phase: G
+  title: Private versus open screen takeover
+  status: todo
+  goal: 'Implement single-screen takeover semantics: collaborative/private participant can take over with notice; advertised/open
+    participant requests to share.'
+  user_visible_behaviour: 'Implement single-screen takeover semantics: collaborative/private participant can take over with
+    notice; advertised/open participant requests to share.'
+  depends_on:
+  - P1-0309
+  - P1-0206
+  allowed_paths:
+  - services/control/**
+  - apps/desktop/**
+  - protocol/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Private/collaborative takeover replaces prior share without approval dialog and shows transition notice.
+  - Open advertised layup uses Ask to share while someone is presenting.
+  - If no presenter, participant may share.
+  - No multi-screen state is possible.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0602
+  plan: PLAN-1
+  phase: G
+  title: No-screen layup continuity
+  status: todo
+  goal: Prove stopping share or presenter leaving returns to AV-only layup rather than ending the session.
+  user_visible_behaviour: Prove stopping share or presenter leaving returns to AV-only layup rather than ending the session.
+  depends_on:
+  - P1-0309
+  - P1-0310
+  - P1-0601
+  allowed_paths:
+  - apps/desktop/**
+  - services/control/**
+  - test/e2e/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Stop sharing leaves memberships and AV intact.
+  - Presenter leaving clears share while remaining members stay.
+  - Another participant can subsequently share.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0603
+  plan: PLAN-1
+  phase: G
+  title: End-to-end People-to-Layup flow
+  status: todo
+  goal: Wire and test the canonical journey from People click through accept, AV, screen, cursors, drawing and control.
+  user_visible_behaviour: Wire and test the canonical journey from People click through accept, AV, screen, cursors, drawing
+    and control.
+  depends_on:
+  - P1-0209
+  - P1-0311
+  - P1-0409
+  - P1-0514
+  - P1-0602
+  allowed_paths:
+  - apps/desktop/**
+  - services/control/**
+  - native/input-helper/**
+  - protocol/**
+  - test/e2e/**
+  - test/latency/**
+  - benchmarks/**
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - No manual room code is required.
+  - Media starts only after accept.
+  - Screen/cursor/drawing/control become available in one session.
+  - Creator can leave and remaining layup continues with no authority transfer.
+  - Canonical e2e test documents manual real-machine steps for portions not automatable.
+  performance: Measure invitation-accept to session-ready time and record it; target roughly two seconds but do not falsify
+    evidence.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0604
+  plan: PLAN-1
+  phase: G
+  title: One-hour pairing soak evidence
+  status: todo
+  goal: Run a one-hour dogfood/soak session on real machines and capture operational/performance observations.
+  user_visible_behaviour: Run a one-hour dogfood/soak session on real machines and capture operational/performance observations.
+  depends_on:
+  - P1-0603
+  - P1-0312
+  allowed_paths:
+  - benchmarks/**
+  - STATUS.md
+  - PLAN-1-REVIEW.md
+  non_goals: []
+  forbidden: []
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - Session lasts approximately one hour or records exact early failure reason.
+  - Direct or TURN route is recorded.
+  - CPU/memory, reconnect/crash, permission and interaction observations are recorded.
+  - Any reason users reached for another tool is recorded without smoothing it over.
+  performance: 'Evidence task: report actual p50/p95 metrics available, not aspirational numbers.'
+  observability: Store machine-readable benchmark artefacts plus concise human notes.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
+- id: P1-0605
+  plan: PLAN-1
+  phase: G
+  title: Prepare PLAN-1 gate evidence bundle
+  status: todo
+  goal: Collect completed task/test/benchmark evidence and mark PLAN-1 GATE READY without judging the human product gate.
+  user_visible_behaviour: Collect completed task/test/benchmark evidence and mark PLAN-1 GATE READY without judging the human
+    product gate.
+  depends_on:
+  - P1-0604
+  - P1-0110
+  allowed_paths:
+  - STATUS.md
+  - PLAN-1-REVIEW.md
+  - benchmarks/**
+  - scripts/**
+  non_goals: []
+  forbidden:
+  - Declaring PLAN-1 product gate passed.
+  - Creating PLAN-2 tasks.
+  - Editing PLAN-2 hypotheses.
+  protocol_changes: None.
+  security: Preserve SPEC and ARCHITECTURE boundaries.
+  acceptance:
+  - STATUS.md states PLAN-1 GATE READY.
+  - PLAN-1-REVIEW.md evidence sections are prefilled where objective data exists but PASS/FAIL remains unchecked.
+  - Links/paths to benchmark/e2e evidence are present.
+  - PLAN-2.md and task graph are not modified/unlocked.
+  performance: No new regression beyond ordinary test noise.
+  observability: Use existing structured logging/metrics where relevant.
+  adrs: []
+  definition_of_done:
+  - All acceptance criteria satisfied.
+  - Relevant tests pass.
+  - Touched components lint/typecheck/build.
+  - No forbidden or non-goal work introduced.
+  - STATUS.md updated with concise evidence.
