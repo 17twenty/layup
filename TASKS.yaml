@@ -585,7 +585,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Join request domain and lifecycle
-  status: todo
+  status: done
   goal: Implement unified invite/knock request types and PENDING/ACCEPTED/DECLINED/EXPIRED/CANCELLED lifecycle.
   user_visible_behaviour: Implement unified invite/knock request types and PENDING/ACCEPTED/DECLINED/EXPIRED/CANCELLED lifecycle.
   depends_on:

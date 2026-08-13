@@ -6,36 +6,38 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0201
-- completed: 18
+- next task: P1-0202
+- completed: 19
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0110 creator devolution end-to-end test
+- task: P1-0201 join request domain and lifecycle
 - result: done
-- tests: `make test-e2e` (2 scenarios, 0 failures) against a freshly built control service
+- tests: `go test ./internal/domain/...` ok (9 new request cases)
 - evidence:
-  - `test/e2e/creator-devolution.test.mjs` runs against a real control service over real HTTP
-    and a real WebSocket, importing no application code - only the wire contract - so it
-    catches a regression made anywhere in the server
-  - asserts, in one scenario: distinct membership ids for creator and joiner; after the creator
-    leaves the layup stays active with `hasCreatorAuthority=false`, no `creatorMembershipId`
-    and no participant flagged; the remaining participant is pushed the same state over
-    realtime; the former creator's rejoin mints a new membership id and restores nothing
-  - also asserts there is no creator-claim endpoint (`POST /api/layups/{id}/creator` -> 404)
-  - second case: the layup ends only when the last membership leaves, `endedAt` is stamped,
-    and rejoining an ended layup is 409
-  - `make test-e2e` wired into the CI smoke job
+  - `services/control/internal/domain/requests.go` - one `JoinRequest` object with
+    `INVITE_USER_TO_NEW_LAYUP` / `INVITE_USER_TO_LAYUP` / `KNOCK_TO_JOIN` and states
+    PENDING/ACCEPTED/DECLINED/EXPIRED/CANCELLED
+  - transitions are validated: only terminal targets are accepted, and a terminal request can
+    never be re-resolved (`TestTerminalStatesAreFinal` covers all 9 combinations)
+  - expiry is deterministic - driven by the injected clock, resolved exactly at the deadline,
+    and an expired request cannot be accepted and disappears from both sides
+    (`TestExpiryIsDeterministic`)
+  - duplicate collapse is in the domain, not the UI: an equivalent pending request from the
+    same requester is returned instead of creating a second notification
+    (`TestDuplicateRequestsCollapse`, `TestKnocksCollapseByRequesterAndLayup`)
+  - shape rules enforced: invitations need a recipient, knocks need a layup, an invitation to a
+    new layup must not name one, and you cannot invite yourself
 
 ## Recent runs
 
-- P1-0106 done - realtime WebSocket envelope
 - P1-0107 done - presence publication and fan-out
 - P1-0108 done - people home grid
 - P1-0109 done - logical layup create/join/leave API
 - P1-0110 done - creator devolution end-to-end test
+- P1-0201 done - join request domain and lifecycle
 
 ## Known issues / decisions needed
 
