@@ -104,6 +104,9 @@ func (s *Server) handleRealtimeMessage(ctx context.Context, conn *realtime.Conn,
 		s.feed.PublishUser(ctx, conn.User())
 		return nil
 	default:
+		if isSignalType(env.Type) {
+			return s.relaySignal(ctx, conn.User(), env)
+		}
 		return errors.New("unsupported message type " + env.Type)
 	}
 }

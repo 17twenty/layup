@@ -6,34 +6,37 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0303
-- completed: 30
+- next task: P1-0304
+- completed: 31
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0302 capture permission onboarding
+- task: P1-0303 WebRTC signalling protocol
 - result: done
-- tests: `npm test` (127 passed incl. 8 permission cases), typecheck/lint green, boundary OK
+- tests: `make test-go` (4 signalling cases over real WebSockets), fmt/vet green
 - evidence:
-  - `apps/desktop/src/main/permissions.ts` - reads macOS screen-recording status and turns each
-    state into plain guidance: denied -> "Privacy & Security → Screen Recording ... then restart",
-    restricted -> an administrator problem, not-determined -> approve the prompt and restart
-  - Windows and Linux report `not-required` and get no invented gate; an unreadable status stays
-    usable rather than blocking the person (`stays usable when the status cannot be read`)
-  - `capture:openSettings` deep-links macOS to the right settings page; it is a no-op elsewhere
-  - the picker shows an alert with the guidance and a settings button only when capture is
-    actually blocked, and says nothing when permission is fine
-  - 6 main-process tests + 2 renderer tests
+  - signalling rides the existing realtime envelope: `signal.offer`, `signal.answer`,
+    `signal.candidate`, `signal.bye`, addressed by *membership* so a rejoin never inherits a
+    half-finished negotiation
+  - the server relays and nothing else: it never inspects, rewrites, stores or logs SDP or
+    candidates (the debug line carries route metadata only) and is never in the media path
+  - the sender is stamped server-side: a forged `fromMembershipId`/`fromUserId` is overwritten
+    (`TestSenderCannotSpoofIdentityOrReachOutsideTheLayup`)
+  - both ends must be active participants of the named layup - an outsider gets
+    "you are not in that layup", an unknown membership is rejected, and a peer cannot signal
+    itself
+  - malformed messages (no layup, no recipient, offer without sdp) get an error envelope and
+    the connection survives
 
 ## Recent runs
 
-- P1-0208 done - incoming invitation experience
 - P1-0209 done - invite while already in a layup
 - P1-0210 done - menu/tray pending attention
 - P1-0301 done - enumerate and preview capture sources
 - P1-0302 done - capture permission onboarding
+- P1-0303 done - WebRTC signalling protocol
 
 ## Known issues / decisions needed
 

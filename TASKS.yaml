@@ -961,7 +961,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: WebRTC signalling protocol
-  status: todo
+  status: done
   goal: Add offer/answer/trickle-ICE signalling scoped to an active layup and participant membership.
   user_visible_behaviour: Add offer/answer/trickle-ICE signalling scoped to an active layup and participant membership.
   depends_on:
