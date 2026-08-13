@@ -56,25 +56,28 @@ PLAN-1 gate: IN PROGRESS
 BLOCKED: P1-0312
 Reason:
   Acceptance requires first real-machine benchmark results on three paths (LAN,
-  ordinary NAT, forced TURN). This build host is a single machine with no second
-  endpoint and no deployed coturn, so the numbers cannot be produced here without
-  fabricating them.
+  ordinary NAT, forced TURN). Containerisation closed part of this: the relay
+  path is now genuinely verified against a real coturn on one machine. What is
+  still impossible here is a second endpoint - LAN and ordinary-NAT numbers, and
+  any latency figure that means anything, need two physical machines.
 Evidence:
   - the harness and schema exist and run: `make bench` writes
     benchmarks/results/<scenario>/<timestamp>.json with percentiles, budgets and
     environment metadata
   - the media path is proven working, single-machine: `make test-webrtc` reports
     a real decoded 320x240 screen share, route "direct", RTT 1ms
-  - the forced-relay switch is proven to change behaviour, single-machine:
-    relay-only gathers zero host candidates and does not connect without TURN
+  - the forced-relay switch is proven both ways, single-machine: relay-only
+    gathers zero host candidates and does not connect without TURN, and
+    `make test-turn` connects *through* a containerised coturn with
+    `route: "relay"`, `relayed: true`, relay candidates at both ends
   - the procedure for the three paths is written down in test/network/README.md
 Smallest human decision needed:
   Who runs the two-machine benchmark pass, and on which pair of machines?
 Options:
   a) A human runs `make bench` plus the test/network/README.md procedure on two
-     real machines (LAN, then ordinary NAT, then compose+coturn with
-     LAYUP_FORCE_RELAY=true) and commits the three result files. P1-0312 then
-     closes on real evidence.
+     real machines (LAN, then ordinary NAT; the TURN path is already covered by
+     `make test-turn`) and commits the result files. P1-0312 then closes on real
+     evidence.
   b) Narrow P1-0312's acceptance to single-machine baselines now and re-open the
      real-machine numbers as part of the P1-0604 soak, which needs two machines
      anyway.

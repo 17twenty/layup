@@ -25,9 +25,21 @@ app.whenReady().then(async () => {
 
   // A real page on the file:// origin, so the bundle loads like any script.
   const page = path.join(path.dirname(harness), 'index.html');
+  // A real coturn, when one is running (see test/network/turn-relay.mjs). It is
+  // injected before the bundle so the harness sees it as it starts.
+  const turn = process.env.LAYUP_TEST_TURN_URL
+    ? {
+        urls: process.env.LAYUP_TEST_TURN_URL,
+        username: process.env.LAYUP_TEST_TURN_USERNAME,
+        credential: process.env.LAYUP_TEST_TURN_CREDENTIAL,
+      }
+    : undefined;
+
   writeFileSync(
     page,
-    '<!doctype html><meta charset="utf-8"><title>layup webrtc</title><script src="./harness.js"></script>',
+    '<!doctype html><meta charset="utf-8"><title>layup webrtc</title>' +
+      (turn ? `<script>window.__layupTurn = ${JSON.stringify(turn)};</script>` : '') +
+      '<script src="./harness.js"></script>',
   );
   await win.loadFile(page);
 
@@ -67,6 +79,16 @@ app.whenReady().then(async () => {
   if (!share.decoded) failures.push('the shared desktop arrived but never decoded a frame');
   if (!(share.inbound && share.inbound.width > 0)) failures.push('decoded video had no dimensions');
   if (!share.connectedAfterUnpublish) failures.push('stopping the share tore down the connection');
+
+  // Only asserted when a real TURN server was supplied.
+  if (process.env.LAYUP_TEST_TURN_URL) {
+    const viaTurn = result.forcedRelayWithTurn ?? {};
+    if (!viaTurn.connected) failures.push('forced relay did not connect through the TURN server');
+    if (!viaTurn.relayed) failures.push('the selected candidate pair was not relayed');
+    if (viaTurn.localCandidateType !== 'relay') {
+      failures.push(`expected a relay local candidate, got ${viaTurn.localCandidateType}`);
+    }
+  }
 
   if (failures.length > 0) {
     console.error('WEBRTC FAILURES:\n' + failures.map((f) => ` - ${f}`).join('\n'));

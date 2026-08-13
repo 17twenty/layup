@@ -16,6 +16,18 @@ verifiable continuously rather than once by hand:
 | `direct` | Two production peer connections negotiate in real Chromium and carry a real video track; diagnostics report the selected route (`direct`, candidate types, RTT, bytes). |
 | `forcedRelayWithoutTurn` | Forced relay genuinely changes behaviour: `iceTransportPolicy` is `relay`, **zero** host candidates are gathered and the peers do **not** connect when no TURN server is reachable. |
 
+`make test-turn` adds the positive half against a **real coturn in a container**
+(needs Docker, no second machine):
+
+| Scenario | What it proves |
+|---|---|
+| `forcedRelayWithTurn` | A forced-relay session connects *through* coturn, and diagnostics report `route: "relay"`, `relayed: true` with `relay` candidates at both ends. |
+
+> Chromium ignores a TURN server on a loopback address - it gathers no relay
+> candidates and fails silently. The runner therefore starts coturn advertising
+> this machine's interface address and dials that, which is why the test works
+> on one machine but still exercises a real allocation.
+
 The second scenario is the guard that matters: if `forceRelay` were quietly
 ignored, a "relay" test would silently pass over host candidates and prove
 nothing.
@@ -34,8 +46,9 @@ switch is set - it fails loudly instead of quietly going direct.
 
 ## Verifying the relay path against real TURN
 
-This needs coturn, so it is run against the compose stack rather than in unit
-tests. Layup does not implement TURN (ADR-0003).
+`make test-turn` does this automatically with a container. The procedure below
+is the two-machine version, which additionally exercises the desktop UI and real
+network latency. Layup does not implement TURN (ADR-0003).
 
 ```bash
 # 1. Bring up the control service and coturn.

@@ -82,13 +82,17 @@ test-e2e: ## End-to-end tests against a real control service (wire contract only
 test-webrtc: ## Prove real WebRTC connectivity in an Electron window
 	npm run test:webrtc --workspace apps/desktop
 
+.PHONY: test-turn
+test-turn: ## Prove forced relay through a real coturn (needs Docker)
+	node test/network/turn-relay.mjs
+
 .PHONY: fmt-check
 fmt-check: ## Fail if any Go file needs gofmt
 	@unformatted="$$(gofmt -l $(GO_MODULES))"; \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed for:"; echo "$$unformatted"; exit 1; fi
 
 .PHONY: verify
-verify: check test-bench test-smoke test-e2e test-boundary test-webrtc ## check + every real-boundary proof
+verify: check test-bench test-smoke test-e2e test-boundary test-webrtc ## check + every real-boundary proof (add test-turn for coturn)
 
 .PHONY: ci
 ci: validate-tasks fmt-check check test-bench ## Everything the fast CI jobs run, locally

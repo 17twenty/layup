@@ -79,6 +79,7 @@ make test-smoke     # desktop clients against a real Go control service
 make test-e2e       # domain invariants over the real wire, no app code imported
 make test-boundary  # renderer privilege proof in a real Electron window
 make test-webrtc    # two real peer connections carrying a real video track
+make test-turn      # forced relay through a real coturn container (needs Docker)
 make bench          # latency scenarios -> benchmarks/results/**.json
 ```
 

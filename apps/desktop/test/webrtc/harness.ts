@@ -125,7 +125,7 @@ async function waitFor(predicate: () => boolean, label: string, timeoutMs = 1500
  * session *does* connect through a real TURN server - needs coturn, and is run
  * with the compose stack (see test/network/README.md).
  */
-async function runForcedRelay(): Promise<Record<string, unknown>> {
+async function runForcedRelay(turn?: RTCIceServer): Promise<Record<string, unknown>> {
   const peers: Record<string, ReturnType<typeof createPeerConnection>> = {};
   const relay = (from: 'a' | 'b') => (type: string, payload: SignalMessage) => {
     const target = from === 'a' ? 'b' : 'a';
@@ -150,19 +150,22 @@ async function runForcedRelay(): Promise<Record<string, unknown>> {
         relay(id)(type, payload);
       },
       createPeerConnection: (config) => new RTCPeerConnection(config),
-      // Relay forced, but no TURN server is configured or reachable.
       forceRelay: true,
-      iceServers: [],
+      // With a TURN server this must connect *through* it; without one it must
+      // not connect at all.
+      iceServers: turn ? [turn] : [],
     });
   }
 
   peers.a!.createDataChannel('probe');
   await peers.a!.negotiate();
 
-  // Give ICE a fair chance to do something it must not be able to do.
-  const connected = await waitFor(() => peers.a!.state().connected, 'a connection', 4000);
+  // With no TURN this is a fair chance to do something it must not manage; with
+  // TURN it is the time the allocation needs.
+  const connected = await waitFor(() => peers.a!.state().connected, 'a connection', turn ? 15000 : 4000);
   const config = (peers.a!.pc as RTCPeerConnection & { getConfiguration?: () => RTCConfiguration })
     .getConfiguration?.();
+  const diagnostics = connected ? await peers.a!.diagnostics() : undefined;
 
   peers.a!.close();
   peers.b!.close();
@@ -172,6 +175,15 @@ async function runForcedRelay(): Promise<Record<string, unknown>> {
     connected,
     hostCandidatesGathered: candidateTypes.filter((type) => type === 'host').length,
     candidateTypes: [...new Set(candidateTypes)],
+    ...(diagnostics
+      ? {
+          route: diagnostics.route,
+          relayed: diagnostics.relayed,
+          localCandidateType: diagnostics.localCandidateType,
+          remoteCandidateType: diagnostics.remoteCandidateType,
+          rttMs: diagnostics.rttMs,
+        }
+      : {}),
   };
 }
 
@@ -254,8 +266,12 @@ async function runScreenShare(): Promise<Record<string, unknown>> {
   };
 }
 
+/** TURN details injected by test/network/turn-relay.mjs, when it is driving. */
+const turnFromEnv = (window as unknown as { __layupTurn?: RTCIceServer }).__layupTurn;
+
 window.__layupWebRTC = (async () => ({
   direct: await run(),
   forcedRelayWithoutTurn: await runForcedRelay(),
   screenShare: await runScreenShare(),
+  ...(turnFromEnv ? { forcedRelayWithTurn: await runForcedRelay(turnFromEnv) } : {}),
 }))();
