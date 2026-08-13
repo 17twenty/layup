@@ -6,42 +6,36 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0110
-- completed: 17
+- next task: P1-0201
+- completed: 18
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0109 logical layup create/join/leave API
+- task: P1-0110 creator devolution end-to-end test
 - result: done
-- tests: `make test-go` (6 layup API cases), `npm test` (94 passed), `make test-smoke` (13 passed), boundary OK
+- tests: `make test-e2e` (2 scenarios, 0 failures) against a freshly built control service
 - evidence:
-  - control plane: `POST /api/layups`, `GET /api/layups/{id}`, `POST /api/layups/{id}/join`,
-    `POST /api/layups/{id}/leave`. Bodies reject unknown fields; ids are validated; a private
-    layup 404s for outsiders (they are not told it exists) and joining one is 403
-  - `layup.state` is pushed over realtime to every participant on any membership change, and
-    presence/activity is republished for everyone affected
-  - creator devolution is visible in API state: after the creator leaves,
-    `hasCreatorAuthority=false`, `creatorMembershipId` is absent and no participant is flagged;
-    a rejoin mints a new membership and restores nothing
-    (`TestCreatorDevolutionIsVisibleInAPIState`)
-  - you can only end your own membership - there is no endpoint to remove anyone else
-  - desktop: `main/layups.ts` supervisor (8 unit tests) + `layup:current|create|join|leave`
-    IPC and a `LayupPanel` that lists participants, tags creator/you, and states plainly when
-    authority has devolved to nobody
-  - real two-client evidence (`make test-smoke`, 13 passed): Nick creates, Karl joins the same
-    layup, Nick sees the membership update over realtime; creator leaves -> layup continues
-    with no authority anywhere; last participant leaving ends it; private layup invisible to
-    an outsider
+  - `test/e2e/creator-devolution.test.mjs` runs against a real control service over real HTTP
+    and a real WebSocket, importing no application code - only the wire contract - so it
+    catches a regression made anywhere in the server
+  - asserts, in one scenario: distinct membership ids for creator and joiner; after the creator
+    leaves the layup stays active with `hasCreatorAuthority=false`, no `creatorMembershipId`
+    and no participant flagged; the remaining participant is pushed the same state over
+    realtime; the former creator's rejoin mints a new membership id and restores nothing
+  - also asserts there is no creator-claim endpoint (`POST /api/layups/{id}/creator` -> 404)
+  - second case: the layup ends only when the last membership leaves, `endedAt` is stamped,
+    and rejoining an ended layup is 409
+  - `make test-e2e` wired into the CI smoke job
 
 ## Recent runs
 
-- P1-0105 done - presence state model
 - P1-0106 done - realtime WebSocket envelope
 - P1-0107 done - presence publication and fan-out
 - P1-0108 done - people home grid
 - P1-0109 done - logical layup create/join/leave API
+- P1-0110 done - creator devolution end-to-end test
 
 ## Known issues / decisions needed
 

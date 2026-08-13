@@ -553,7 +553,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Creator devolution end-to-end test
-  status: todo
+  status: done
   goal: Add an e2e test proving creator leaves, layup survives, nobody inherits authority and former creator rejoins ordinarily.
   user_visible_behaviour: Add an e2e test proving creator leaves, layup survives, nobody inherits authority and former creator
     rejoins ordinarily.

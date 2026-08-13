@@ -74,6 +74,10 @@ bench: ## Run every benchmark scenario and write result JSON
 test-bench: ## Unit-test the benchmark harness itself
 	node --test test/latency/harness.test.mjs
 
+.PHONY: test-e2e
+test-e2e: ## End-to-end tests against a real control service (wire contract only)
+	node --test test/e2e/*.test.mjs
+
 .PHONY: fmt-check
 fmt-check: ## Fail if any Go file needs gofmt
 	@unformatted="$$(gofmt -l $(GO_MODULES))"; \

@@ -138,6 +138,8 @@ jobs:
       - run: npm ci
       - name: Desktop client against a real control service
         run: make test-smoke
+      - name: End-to-end domain invariants
+        run: make test-e2e
 
   boundary:
     name: Electron security boundary
