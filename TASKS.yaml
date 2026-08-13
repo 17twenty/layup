@@ -78,7 +78,7 @@ tasks:
   plan: PLAN-1
   phase: A
   title: Control service health and config
-  status: todo
+  status: done
   goal: Add Go config loading and /healthz plus build/version metadata.
   user_visible_behaviour: Add Go config loading and /healthz plus build/version metadata.
   depends_on:

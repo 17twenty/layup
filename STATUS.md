@@ -6,34 +6,31 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0003
-- completed: 2
+- next task: P1-0004
+- completed: 3
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0002 harden Electron process boundary
+- task: P1-0003 control service health and config
 - result: done
-- tests: `npm test` (18 passed), `npm run typecheck`, `npm run lint`, `npm run build`, `make test-boundary` - all green
-- metrics: none (no budget defined)
+- tests: `make test-go` (config+httpapi ok), `make lint-go`, live curl smoke
 - evidence:
-  - `apps/desktop/src/main/window.ts` - contextIsolation on, nodeIntegration off, sandbox on,
-    webviewTag off, insecure content off; asserted by `src/main/window.test.ts`
-  - `apps/desktop/src/shared/ipc.ts` - the only declared renderer->main surface, request and
-    response validated in both directions
-  - `apps/desktop/src/shared/validate.ts` - dependency-free validators; unknown properties are
-    rejected, not ignored (`src/shared/validate.test.ts`)
-  - `apps/desktop/src/preload/api.ts` - enumerated bridge, no generic invoke, bundled for a
-    sandboxed preload (`vite.preload.config.ts`)
-  - real-window proof `make test-boundary`: renderer sees `require/process/module/global/Buffer`
-    as `undefined`, `window.layup` keys exactly `['app','protocolVersion']`, smuggled payload
-    discarded -> `BOUNDARY OK`
+  - `services/control/internal/config` - env-driven config with fail-fast validation; a bad
+    `LAYUP_LOG_LEVEL` exits 1 with `LAYUP_LOG_LEVEL "verbose" must be debug|info|warn|error`
+  - `services/control/internal/httpapi` - `GET /healthz` -> 200 JSON
+    `{status, protocolVersion, environment, uptimeSeconds, build{version,goVersion,platform}}`;
+    unknown route 404, wrong method 405
+  - `services/control/internal/buildinfo` - version/commit/goVersion/platform, VCS stamp aware
+  - live check: `curl 127.0.0.1:8791/healthz` returned `{"status":"ok","protocolVersion":1,...}`;
+    startup log is one JSON line with build + listen address and no secrets
 
 ## Recent runs
 
-1. P1-0001 done - workspace, toolchain pins, root developer commands.
-2. P1-0002 done - hardened Electron boundary, validated IPC, real-window boundary proof.
+- P1-0001 done - workspace, toolchain pins, root developer commands.
+- P1-0002 done - hardened Electron boundary, validated IPC, real-window boundary proof.
+- P1-0003 done - control service health and config
 
 ## Known issues / decisions needed
 
