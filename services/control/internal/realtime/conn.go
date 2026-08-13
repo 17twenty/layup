@@ -36,8 +36,6 @@ type Conn struct {
 	closeMsg  string
 
 	heartbeatInterval time.Duration
-	lastAckSeq        int64
-	mu                sync.Mutex
 }
 
 // ID implements Sink.
@@ -74,13 +72,6 @@ func (c *Conn) Close(reason string) {
 		c.closeMsg = reason
 		close(c.closed)
 	})
-}
-
-// LastAckSeq is the last heartbeat sequence the client acknowledged.
-func (c *Conn) LastAckSeq() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lastAckSeq
 }
 
 // ServeOptions configures a connection.
@@ -195,14 +186,12 @@ func (c *Conn) readLoop(ctx context.Context, opts ServeOptions) {
 
 		switch env.Type {
 		case protocol.TypeHeartbeatAck:
+			// The ack is validated but carries no state: a dead peer is
+			// detected by the heartbeat write failing, not by counting acks.
 			var payload protocol.HeartbeatPayload
 			if err := protocol.DecodePayload(env, &payload); err != nil {
 				c.rejectMalformed(ctx, protocol.CodeMalformedMessage, err.Error())
-				continue
 			}
-			c.mu.Lock()
-			c.lastAckSeq = payload.Seq
-			c.mu.Unlock()
 		default:
 			if opts.OnMessage == nil {
 				c.rejectMalformed(ctx, protocol.CodeUnknownMessageType, "unsupported message type "+env.Type)

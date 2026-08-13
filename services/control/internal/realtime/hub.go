@@ -76,21 +76,6 @@ func (h *Hub) Connections() int {
 	return len(h.conns)
 }
 
-// UsersOnline returns the distinct users with at least one live connection.
-func (h *Hub) UsersOnline() []domain.UserID {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	seen := map[domain.UserID]bool{}
-	out := make([]domain.UserID, 0, len(h.conns))
-	for _, sink := range h.conns {
-		if !seen[sink.UserID()] {
-			seen[sink.UserID()] = true
-			out = append(out, sink.UserID())
-		}
-	}
-	return out
-}
-
 // BroadcastToOrganisation sends to every connection in one organisation.
 // The organisation boundary is enforced here, not by the caller.
 func (h *Hub) BroadcastToOrganisation(org domain.OrganisationID, env protocol.Envelope) int {

@@ -19,7 +19,7 @@ func newRequestFixture(t *testing.T) *requestFixture {
 	t.Helper()
 	f := newFixture(t)
 	rf := &requestFixture{fixture: f, clock: time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)}
-	rf.requests = NewRequestService(f.svc, RequestServiceOptions{
+	rf.requests = NewRequestService(RequestServiceOptions{
 		IDs:    f.ids,
 		Now:    func() time.Time { return rf.clock },
 		TTL:    60 * time.Second,

@@ -49,20 +49,6 @@ export const isNormalised: Validator<number> = (value, path = '') => {
   return n >= 0 && n <= 1 ? n : fail(path, 'expected a normalised value in [0,1]');
 };
 
-export function isStringOfLength(min: number, max: number): Validator<string> {
-  return (value, path = '') => {
-    const s = isString(value, path);
-    if (s.length < min) fail(path, `expected at least ${min} characters`);
-    if (s.length > max) fail(path, `expected at most ${max} characters`);
-    return s;
-  };
-}
-
-export function isLiteral<T extends string | number | boolean>(expected: T): Validator<T> {
-  return (value, path = '') =>
-    value === expected ? (value as T) : fail(path, `expected ${JSON.stringify(expected)}`);
-}
-
 export function isEnum<T extends string>(values: readonly T[]): Validator<T> {
   return (value, path = '') => {
     const s = isString(value, path);

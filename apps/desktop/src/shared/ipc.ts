@@ -74,7 +74,7 @@ export const realtimeStateResponse = isObject({
 export type RealtimeStateResponse = ReturnType<typeof realtimeStateResponse>;
 
 /** Mirrors Person in core/people-store.ts. */
-export const personShape = isObject({
+const personShape = isObject({
   userId: isString,
   displayName: isString,
   statusMessage: optional(isString),
@@ -94,7 +94,7 @@ export const personShape = isObject({
 export const peopleResponse = isObject({ people: isArrayOf(personShape, { max: 500 }) });
 export type PeopleResponse = ReturnType<typeof peopleResponse>;
 
-export const participantShape = isObject({
+const participantShape = isObject({
   membershipId: isString,
   userId: isString,
   displayName: isString,
@@ -103,7 +103,7 @@ export const participantShape = isObject({
   isCreatorMembership: isBoolean,
 });
 
-export const layupShape = isObject({
+const layupShape = isObject({
   id: isString,
   organisationId: isString,
   title: optional(isString),
@@ -131,7 +131,7 @@ export const createLayupRequest = isObject({
 
 export const joinLayupRequest = isObject({ layupId: isString });
 
-export const joinRequestShape = isObject({
+const joinRequestShape = isObject({
   id: isString,
   type: isEnum(['INVITE_USER_TO_NEW_LAYUP', 'INVITE_USER_TO_LAYUP', 'KNOCK_TO_JOIN'] as const),
   state: isEnum(['PENDING', 'ACCEPTED', 'DECLINED', 'EXPIRED', 'CANCELLED'] as const),
@@ -162,7 +162,7 @@ export const inviteRequest = isObject({
 export const requestIdRequest = isObject({ requestId: isString });
 
 /** One organisation-open layup on the Happening Now surface. */
-export const openLayupShape = isObject({
+const openLayupShape = isObject({
   id: isString,
   title: optional(isString),
   participantCount: isInteger({ min: 0 }),
@@ -177,7 +177,7 @@ export const openLayupsResponse = isObject({
 });
 export type OpenLayupsResponse = ReturnType<typeof openLayupsResponse>;
 
-export const captureSourceShape = isObject({
+const captureSourceShape = isObject({
   id: isString,
   name: isString,
   kind: isEnum(['screen', 'window'] as const),
@@ -239,8 +239,6 @@ export const ipcEvents = {
 export type EventName = keyof typeof ipcEvents;
 export type EventPayload<E extends EventName> =
   (typeof ipcEvents)[E] extends Validator<infer P> ? P : never;
-
-export const eventNames = Object.keys(ipcEvents) as EventName[];
 
 export type IpcChannels = typeof ipcChannels;
 export type ChannelName = keyof IpcChannels;

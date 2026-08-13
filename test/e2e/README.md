@@ -9,6 +9,6 @@ These prove behaviour across a real boundary rather than against a mock.
 | Real WebRTC | `make test-webrtc` | Two peer connections built by the production module negotiate in a real Chromium window and carry a real video track; reports the chosen ICE route. |
 | Electron security boundary | `make test-boundary` | A real window with the production preload gives the renderer no Node/OS privilege. |
 
-Both harnesses build what they test, so they fail if the components drift apart.
+Each harness builds what it tests, so they fail if the components drift apart.
 
-Requirements: Go toolchain (smoke), a display or `xvfb-run` (boundary).
+Requirements: Go toolchain (smoke, e2e), a display or `xvfb-run` (boundary, WebRTC).

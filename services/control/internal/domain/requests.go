@@ -130,11 +130,10 @@ type RequestService struct {
 	requests map[JoinRequestID]JoinRequest
 	order    []JoinRequestID
 
-	layups *LayupService
-	ids    IDGenerator
-	now    func() time.Time
-	ttl    time.Duration
-	log    *slog.Logger
+	ids IDGenerator
+	now func() time.Time
+	ttl time.Duration
+	log *slog.Logger
 }
 
 // RequestServiceOptions configures a RequestService.
@@ -145,8 +144,9 @@ type RequestServiceOptions struct {
 	Logger *slog.Logger
 }
 
-// NewRequestService builds the service.
-func NewRequestService(layups *LayupService, opts RequestServiceOptions) *RequestService {
+// NewRequestService builds the service. Requests are a lifecycle of their own:
+// what an acceptance *does* to a layup is decided by the caller.
+func NewRequestService(opts RequestServiceOptions) *RequestService {
 	ids := opts.IDs
 	if ids == nil {
 		ids = NewRandomIDs()
@@ -165,7 +165,6 @@ func NewRequestService(layups *LayupService, opts RequestServiceOptions) *Reques
 	}
 	return &RequestService{
 		requests: map[JoinRequestID]JoinRequest{},
-		layups:   layups,
 		ids:      ids,
 		now:      now,
 		ttl:      ttl,

@@ -76,9 +76,6 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 				s.log.WarnContext(serveCtx, "could not build presence snapshot", "error", err.Error())
 			}
 			s.feed.UserConnected(serveCtx, conn.User())
-			if s.onRealtimeReady != nil {
-				s.onRealtimeReady(conn)
-			}
 		},
 		OnMessage: s.handleRealtimeMessage,
 		OnClosed: func(conn *realtime.Conn) {

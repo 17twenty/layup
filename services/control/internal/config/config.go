@@ -5,7 +5,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -153,9 +152,6 @@ func Load(getenv Getenv) (Config, error) {
 
 // LoadFromOS is the production entry point.
 func LoadFromOS() (Config, error) { return Load(os.Getenv) }
-
-// ErrNotConfigured is returned by helpers that need configuration that is absent.
-var ErrNotConfigured = errors.New("not configured")
 
 // splitList parses a comma-separated environment value.
 func splitList(raw string) []string {

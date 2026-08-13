@@ -87,8 +87,11 @@ fmt-check: ## Fail if any Go file needs gofmt
 	@unformatted="$$(gofmt -l $(GO_MODULES))"; \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed for:"; echo "$$unformatted"; exit 1; fi
 
+.PHONY: verify
+verify: check test-bench test-smoke test-e2e test-boundary test-webrtc ## check + every real-boundary proof
+
 .PHONY: ci
-ci: validate-tasks fmt-check typecheck lint test test-bench build ## Everything CI runs, locally
+ci: validate-tasks fmt-check check test-bench ## Everything the fast CI jobs run, locally
 
 .PHONY: check
 check: typecheck lint test build ## Full local gate: typecheck, lint, test, build

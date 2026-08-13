@@ -36,7 +36,6 @@ type Server struct {
 	feed      *presencefeed.Feed
 	// heartbeatInterval is overridable so tests do not wait seconds.
 	heartbeatInterval time.Duration
-	onRealtimeReady   func(*realtime.Conn)
 }
 
 // Options configures a Server. Zero values fall back to production defaults.
@@ -83,7 +82,7 @@ func New(cfg config.Config, opts Options) *Server {
 	}
 	requests := opts.Requests
 	if requests == nil {
-		requests = domain.NewRequestService(layups, domain.RequestServiceOptions{
+		requests = domain.NewRequestService(domain.RequestServiceOptions{
 			TTL:    dir.Organisation().Policy.RequestTTL,
 			Logger: log,
 		})

@@ -17,10 +17,11 @@ Read in this order:
 3. `PLAN-1.md` - executable first tranche. This is what Ralph may build now.
 4. `RALPH.md` - one-task-per-run operating contract.
 5. `TASKS.yaml` - atomised PLAN-1 backlog.
-6. `STATUS.md` - current execution state.
-7. `PLAN-2.md` - provisional future plan. **Do not execute it yet.**
+6. `STATUS.md` - current execution state and the evidence for it.
+7. `docs/adr/` - the architecture decisions accepted for PLAN-1.
 
-`PLAN-1-REVIEW.md` is the human review template used when PLAN-1 is complete. PLAN-2 is rewritten only after that review.
+`PLAN-1-REVIEW.md` is the human review template used when PLAN-1 is complete.
+PLAN-2 does not exist yet and is not written until after that review.
 
 ## The PLAN-1 product gate
 
@@ -70,49 +71,54 @@ make check         # typecheck + lint + test + build for every component
 
 `make help` lists every developer command.
 
-Evidence harnesses:
+Evidence harnesses (each builds what it tests, so they fail on drift):
 
 ```bash
-make test-smoke     # desktop control client against a real Go control service
+make verify         # check + every proof below
+make test-smoke     # desktop clients against a real Go control service
+make test-e2e       # domain invariants over the real wire, no app code imported
 make test-boundary  # renderer privilege proof in a real Electron window
+make test-webrtc    # two real peer connections carrying a real video track
 make bench          # latency scenarios -> benchmarks/results/**.json
 ```
 
-See `benchmarks/README.md` for the result schema and `test/e2e/README.md` for the
-cross-component harnesses.
+See `benchmarks/README.md` for the result schema and `test/e2e/README.md` for what
+each harness proves.
 
 ## Repository shape
 
 ```text
 .
-├── AGENTS.md
-├── README.md
-├── SPEC.md
-├── ARCHITECTURE.md
-├── PLAN-1.md
-├── PLAN-2.md
-├── PLAN-1-REVIEW.md
-├── RALPH.md
-├── TASKS.yaml
-├── STATUS.md
-├── REFERENCES.md
-├── apps/
-│   └── desktop/
-├── services/
-│   └── control/
-├── native/
-│   └── input-helper/
-├── protocol/
-├── deploy/
-│   └── compose/
-├── docs/
-│   └── adr/
-├── test/
-│   ├── e2e/
-│   ├── network/
-│   └── latency/
-├── benchmarks/
-└── scripts/
+├── SPEC.md ARCHITECTURE.md PLAN-1.md RALPH.md TASKS.yaml STATUS.md   contract
+├── PLAN-1-REVIEW.md REFERENCES.md                                    review inputs
+├── docs/adr/                 accepted architecture decisions
+├── protocol/                 the wire contract
+│   ├── VERSION               single source of truth for the version
+│   ├── go/                   Go binding   (envelope, realtime types)
+│   └── ts/                   TS binding   (@layup/protocol, validators)
+├── services/control/         Go control plane
+│   ├── cmd/control/          entry point
+│   └── internal/
+│       ├── domain/           layups, memberships, presence, requests
+│       ├── httpapi/          HTTP + WSS surface, signalling relay, TURN
+│       ├── realtime/         connection hub and fan-out
+│       ├── presencefeed/     per-viewer presence publication
+│       ├── directory/        development identities
+│       ├── config/ logging/ buildinfo/
+├── apps/desktop/             Electron desktop
+│   ├── src/main/             privileged: windows, capture, IPC, supervisors
+│   ├── src/preload/          the entire renderer-facing surface
+│   ├── src/renderer/         React UI (People, invitations, layup, capture)
+│   ├── src/core/             framework-free logic (control client, realtime,
+│   │                         peer connection, ICE diagnostics, stores)
+│   ├── src/shared/           the IPC contract
+│   └── test/                 boundary and WebRTC harnesses
+├── native/input-helper/      privileged input helper (Phase F)
+├── deploy/compose/           control service + coturn
+├── test/                     e2e (wire contract), latency harness, network
+├── benchmarks/               harness docs + committed result JSON
+└── scripts/                  task-graph tooling
 ```
 
-The empty source directories are intentional. `P1-0001` bootstraps the actual toolchains so the agent does not inherit guessed package versions from this seed pack.
+The Go workspace (`go.work`) spans `protocol/go` and `services/control`.
+The npm workspace spans `protocol/ts` and `apps/desktop`.

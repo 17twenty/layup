@@ -25,7 +25,7 @@ func serverWithClock(t *testing.T, ttl time.Duration) (*httptest.Server, *Server
 	layups := domain.NewLayupService(domain.NewMemoryRepository(), domain.LayupServiceOptions{})
 
 	clock := time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)
-	requests := domain.NewRequestService(layups, domain.RequestServiceOptions{
+	requests := domain.NewRequestService(domain.RequestServiceOptions{
 		Now: func() time.Time { return clock },
 		TTL: ttl,
 	})
