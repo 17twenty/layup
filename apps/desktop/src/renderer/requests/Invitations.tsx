@@ -11,7 +11,12 @@ type JoinRequest = RequestsResponse['incoming'][number];
  * update immediately - the card never sits there looking un-clicked while the
  * round trip completes.
  */
-export function Invitations() {
+export interface InvitationsProps {
+  /** The layup this desktop is currently in, if any. */
+  currentLayupId?: string;
+}
+
+export function Invitations({ currentLayupId }: InvitationsProps = {}) {
   const [state, setState] = useState<RequestsResponse>({ incoming: [], outgoing: [] });
   const [resolving, setResolving] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | undefined>();
@@ -81,14 +86,32 @@ export function Invitations() {
               className="tile__action"
               onClick={() => void act(request.id, () => window.layup.requests.accept(request.id))}
             >
-              {request.type === 'KNOCK_TO_JOIN' ? 'Let them in' : 'Join'}
+              {request.type === 'KNOCK_TO_JOIN' ? 'Let them in' : busyElsewhere(request, currentLayupId) ? 'Join theirs' : 'Join'}
             </button>
+
+            {busyElsewhere(request, currentLayupId) && (
+              <button
+                type="button"
+                className="tile__action tile__action--secondary"
+                onClick={() =>
+                  void act(request.id, async () => {
+                    // Invite them into the layup we are already in, then answer
+                    // theirs. No layups are merged (SPEC.md §6.4).
+                    await window.layup.requests.invite(request.fromUserId, { layupId: currentLayupId });
+                    await window.layup.requests.decline(request.id);
+                  })
+                }
+              >
+                Invite them here
+              </button>
+            )}
+
             <button
               type="button"
               className="tile__action tile__action--secondary"
               onClick={() => void act(request.id, () => window.layup.requests.decline(request.id))}
             >
-              Not now
+              {busyElsewhere(request, currentLayupId) ? 'Decline' : 'Not now'}
             </button>
           </div>
         </article>
@@ -138,6 +161,18 @@ function context(request: JoinRequest): string | undefined {
   if (request.type === 'KNOCK_TO_JOIN') return 'They want to join the layup you are in';
   if (request.layupTitle) return `“${request.layupTitle}”`;
   return undefined;
+}
+
+/**
+ * True when this invitation would move us out of a layup we are already in.
+ * A knock is never in this category: admitting someone does not move you.
+ */
+function busyElsewhere(request: JoinRequest, currentLayupId?: string): currentLayupId is string {
+  return (
+    currentLayupId !== undefined &&
+    request.type !== 'KNOCK_TO_JOIN' &&
+    request.layupId !== currentLayupId
+  );
 }
 
 function secondsLeft(request: JoinRequest, now: number): number {

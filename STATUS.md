@@ -6,35 +6,36 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0209
-- completed: 26
+- next task: P1-0210
+- completed: 27
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0208 incoming invitation experience
+- task: P1-0209 invite while already in a layup
 - result: done
-- tests: `npm test` (102 passed incl. 8 invitation cases), typecheck/lint green
+- tests: `make test-go` (3 busy-invite cases), `npm test` (105 passed incl. 3 new UI cases)
 - evidence:
-  - `Invitations` is a page section, not a modal: it sits above People so you can see who is
-    asking without losing the app (asserted: a `region` labelled Invitations, no `dialog`)
-  - accept/decline update immediately - the card is removed on click, before the round trip
-    completes, and is restored with the reason if the command fails
-    (`accepting removes the card immediately`, `restores the card and explains when a command fails`)
-  - context is privacy-filtered by type: a knock says "They want to join the layup you are in"
-    and never names it; an invitation shows a title only when the server sent one
-  - a live countdown shows how long is left and the card disappears when the request runs out,
-    so an expired invitation is never clickable
-  - 8 renderer tests cover all of the above
+  - "Join theirs" leaves the current layup *first*, then joins the target, in that order, so
+    the two layups never briefly overlap; the abandoned layup continues for the people left in
+    it (`TestJoinTheirsLeavesTheCurrentLayupFirst`)
+  - no graph merge anywhere: the two layups remain two layups with their own participants, and
+    creator authority is unaffected
+  - "Invite them here" sends `INVITE_USER_TO_LAYUP` for the layup you are in and declines
+    theirs; accepting lands the other person in your existing layup, and exactly one layup
+    exists afterwards (`TestInviteThemHereCreatesAnInvitationToTheCurrentLayup`)
+  - declining while busy changes nothing at all
+  - the UI shows the three-way choice only when it applies: a knock never offers to move you,
+    and with no current layup it stays a plain Join / Not now
 
 ## Recent runs
 
-- P1-0204 done - knock on private layup
 - P1-0205 done - collapse, cancel and expire requests
 - P1-0206 done - organisation-open layups and Happening Now
 - P1-0207 done - link-join layups
 - P1-0208 done - incoming invitation experience
+- P1-0209 done - invite while already in a layup
 
 ## Known issues / decisions needed
 

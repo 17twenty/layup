@@ -164,3 +164,35 @@ describe('incoming invitation experience', () => {
     expect(bridge.api.cancel).toHaveBeenCalledWith(invitation.id);
   });
 });
+
+describe('being invited while already in a layup', () => {
+  it('offers Join theirs / Invite them here / Decline', async () => {
+    const bridge = stub({ incoming: [invitation], outgoing: [] });
+    render(<Invitations currentLayupId="lay_current01" />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Join theirs' })).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Invite them here' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Invite them here' }));
+    expect(bridge.api.invite).toHaveBeenCalledWith('usr_devnickx', { layupId: 'lay_current01' });
+    await waitFor(() => expect(bridge.api.decline).toHaveBeenCalledWith(invitation.id));
+  });
+
+  it('keeps the plain two-button choice when you are in nothing', async () => {
+    stub({ incoming: [invitation], outgoing: [] });
+    render(<Invitations />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Join' })).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Invite them here' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy();
+  });
+
+  it('never offers to move you for a knock', async () => {
+    stub({ incoming: [{ ...invitation, type: 'KNOCK_TO_JOIN' }], outgoing: [] });
+    render(<Invitations currentLayupId="lay_current01" />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Let them in' })).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Invite them here' })).toBeNull();
+  });
+});

@@ -839,7 +839,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Invite while already in a layup
-  status: todo
+  status: done
   goal: When invited while already in a layup, offer Join theirs / Invite them here / Decline without graph merging.
   user_visible_behaviour: When invited while already in a layup, offer Join theirs / Invite them here / Decline without graph
     merging.

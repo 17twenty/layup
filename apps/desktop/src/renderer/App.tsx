@@ -48,7 +48,7 @@ export function App() {
         <p className="tagline">People → Layup → Share → Collaborate</p>
       </header>
 
-      <Invitations />
+      <Invitations currentLayupId={layup?.layup?.id} />
       <HappeningNow />
       <PeopleGrid
         selfUserId={identity?.userId}

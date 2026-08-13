@@ -64,6 +64,16 @@ func (s *Server) applyAcceptance(
 ) (domain.LayupView, domain.MembershipID, error) {
 	policy := s.directory.Organisation().Policy
 
+	// "Join theirs" while already in a layup: leave the current one first, in
+	// that order, so the two layups never briefly merge. There is deliberately
+	// no room-graph merge in Layup (SPEC.md §6.4).
+	if request.Type != domain.RequestKnock {
+		if err := s.leaveOtherLayups(r.Context(), identity.User, request.LayupID); err != nil {
+			s.writeDomainError(w, r, err)
+			return domain.LayupView{}, "", err
+		}
+	}
+
 	switch request.Type {
 	case domain.RequestInviteToNewLayup:
 		// One layup and both memberships appear together (SPEC.md §6.1).
@@ -106,6 +116,33 @@ func (s *Server) applyAcceptance(
 		s.writeAPIError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
 		return domain.LayupView{}, "", err
 	}
+}
+
+// leaveOtherLayups ends the user's memberships in every active layup except
+// `keep`. Each departure publishes its own state, so the people left behind see
+// them go before the new layup appears.
+func (s *Server) leaveOtherLayups(ctx context.Context, user domain.User, keep domain.LayupID) error {
+	views, err := s.layups.ActiveLayupsForUser(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	for _, view := range views {
+		if view.Layup.ID == keep {
+			continue
+		}
+		membershipID := membershipOf(view, user.ID)
+		if membershipID == "" {
+			continue
+		}
+		after, err := s.layups.Leave(ctx, membershipID)
+		if err != nil {
+			return err
+		}
+		s.log.InfoContext(ctx, "left a layup to join another",
+			"leftLayupId", string(view.Layup.ID), "userId", string(user.ID))
+		s.afterLayupChange(ctx, after, user)
+	}
+	return nil
 }
 
 func (s *Server) handleDeclineRequest(w http.ResponseWriter, r *http.Request) {
