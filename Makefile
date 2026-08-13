@@ -2,6 +2,9 @@
 SHELL := /bin/bash
 
 CONTROL_DIR := services/control
+# The task tooling needs PyYAML. A repo-local venv is used when present, so the
+# host python is never modified (many are externally managed).
+PYTHON := $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
 # Every Go module in go.work. `go <cmd> ./...` is per-module, so we iterate.
 GO_MODULES := $(patsubst ./%/go.mod,%,$(shell find . -name go.mod -not -path './node_modules/*' -not -path './*/node_modules/*'))
 
@@ -10,8 +13,14 @@ help: ## Show available developer commands
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: bootstrap
-bootstrap: ## Install pinned JS dependencies
+bootstrap: tools ## Install pinned JS dependencies and the task tooling
 	npm ci || npm install
+
+.PHONY: tools
+tools: ## Create .venv with the task tooling's only dependency
+	@[ -x .venv/bin/python ] || python3 -m venv .venv
+	@.venv/bin/pip install --quiet pyyaml
+	@echo "task tooling ready: .venv/bin/python scripts/ralph.py" 
 
 .PHONY: dev
 dev: ## Run the desktop app against a local control service
@@ -101,9 +110,13 @@ ci: validate-tasks fmt-check check test-bench ## Everything the fast CI jobs run
 check: typecheck lint test build ## Full local gate: typecheck, lint, test, build
 
 .PHONY: tasks
-tasks: ## Show the next eligible Ralph task
-	python3 scripts/next_task.py
+tasks: ## Show the next eligible Ralph task, with the contract that governs it
+	$(PYTHON) scripts/ralph.py
 
 .PHONY: validate-tasks
-validate-tasks: ## Validate the task graph
-	python3 scripts/validate_tasks.py
+validate-tasks: ## Validate every task graph (PLAN-1 and PLAN-1.5)
+	$(PYTHON) scripts/ralph.py validate
+
+.PHONY: plan-status
+plan-status: ## Progress across both plans and their gates
+	$(PYTHON) scripts/ralph.py status

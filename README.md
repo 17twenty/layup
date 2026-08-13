@@ -12,6 +12,7 @@ This repository is initially driven by a Ralph-style looped implementation agent
 
 Read in this order:
 
+0. `scripts/ralph.py` - tells you which plan is live and what is next.
 1. `SPEC.md` - product truth and invariants.
 2. `ARCHITECTURE.md` - technical boundaries and trust model.
 3. `PLAN-1.md` - executable first tranche. This is what Ralph may build now.
@@ -39,17 +40,17 @@ A loop invocation should use something equivalent to:
 You are Ralph. Follow RALPH.md exactly. Complete exactly one eligible task from TASKS.yaml, update TASKS.yaml and STATUS.md, commit if possible, then exit.
 ```
 
-To see the next eligible task:
+One script drives the loop across both plans:
 
 ```bash
-python3 scripts/next_task.py
+python3 scripts/ralph.py            # the next eligible task + the contract governing it
+python3 scripts/ralph.py status     # progress and gate state for PLAN-1 and PLAN-1.5
+python3 scripts/ralph.py validate   # validate both task graphs
 ```
 
-To validate the task graph:
-
-```bash
-python3 scripts/validate_tasks.py
-```
+`TASKS.yaml` (PLAN-1) and `TASKS-1.5.yaml` (PLAN-1.5) stay separate files: the
+script respects the lock between them and never merges them, which is a human
+decision.
 
 ## Toolchains
 
@@ -90,7 +91,9 @@ each harness proves.
 
 ```text
 .
-├── SPEC.md ARCHITECTURE.md PLAN-1.md RALPH.md TASKS.yaml STATUS.md   contract
+├── SPEC.md ARCHITECTURE.md RALPH.md STATUS.md                        contract
+├── PLAN-1.md TASKS.yaml                                              executable now
+├── PLAN-1.5.md TASKS-1.5.yaml RALPH-PLAN-1.5-PROMPT.md               locked until the PLAN-1 gate
 ├── PLAN-1-REVIEW.md REFERENCES.md                                    review inputs
 ├── docs/adr/                 accepted architecture decisions
 ├── protocol/                 the wire contract

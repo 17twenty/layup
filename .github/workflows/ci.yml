@@ -24,8 +24,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install pyyaml
-      - name: Validate TASKS.yaml
-        run: python3 scripts/validate_tasks.py
+      - name: Validate task graphs
+        run: python3 scripts/ralph.py validate
 
   go:
     name: Go control plane

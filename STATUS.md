@@ -4,6 +4,22 @@ Active plan: PLAN-1
 PLAN-2: LOCKED
 PLAN-1 gate: IN PROGRESS
 
+## Plan sequence
+
+```text
+PLAN-1   (executable now)      -> PLAN-1 GATE READY   -> humans complete PLAN-1-REVIEW.md
+PLAN-1.5 (locked until then)   -> PLAN-1.5 GATE READY -> stop; PLAN-2 is not written yet
+```
+
+PLAN-1.5 supersedes two things PLAN-1 already shipped, by design (PLAN-1.5 §13):
+P1-0107's organisation-wide presence fan-out becomes accepted-People-scoped, and
+P1-0108's directory-backed People grid becomes connection-backed. P15-0113 also
+replaces P1-0603's end-to-end flow. Remaining PLAN-1 work therefore does not
+deepen the organisation-wide presence assumption, and P1-0603 stays minimal
+because it is rewritten in PLAN-1.5.
+
+`python3 scripts/ralph.py` reports which plan is live and what is next.
+
 ## Current state
 
 - next task: P1-0402
@@ -90,8 +106,6 @@ Options:
 - Deviation from the seed's suggested `allowed_paths`: npm workspaces are used instead of pnpm
   (pnpm is not installed on the build host and no global installs were made). This adds
   `package-lock.json` instead of `pnpm-lock.yaml`.
-- `scripts/next_task.py` / `scripts/validate_tasks.py` need PyYAML; the host python3 is
-  externally managed, so they are run from a virtualenv.
 - Redaction key lists are duplicated in Go and TypeScript (no shared artefact is allowed by
   P1-0005's `allowed_paths`); each side has its own test, so drift is visible but not blocked.
 - **Owed by humans, not producible here:** the multi-machine evidence in P1-0312 (LAN,
