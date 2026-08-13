@@ -18,10 +18,18 @@ function harness(states: ControlConnectionState[]) {
   const log = createLogger({ level: 'debug', write: (line) => lines.push(line) });
   let clock = 0;
   const probe = vi.fn(async () => states.shift() ?? state());
+  const unusedHere = async () => {
+    throw new Error('not used by these tests');
+  };
   const client: ControlClient = {
     baseUrl: 'http://127.0.0.1:8787',
     probe,
     apiGet: async () => ({}) as never,
+    apiPost: unusedHere,
+    createLayup: unusedHere,
+    joinLayup: unusedHere,
+    leaveLayup: unusedHere,
+    getLayup: unusedHere,
     me: async () => ({
       user: { id: 'usr_devkarlx', displayName: 'Karl' },
       organisation: { id: 'org_devlayup', name: 'Layup Development' },

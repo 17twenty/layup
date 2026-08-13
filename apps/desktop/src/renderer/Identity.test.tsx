@@ -11,6 +11,7 @@ function stub(identity: IdentityResponse) {
       control: { status: vi.fn() },
       identity: { current: vi.fn(async () => identity) },
       people: { list: vi.fn(async () => ({ people: [] })), onChanged: vi.fn(() => () => {}) },
+      layup: { current: vi.fn(), create: vi.fn(), join: vi.fn(), leave: vi.fn(), onChanged: vi.fn(() => () => {}) },
       realtime: { status: vi.fn(), onState: vi.fn(() => () => {}) },
     },
     configurable: true,

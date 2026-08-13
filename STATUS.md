@@ -6,38 +6,42 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0109
-- completed: 16
+- next task: P1-0110
+- completed: 17
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0108 people home grid
+- task: P1-0109 logical layup create/join/leave API
 - result: done
-- tests: `npm test` (82 passed incl. 13 new people cases), typecheck/lint/build green, boundary OK
+- tests: `make test-go` (6 layup API cases), `npm test` (94 passed), `make test-smoke` (13 passed), boundary OK
 - evidence:
-  - `apps/desktop/src/renderer/people/` - `PeopleGrid` is the home surface: one tile per
-    colleague with avatar initials, name, presence dot, presence/activity label, status
-    message and open-layup participant count. Self is excluded from the grid
-  - `primary-action.ts` encodes SPEC §5.1 as a pure function: AVAILABLE -> Start layup
-    (primary), AWAY -> Start layup (secondary), DND -> disabled unless policy allows,
-    IN_PRIVATE_LAYUP -> Knock, IN_OPEN_LAYUP -> Join, INVITING_YOU -> Join,
-    WAITING_FOR_YOU -> Waiting, OFFLINE -> disabled. 8 unit tests
-  - states are visually distinguishable: per-tile classes (`tile--dnd`, `tile--offline`,
-    `tile--activity-in_open_layup`), coloured presence dots, disabled/secondary buttons
-  - no meeting wizard: the App renders People first with connection/identity chrome in a
-    footer; tests assert no "New Meeting" affordance exists
-  - the grid is fed by realtime pushes (`people:changed`), asserted live in
-    `PeopleGrid.test.tsx` ("updates live when presence is pushed")
+  - control plane: `POST /api/layups`, `GET /api/layups/{id}`, `POST /api/layups/{id}/join`,
+    `POST /api/layups/{id}/leave`. Bodies reject unknown fields; ids are validated; a private
+    layup 404s for outsiders (they are not told it exists) and joining one is 403
+  - `layup.state` is pushed over realtime to every participant on any membership change, and
+    presence/activity is republished for everyone affected
+  - creator devolution is visible in API state: after the creator leaves,
+    `hasCreatorAuthority=false`, `creatorMembershipId` is absent and no participant is flagged;
+    a rejoin mints a new membership and restores nothing
+    (`TestCreatorDevolutionIsVisibleInAPIState`)
+  - you can only end your own membership - there is no endpoint to remove anyone else
+  - desktop: `main/layups.ts` supervisor (8 unit tests) + `layup:current|create|join|leave`
+    IPC and a `LayupPanel` that lists participants, tags creator/you, and states plainly when
+    authority has devolved to nobody
+  - real two-client evidence (`make test-smoke`, 13 passed): Nick creates, Karl joins the same
+    layup, Nick sees the membership update over realtime; creator leaves -> layup continues
+    with no authority anywhere; last participant leaving ends it; private layup invisible to
+    an outsider
 
 ## Recent runs
 
-- P1-0104 done - development user and organisation directory
 - P1-0105 done - presence state model
 - P1-0106 done - realtime WebSocket envelope
 - P1-0107 done - presence publication and fan-out
 - P1-0108 done - people home grid
+- P1-0109 done - logical layup create/join/leave API
 
 ## Known issues / decisions needed
 

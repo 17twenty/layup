@@ -29,6 +29,10 @@ app.whenReady().then(async () => {
     'identity:current': () => ({ devUser: 'nick', resolved: false, detail: 'no control service' }),
     'realtime:status': () => ({ status: 'idle', attempt: 0 }),
     'people:list': () => ({ people: [] }),
+    'layup:current': () => ({ youAreCreatorMembership: false }),
+    'layup:create': () => ({ youAreCreatorMembership: false }),
+    'layup:join': () => ({ youAreCreatorMembership: false }),
+    'layup:leave': () => ({ youAreCreatorMembership: false }),
   });
 
   const win = new BrowserWindow({
@@ -77,7 +81,7 @@ app.whenReady().then(async () => {
   expect(
     'window.layup keys',
     JSON.stringify(probe.layupKeys),
-    JSON.stringify(['app', 'control', 'identity', 'people', 'protocolVersion', 'realtime']),
+    JSON.stringify(['app', 'control', 'identity', 'layup', 'people', 'protocolVersion', 'realtime']),
   );
   expect('app:info protocolVersion', probe.appInfo && probe.appInfo.protocolVersion, 1);
   expect('discards smuggled payload', probe.smuggledPayloadDiscarded, true);

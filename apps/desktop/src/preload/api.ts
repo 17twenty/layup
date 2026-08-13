@@ -74,6 +74,20 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       onChanged: (handler: (payload: EventPayload<'people:changed'>) => void) =>
         subscribe('people:changed', handler),
     },
+    layup: {
+      /** The layup this desktop is in, if any. */
+      current: () => invoke('layup:current', undefined),
+      /** Creates a layup with you as the creator membership. */
+      create: (input: { title?: string; visibility?: 'PRIVATE' | 'ORGANISATION' | 'LINK' } = {}) =>
+        invoke('layup:create', input),
+      /** Joins an existing layup. */
+      join: (layupId: string) => invoke('layup:join', { layupId }),
+      /** Ends your own membership. Nobody can remove anyone else. */
+      leave: () => invoke('layup:leave', undefined),
+      /** Subscribe to layup state changes. Returns unsubscribe. */
+      onChanged: (handler: (state: EventPayload<'layup:changed'>) => void) =>
+        subscribe('layup:changed', handler),
+    },
     realtime: {
       /** Current realtime connection state. */
       status: () => invoke('realtime:status', undefined),

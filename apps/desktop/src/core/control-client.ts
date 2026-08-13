@@ -12,6 +12,8 @@ import {
   PROTOCOL_VERSION,
   ValidationError,
   isArrayOf,
+  isBoolean,
+  isEnum,
   isFiniteNumber,
   isInteger,
   isObject,
@@ -106,6 +108,44 @@ const directoryShape = isObject({
 
 const meShape = isObject({ user: userShape, organisation: organisationShape });
 
+export const VISIBILITIES = ['PRIVATE', 'ORGANISATION', 'LINK'] as const;
+export type Visibility = (typeof VISIBILITIES)[number];
+
+const participantShape = isObject({
+  membershipId: isString,
+  userId: isString,
+  displayName: isString,
+  joinedAt: isString,
+  leftAt: optional(isString),
+  isCreatorMembership: isBoolean,
+});
+
+export const layupShape = isObject({
+  id: isString,
+  organisationId: isString,
+  title: optional(isString),
+  visibility: isEnum(VISIBILITIES),
+  active: isBoolean,
+  createdAt: isString,
+  endedAt: optional(isString),
+  hasCreatorAuthority: isBoolean,
+  creatorMembershipId: optional(isString),
+  participants: isArrayOf(participantShape, { max: 200 }),
+});
+export type Layup = ReturnType<typeof layupShape>;
+export type Participant = ReturnType<typeof participantShape>;
+
+const membershipResultShape = isObject({
+  layup: layupShape,
+  yourMembershipId: isString,
+});
+export type MembershipResult = ReturnType<typeof membershipResultShape>;
+
+export interface CreateLayupInput {
+  title?: string;
+  visibility?: Visibility;
+}
+
 export class ControlRequestError extends Error {
   readonly status: number;
   readonly code: string | undefined;
@@ -124,10 +164,20 @@ export interface ControlClient {
   probe(): Promise<ControlConnectionState>;
   /** Versioned API call. Throws ControlRequestError on a non-2xx response. */
   apiGet<T>(path: string): Promise<T>;
+  /** Versioned API command. Throws ControlRequestError on a non-2xx response. */
+  apiPost<T>(path: string, body?: unknown): Promise<T>;
   /** Who the control plane thinks this desktop is. */
   me(): Promise<MeSnapshot>;
   /** The people in this organisation. */
   directory(): Promise<DirectorySnapshot>;
+  /** Creates a layup with the caller as the creator membership. */
+  createLayup(input?: CreateLayupInput): Promise<MembershipResult>;
+  /** Joins an existing layup. */
+  joinLayup(layupId: string): Promise<MembershipResult>;
+  /** Ends the caller's own membership. Nobody can remove anyone else. */
+  leaveLayup(layupId: string): Promise<MembershipResult>;
+  /** Reads current layup state. */
+  getLayup(layupId: string): Promise<Layup>;
 }
 
 export function createControlClient(options: ControlClientOptions): ControlClient {
@@ -135,6 +185,15 @@ export function createControlClient(options: ControlClientOptions): ControlClien
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? 2000;
   const now = options.now ?? (() => Date.now());
+
+  function apiHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
+      Accept: 'application/json',
+    };
+    if (options.devUser) headers[DEV_USER_HEADER] = options.devUser;
+    return headers;
+  }
 
   async function withTimeout(url: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
@@ -214,14 +273,55 @@ export function createControlClient(options: ControlClientOptions): ControlClien
       return directoryShape(envelope.payload, 'directory.users');
     },
 
-    async apiGet<T>(path: string): Promise<T> {
-      const headers: Record<string, string> = {
-        [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
-        Accept: 'application/json',
-      };
-      if (options.devUser) headers[DEV_USER_HEADER] = options.devUser;
+    async createLayup(input: CreateLayupInput = {}): Promise<MembershipResult> {
+      const envelope = await this.apiPost<{ payload?: unknown }>('/api/layups', {
+        title: input.title ?? '',
+        visibility: input.visibility ?? 'PRIVATE',
+      });
+      return membershipResultShape(envelope.payload, 'layup.created');
+    },
 
-      const response = await withTimeout(`${baseUrl}${path}`, { method: 'GET', headers });
+    async joinLayup(layupId: string): Promise<MembershipResult> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/layups/${encodeURIComponent(layupId)}/join`,
+      );
+      return membershipResultShape(envelope.payload, 'layup.joined');
+    },
+
+    async leaveLayup(layupId: string): Promise<MembershipResult> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/layups/${encodeURIComponent(layupId)}/leave`,
+      );
+      return membershipResultShape(envelope.payload, 'layup.left');
+    },
+
+    async getLayup(layupId: string): Promise<Layup> {
+      const envelope = await this.apiGet<{ payload?: unknown }>(
+        `/api/layups/${encodeURIComponent(layupId)}`,
+      );
+      return layupShape(envelope.payload, 'layup.state');
+    },
+
+    async apiPost<T>(path: string, body?: unknown): Promise<T> {
+      const response = await withTimeout(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+        body: body === undefined ? '{}' : JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const parsed = await response.json().catch(() => undefined);
+        const code = extractErrorCode(parsed);
+        throw new ControlRequestError(
+          `POST ${path} failed with HTTP ${response.status}${code ? ` (${code})` : ''}`,
+          response.status,
+          code,
+        );
+      }
+      return (await response.json()) as T;
+    },
+
+    async apiGet<T>(path: string): Promise<T> {
+      const response = await withTimeout(`${baseUrl}${path}`, { method: 'GET', headers: apiHeaders() });
       if (!response.ok) {
         const body = await response.json().catch(() => undefined);
         const code = extractErrorCode(body);

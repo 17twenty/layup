@@ -4,6 +4,7 @@ import { ControlStatus } from './ControlStatus';
 import { Identity } from './Identity';
 import { RealtimeStatus } from './RealtimeStatus';
 import { PeopleGrid } from './people/PeopleGrid';
+import { LayupPanel } from './layup/LayupPanel';
 import type { IdentityResponse } from '../shared/ipc';
 
 /**
@@ -34,6 +35,7 @@ export function App() {
       </header>
 
       <PeopleGrid selfUserId={identity?.userId} />
+      <LayupPanel />
 
       <footer className="shell__footer">
         <Identity />

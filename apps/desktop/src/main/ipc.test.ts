@@ -29,6 +29,10 @@ const goodHandlers: Handlers = {
   'identity:current': () => ({ devUser: 'nick', resolved: false }),
   'realtime:status': () => ({ status: 'idle' as const, attempt: 0 }),
   'people:list': () => ({ people: [] }),
+  'layup:current': () => ({ youAreCreatorMembership: false }),
+  'layup:create': () => ({ youAreCreatorMembership: false }),
+  'layup:join': () => ({ youAreCreatorMembership: false }),
+  'layup:leave': () => ({ youAreCreatorMembership: false }),
 };
 
 describe('main IPC boundary', () => {
@@ -51,6 +55,10 @@ describe('main IPC boundary', () => {
       'identity:current',
       'realtime:status',
       'people:list',
+      'layup:current',
+      'layup:create',
+      'layup:join',
+      'layup:leave',
     ]);
   });
 

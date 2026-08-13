@@ -518,7 +518,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Logical layup create/join/leave API
-  status: todo
+  status: done
   goal: Expose control-plane commands and desktop state for creating, joining and leaving a logical layup without media.
   user_visible_behaviour: Expose control-plane commands and desktop state for creating, joining and leaving a logical layup
     without media.

@@ -6,6 +6,7 @@ import type { ControlStatusResponse } from '../shared/ipc';
 function stubBridge(status: () => Promise<ControlStatusResponse>) {
   Object.defineProperty(window, 'layup', {
     value: { protocolVersion: 1, app: { info: vi.fn() }, control: { status }, identity: { current: vi.fn() }, people: { list: vi.fn(async () => ({ people: [] })), onChanged: vi.fn(() => () => {}) },
+      layup: { current: vi.fn(), create: vi.fn(), join: vi.fn(), leave: vi.fn(), onChanged: vi.fn(() => () => {}) },
       realtime: { status: vi.fn(), onState: vi.fn(() => () => {}) } },
     configurable: true,
     writable: true,

@@ -7,6 +7,8 @@ import { createControlSupervisor, DEFAULT_CONTROL_URL, DEFAULT_DEV_USER } from '
 import { createLogger, newCorrelationId } from './logging';
 import { createRealtimeSupervisor } from './realtime';
 import { createPeopleStore, TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE } from '../core/people-store';
+import { createControlClient } from '../core/control-client';
+import { createLayupSupervisor } from './layups';
 import { secureWebPreferences } from './window';
 
 /**
@@ -25,9 +27,12 @@ const log = createLogger({
 const controlUrl = process.env.LAYUP_CONTROL_URL || DEFAULT_CONTROL_URL;
 const devUser = process.env.LAYUP_DEV_USER || DEFAULT_DEV_USER;
 
+const controlClient = createControlClient({ baseUrl: controlUrl, devUser });
+
 const control = createControlSupervisor({
   baseUrl: controlUrl,
   devUser,
+  client: controlClient,
   log: log.with({ component: 'control-client' }),
 });
 
@@ -66,6 +71,13 @@ for (const type of [TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE]) {
   });
 }
 
+const layups = createLayupSupervisor({
+  client: controlClient,
+  realtime: realtime.client,
+  log: log.with({ component: 'layups' }),
+  onChange: (state) => broadcast('layup:changed', state),
+});
+
 function buildHandlers(): Handlers {
   return {
     'app:info': () => ({
@@ -77,6 +89,10 @@ function buildHandlers(): Handlers {
     'identity:current': () => control.identity(),
     'realtime:status': () => realtime.state(),
     'people:list': () => ({ people: people.people() }),
+    'layup:current': () => layups.state(),
+    'layup:create': (input) => layups.create(input),
+    'layup:join': (input) => layups.join(input.layupId),
+    'layup:leave': () => layups.leave(),
   };
 }
 

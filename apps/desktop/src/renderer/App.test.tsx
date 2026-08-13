@@ -6,7 +6,7 @@ describe('bootstrap shell', () => {
   it('renders the product identity and the protocol version', () => {
     Object.defineProperty(window, 'layup', {
       value: { protocolVersion: 1, app: { info: vi.fn() }, control: { status: vi.fn(async () => undefined) }, identity: { current: vi.fn(async () => undefined) }, people: { list: vi.fn(async () => ({ people: [] })), onChanged: vi.fn(() => () => {}) },
-      realtime: { status: vi.fn(async () => ({ status: 'idle', attempt: 0 })), onState: vi.fn(() => () => {}) } },
+      layup: { current: vi.fn(async () => ({ youAreCreatorMembership: false })), create: vi.fn(), join: vi.fn(), leave: vi.fn(), onChanged: vi.fn(() => () => {}) }, realtime: { status: vi.fn(async () => ({ status: 'idle', attempt: 0 })), onState: vi.fn(() => () => {}) } },
       configurable: true,
       writable: true,
     });

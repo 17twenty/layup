@@ -94,12 +94,53 @@ export const personShape = isObject({
 export const peopleResponse = isObject({ people: isArrayOf(personShape, { max: 500 }) });
 export type PeopleResponse = ReturnType<typeof peopleResponse>;
 
+export const participantShape = isObject({
+  membershipId: isString,
+  userId: isString,
+  displayName: isString,
+  joinedAt: isString,
+  leftAt: optional(isString),
+  isCreatorMembership: isBoolean,
+});
+
+export const layupShape = isObject({
+  id: isString,
+  organisationId: isString,
+  title: optional(isString),
+  visibility: isEnum(['PRIVATE', 'ORGANISATION', 'LINK'] as const),
+  active: isBoolean,
+  createdAt: isString,
+  endedAt: optional(isString),
+  hasCreatorAuthority: isBoolean,
+  creatorMembershipId: optional(isString),
+  participants: isArrayOf(participantShape, { max: 200 }),
+});
+
+/** Mirrors LayupState in main/layups.ts. */
+export const layupStateResponse = isObject({
+  layup: optional(layupShape),
+  membershipId: optional(isString),
+  youAreCreatorMembership: isBoolean,
+});
+export type LayupStateResponse = ReturnType<typeof layupStateResponse>;
+
+export const createLayupRequest = isObject({
+  title: optional(isString),
+  visibility: optional(isEnum(['PRIVATE', 'ORGANISATION', 'LINK'] as const)),
+});
+
+export const joinLayupRequest = isObject({ layupId: isString });
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'control:status': channel(isVoid, controlStatusResponse),
   'identity:current': channel(isVoid, identityResponse),
   'realtime:status': channel(isVoid, realtimeStateResponse),
   'people:list': channel(isVoid, peopleResponse),
+  'layup:current': channel(isVoid, layupStateResponse),
+  'layup:create': channel(createLayupRequest, layupStateResponse),
+  'layup:join': channel(joinLayupRequest, layupStateResponse),
+  'layup:leave': channel(isVoid, layupStateResponse),
 } as const;
 
 /**
@@ -111,6 +152,7 @@ export const ipcChannels = {
 export const ipcEvents = {
   'realtime:state': realtimeStateResponse,
   'people:changed': peopleResponse,
+  'layup:changed': layupStateResponse,
 } as const;
 
 export type EventName = keyof typeof ipcEvents;
