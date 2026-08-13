@@ -1286,7 +1286,7 @@ tasks:
   plan: PLAN-1
   phase: E
   title: WebRTC data-channel abstraction
-  status: todo
+  status: done
   goal: Create semantic data-channel setup for cursor-fast, annotation-fast and input-reliable without implementing input
     yet.
   user_visible_behaviour: Create semantic data-channel setup for cursor-fast, annotation-fast and input-reliable without implementing

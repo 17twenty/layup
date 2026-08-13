@@ -6,38 +6,38 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0312
-- completed: 39 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0402
+- completed: 40 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0311 join AV default policy
+- task: P1-0401 WebRTC data-channel abstraction
 - result: done
-- tests: `make test-go` (4 policy + 1 wire case), `npm test` (171 passed), lint/fmt green
+- tests: `npm test` (180 passed incl. 9 data-channel cases), typecheck/lint green
 - evidence:
-  - `services/control/internal/domain/avpolicy.go` implements SPEC §4: joining at a resulting
-    count of 1-4 gives camera ON + microphone ON; participant 5 or later gives camera ON +
-    microphone MUTED, with `mutedByThreshold` so the UI can say *why* rather than looking broken
-  - precedence is enforced, not assumed: personal preference may only narrow what organisation
-    policy allows - a stricter preference wins, a more permissive one is ignored
-    (`TestPersonalPreferenceMayOnlyNarrow`)
-  - the threshold is policy, not a constant: an organisation can move it (3 mutes the third
-    joiner) or disable it entirely (0 never auto-mutes)
-  - every join carries the decision: `layup.created`, `layup.joined` and `request.accepted` all
-    return `media {camera, microphone, participantCount, mutedByThreshold}`, so the client never
-    has to re-derive it (`TestJoinMediaDefaultsRideOnEveryJoin` walks participants 1-4 over the
-    wire and asserts the 5th through the same domain rule the endpoint uses)
-  - the desktop threads it into layup state, and `av.ts` applies it when devices open
+  - `apps/desktop/src/core/data-channels.ts` opens the three channels of ADR-0008 / SPEC §11
+    on every peer: `cursor-fast` (unordered, `maxRetransmits: 0`), `annotation-fast`
+    (unordered, 2 retransmits) and `input-reliable` (ordered, reliable)
+  - the rule the ADR exists to protect is asserted directly: cursor motion is never on a
+    reliable queue, and input never has a retransmit limit
+    (`never puts cursor motion on a reliable queue`)
+  - channels are negotiated with fixed ids, so both sides have them the moment the connection
+    opens - no `ondatachannel` race and no extra negotiation round trip
+  - messages are JSON-framed and routed per channel; junk is dropped without breaking the
+    channel, a throwing subscriber cannot take the others down, and sends before a channel is
+    open are counted rather than silently lost
+  - the session owns a channel set per peer and closes them with the connection; no input,
+    cursor or drawing behaviour is implemented yet, as the task requires (8 + 1 tests)
 
 ## Recent runs
 
-- P1-0307 done - forced TURN test mode
 - P1-0308 done - publish and render shared desktop
 - P1-0309 done - single active screen-share domain
 - P1-0310 done - minimal camera and microphone tracks
 - P1-0311 done - join AV default policy
+- P1-0401 done - WebRTC data-channel abstraction
 
 ## Evidence index
 

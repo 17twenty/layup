@@ -46,8 +46,8 @@ class FakePeerConnection {
     return sender as unknown as RTCRtpSender;
   }
   removeTrack() {}
-  createDataChannel(label: string) {
-    return { label } as RTCDataChannel;
+  createDataChannel(label: string, init?: RTCDataChannelInit) {
+    return { label, init, readyState: 'open', send: vi.fn(), close: vi.fn() } as unknown as RTCDataChannel;
   }
   async getStats() {
     return { forEach: () => {} } as unknown as RTCStatsReport;
@@ -204,6 +204,14 @@ describe('layup media session', () => {
 
     expect(h.session.remotes()[0]?.connection.connected).toBe(true);
     expect(h.changes.length).toBeGreaterThan(1);
+  });
+
+  it('opens the three semantic channels for each peer', () => {
+    const h = harness();
+    h.session.connect('mem_remote');
+    // cursor-fast, annotation-fast and input-reliable (ADR-0008).
+    expect(h.session.channels('mem_remote')).toBeTruthy();
+    expect(h.session.channels('nobody')).toBeUndefined();
   });
 
   it('closes every peer when the session ends', () => {

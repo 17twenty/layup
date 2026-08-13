@@ -20,6 +20,7 @@ import {
   type SignalMessage,
 } from './peer-connection';
 import type { RouteDiagnostics } from './ice-diagnostics';
+import { createDataChannels, type DataChannelSet } from './data-channels';
 
 /** Everything a peer publishes to us, or we publish to them. */
 export interface RemoteMedia {
@@ -37,6 +38,8 @@ export interface SessionPeer {
   membershipId: string;
   peer: PeerConnection;
   media: RemoteMedia;
+  /** cursor-fast / annotation-fast / input-reliable for this peer (ADR-0008). */
+  channels: DataChannelSet;
 }
 
 export interface SessionOptions {
@@ -76,6 +79,8 @@ export interface Session {
   /** The stream this desktop is publishing, if any. */
   localScreen(): MediaStream | undefined;
   diagnostics(): Promise<Record<string, RouteDiagnostics>>;
+  /** The data channels for one peer, if connected. */
+  channels(membershipId: string): DataChannelSet | undefined;
   /** Closes one peer, e.g. when they leave the layup. */
   disconnect(membershipId: string, reason?: string): void;
   close(reason?: string): void;
@@ -142,7 +147,14 @@ export function createSession(options: SessionOptions): Session {
       },
     });
 
-    const entry: SessionPeer = { membershipId, peer, media };
+    // The three semantic channels are negotiated up front, so both sides have
+    // them the moment the connection opens.
+    const channels = createDataChannels({
+      createDataChannel: (label, init) => peer.createDataChannel(label, init),
+      log,
+    });
+
+    const entry: SessionPeer = { membershipId, peer, media, channels };
     peers.set(membershipId, entry);
 
     // Whoever is already publishing keeps publishing to a peer that arrives later.
@@ -183,6 +195,8 @@ export function createSession(options: SessionOptions): Session {
     connect,
     remotes,
     localScreen: () => localScreen,
+
+    channels: (membershipId) => peers.get(membershipId)?.channels,
 
     setPresenter(membershipId) {
       presenterMembershipId = membershipId;
@@ -235,6 +249,7 @@ export function createSession(options: SessionOptions): Session {
     disconnect(membershipId, reason) {
       const entry = peers.get(membershipId);
       if (!entry) return;
+      entry.channels.close();
       entry.peer.close(reason ?? 'they left the layup');
       peers.delete(membershipId);
       screenSenders.delete(membershipId);
@@ -243,6 +258,7 @@ export function createSession(options: SessionOptions): Session {
 
     close(reason) {
       for (const [membershipId, entry] of peers) {
+        entry.channels.close();
         entry.peer.close(reason ?? 'leaving the layup');
         screenSenders.delete(membershipId);
       }
