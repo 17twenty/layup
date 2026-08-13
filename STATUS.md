@@ -6,37 +6,35 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0102
-- completed: 9
+- next task: P1-0103
+- completed: 10
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0101 domain IDs and core types
+- task: P1-0102 layup lifecycle service
 - result: done
-- tests: `go test ./internal/domain/...` ok (8 cases), `make fmt-check`, `make test-go` green
+- tests: `go test ./internal/domain/...` ok (10 lifecycle cases), `make fmt-check` clean
 - evidence:
-  - `test/latency/harness.mjs` - result schema v1: scenario, unit, startedAt/endedAt,
-    wallClockMs, samples{count,min,max,mean,percentiles p50/p75/p90/p95/p99}, budgets with
-    pass/fail, context, environment (platform/arch/cpu/memory/node/gitCommit), harness overhead
-  - nearest-rank percentiles so p95 is an observed sample, not an interpolation
-  - `test/latency/run.mjs` - CLI (`--list`, `--samples`, `--no-write`), writes
-    `benchmarks/results/<scenario>/<timestamp>.json`, exits non-zero on a breached budget
-  - synthetic proof: `synthetic-latency` (deterministic, seeded) n=500 p50=25.413ms
-    p95=31.843ms within budget; `loopback-rtt` n=200 p50=1.507ms p95=1.729ms
-  - `make test-bench` (6 node:test cases) covers percentile maths, full document shape,
-    budget breach reporting and determinism
-  - harness overhead is recorded per run (`harness.overheadPerSampleNs`) and documented in
-    `benchmarks/README.md`
+  - `services/control/internal/domain/repository.go` - `Repository` interface plus a
+    concurrent-safe `MemoryRepository` (PLAN-1 in-memory only; persistence must implement the
+    same interface rather than reshape the domain)
+  - `layups.go` - `LayupService.CreateLayup/Join/Leave/View/ActiveLayupsForUser`
+  - proven: first membership activates the layup; layup survives while any membership remains;
+    the final leave stamps `EndedAt`; an ownerless layup still accepts joins
+    (`TestFirstMembershipActivatesLayup`, `TestLayupRemainsActiveWhileAnyMembershipRemains`,
+    `TestFinalMembershipLeavingEndsLayup`, `TestNoOwnerRequirementForAnActiveLayup`)
+  - join is idempotent for a present user, joining an ended layup is `ErrConflict`, leaving
+    twice is a no-op
 
 ## Recent runs
 
-- P1-0005 done - structured logging baseline
 - P1-0006 done - CI build and test matrix
 - P1-0007 done - desktop-to-control smoke path
 - P1-0008 done - latency benchmark harness skeleton
 - P1-0101 done - domain IDs and core types
+- P1-0102 done - layup lifecycle service
 
 ## Known issues / decisions needed
 

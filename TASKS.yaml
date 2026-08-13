@@ -300,7 +300,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Layup lifecycle service
-  status: todo
+  status: done
   goal: Implement create, join, leave and end-on-final-membership semantics using an in-memory repository.
   user_visible_behaviour: Implement create, join, leave and end-on-final-membership semantics using an in-memory repository.
   depends_on:
