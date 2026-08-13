@@ -108,6 +108,23 @@ jobs:
             apps/desktop/dist
           retention-days: 7
 
+  smoke:
+    name: Desktop to control smoke path
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - run: npm ci
+      - name: Desktop client against a real control service
+        run: make test-smoke
+
   boundary:
     name: Electron security boundary
     runs-on: ubuntu-latest

@@ -80,12 +80,34 @@ export function isArrayOf<T>(item: Validator<T>, options: { max?: number } = {})
   };
 }
 
-export function optional<T>(inner: Validator<T>): Validator<T | undefined> {
-  return (value, path = '') => (value === undefined || value === null ? undefined : inner(value, path));
+/**
+ * Marks a field as absent-permitted. The brand lets `Infer` turn it into an
+ * optional property rather than a required `T | undefined` one.
+ */
+export interface OptionalValidator<T> {
+  (value: unknown, path?: string): T | undefined;
+  readonly optional: true;
 }
 
-export type Shape = Record<string, Validator<unknown>>;
-export type Infer<S extends Shape> = { [K in keyof S]: S[K] extends Validator<infer T> ? T : never };
+export function optional<T>(inner: Validator<T>): OptionalValidator<T> {
+  const validator = (value: unknown, path = '') =>
+    value === undefined || value === null ? undefined : inner(value, path);
+  return Object.assign(validator, { optional: true as const });
+}
+
+export type Shape = Record<string, Validator<unknown> | OptionalValidator<unknown>>;
+
+type OptionalKeys<S extends Shape> = {
+  [K in keyof S]: S[K] extends OptionalValidator<unknown> ? K : never;
+}[keyof S];
+type RequiredKeys<S extends Shape> = Exclude<keyof S, OptionalKeys<S>>;
+type ValueOf<V> = V extends OptionalValidator<infer T> ? T : V extends Validator<infer T> ? T : never;
+
+export type Infer<S extends Shape> = {
+  [K in RequiredKeys<S>]: ValueOf<S[K]>;
+} & {
+  [K in OptionalKeys<S>]?: ValueOf<S[K]>;
+};
 
 /**
  * Validates a plain object. Unknown keys are rejected rather than ignored so a

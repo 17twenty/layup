@@ -37,6 +37,10 @@ export function createLayupApi(invoker: Invoker) {
     app: {
       info: () => invoke('app:info', undefined),
     },
+    control: {
+      /** Current connection state of the Go control plane. */
+      status: () => invoke('control:status', undefined),
+    },
   } as const;
 }
 

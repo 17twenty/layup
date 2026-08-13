@@ -16,8 +16,16 @@ function fakeIpcMain() {
   return { target, registered, invoke };
 }
 
+const controlState = {
+  status: 'connected' as const,
+  baseUrl: 'http://127.0.0.1:8787',
+  clientProtocolVersion: 1,
+  checkedAtMs: 1,
+};
+
 const goodHandlers: Handlers = {
   'app:info': () => ({ appVersion: '0.1.0', protocolVersion: 1, platform: 'darwin' }),
+  'control:status': () => controlState,
 };
 
 describe('main IPC boundary', () => {
@@ -34,14 +42,14 @@ describe('main IPC boundary', () => {
   it('registers exactly the declared channels', () => {
     const ipc = fakeIpcMain();
     registerIpcHandlers(ipc.target, goodHandlers);
-    expect([...ipc.registered.keys()]).toEqual(['app:info']);
+    expect([...ipc.registered.keys()]).toEqual(['app:info', 'control:status']);
   });
 
   it('rejects an unexpected payload before the handler runs', async () => {
     const ipc = fakeIpcMain();
     const handler = vi.fn(goodHandlers['app:info']);
     const onRejected = vi.fn();
-    registerIpcHandlers(ipc.target, { 'app:info': handler }, { onRejected });
+    registerIpcHandlers(ipc.target, { ...goodHandlers, 'app:info': handler }, { onRejected });
 
     await expect(ipc.invoke('app:info', { sneaky: true })).rejects.toThrow(ValidationError);
     expect(handler).not.toHaveBeenCalled();
@@ -51,7 +59,7 @@ describe('main IPC boundary', () => {
   it('rejects extra positional arguments', async () => {
     const ipc = fakeIpcMain();
     const handler = vi.fn(goodHandlers['app:info']);
-    registerIpcHandlers(ipc.target, { 'app:info': handler });
+    registerIpcHandlers(ipc.target, { ...goodHandlers, 'app:info': handler });
     await expect(ipc.invoke('app:info', undefined, 'extra')).rejects.toThrow(ValidationError);
     expect(handler).not.toHaveBeenCalled();
   });
@@ -59,6 +67,7 @@ describe('main IPC boundary', () => {
   it('refuses to return a response the renderer was not promised', async () => {
     const ipc = fakeIpcMain();
     registerIpcHandlers(ipc.target, {
+      ...goodHandlers,
       'app:info': () =>
         ({ appVersion: '0.1.0', protocolVersion: 1, platform: 'darwin', secret: 'token' }) as never,
     });

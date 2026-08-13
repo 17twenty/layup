@@ -14,7 +14,8 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.preload.json && tsc -p tsconfig.web.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:boundary": "electron test/boundary/main.cjs"
+    "test:boundary": "electron test/boundary/main.cjs",
+    "test:smoke": "vitest run --config vitest.smoke.config.ts"
   },
   "dependencies": {
     "@layup/protocol": "*",

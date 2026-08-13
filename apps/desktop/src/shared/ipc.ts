@@ -8,10 +8,12 @@
  */
 import {
   isEnum,
+  isFiniteNumber,
   isInteger,
   isObject,
   isString,
   isVoid,
+  optional,
   type Validator,
 } from '@layup/protocol';
 
@@ -31,8 +33,23 @@ export const appInfoResponse = isObject({
 });
 export type AppInfo = ReturnType<typeof appInfoResponse>;
 
+/** Mirrors ControlConnectionState in core/control-client.ts. */
+export const controlStatusResponse = isObject({
+  status: isEnum(['connected', 'unreachable', 'incompatible'] as const),
+  baseUrl: isString,
+  clientProtocolVersion: isInteger({ min: 1 }),
+  serverProtocolVersion: optional(isInteger({ min: 1 })),
+  serverVersion: optional(isString),
+  environment: optional(isString),
+  latencyMs: optional(isFiniteNumber),
+  detail: optional(isString),
+  checkedAtMs: isFiniteNumber,
+});
+export type ControlStatusResponse = ReturnType<typeof controlStatusResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
+  'control:status': channel(isVoid, controlStatusResponse),
 } as const;
 
 export type IpcChannels = typeof ipcChannels;

@@ -36,3 +36,20 @@ body {
   color: var(--muted);
   font-size: 12px;
 }
+
+.status {
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.status--good {
+  color: #6fd18a;
+}
+
+.status--bad {
+  color: #f0805a;
+}
+
+.status__url {
+  color: var(--muted);
+}

@@ -62,6 +62,10 @@ test-go: ## Run Go tests
 test-boundary: build-js ## Prove the Electron renderer boundary in a real window
 	npm run test:boundary --workspace apps/desktop
 
+.PHONY: test-smoke
+test-smoke: ## Desktop control client against a real Go control service
+	npm run test:smoke --workspace apps/desktop
+
 .PHONY: fmt-check
 fmt-check: ## Fail if any Go file needs gofmt
 	@unformatted="$$(gofmt -l $(GO_MODULES))"; \

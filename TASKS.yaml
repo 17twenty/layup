@@ -204,7 +204,7 @@ tasks:
   plan: PLAN-1
   phase: A
   title: Desktop-to-control smoke path
-  status: todo
+  status: done
   goal: Make the desktop call the configured control service health endpoint and surface connection state in a developer/status
     view.
   user_visible_behaviour: Make the desktop call the configured control service health endpoint and surface connection state

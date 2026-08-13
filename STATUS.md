@@ -6,32 +6,37 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0007
-- completed: 6
+- next task: P1-0008
+- completed: 7
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0006 CI build and test matrix
+- task: P1-0007 desktop-to-control smoke path
 - result: done
-- tests: `make fmt-check`, cross-builds (windows/linux), `validate_tasks.py` OK: 68 tasks
+- tests: `npm test` (46 passed), `make test-smoke` (3 passed), `make test-boundary` OK, typecheck/lint/build green
 - evidence:
-  - `.github/workflows/ci.yml` jobs: `tasks` (validates TASKS.yaml), `go` (gofmt, vet, test,
-    build), `go-cross` (linux/amd64, darwin/arm64, windows/amd64), `desktop`
-    (ubuntu+macos+windows: typecheck, lint, unit tests, bundle build, artefact upload),
-    `boundary` (xvfb + real Electron window renderer-privilege proof)
-  - local equivalent `make ci` = validate-tasks + fmt-check + typecheck + lint + test + build
-  - verified locally: `make fmt-check` clean, cross-builds for windows/amd64 and linux/amd64
-    succeed from macOS, `scripts/validate_tasks.py` reports 68 valid PLAN-1 tasks
+  - `apps/desktop/src/core/control-client.ts` - probe returns `connected` / `unreachable` /
+    `incompatible` with a human-readable `detail`, bounded by a timeout so an absent server
+    cannot hang the UI; versioned calls send `X-Layup-Protocol-Version`
+  - `apps/desktop/src/main/control.ts` - debounces probes, logs transitions once
+  - `apps/desktop/src/renderer/ControlStatus.tsx` - status line: connected shows protocol
+    version, environment and latency; otherwise the reason is shown verbatim
+  - smoke `make test-smoke` (3 passed): builds and runs the real Go service, asserts
+    connected, asserts `/api/protocol` needs a supported header (400 without, 426 at v99),
+    then kills the service and asserts the disconnected state
+  - `make test-boundary` still OK; the harness caught the widened bridge surface and now
+    asserts `['app','control','protocolVersion']`
+  - `@layup/protocol` now ships ESM + CJS so the Electron main process can require it
 
 ## Recent runs
 
-- P1-0002 done - hardened Electron boundary, validated IPC, real-window boundary proof.
 - P1-0003 done - control service health and config
 - P1-0004 done - shared protocol version contract
 - P1-0005 done - structured logging baseline
 - P1-0006 done - CI build and test matrix
+- P1-0007 done - desktop-to-control smoke path
 
 ## Known issues / decisions needed
 

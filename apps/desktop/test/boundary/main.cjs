@@ -19,6 +19,13 @@ const failures = [];
 app.whenReady().then(async () => {
   registerIpcHandlers(ipcMain, {
     'app:info': () => ({ appVersion: '0.1.0-test', protocolVersion: 1, platform: process.platform }),
+    'control:status': () => ({
+      status: 'unreachable',
+      baseUrl: 'http://127.0.0.1:8787',
+      clientProtocolVersion: 1,
+      detail: 'boundary harness does not run a control service',
+      checkedAtMs: 0,
+    }),
   });
 
   const win = new BrowserWindow({
@@ -64,7 +71,11 @@ app.whenReady().then(async () => {
   expect('typeof global', probe.global, 'undefined');
   expect('typeof Buffer', probe.Buffer, 'undefined');
   expect('typeof window.layup', probe.layup, 'object');
-  expect('window.layup keys', JSON.stringify(probe.layupKeys), JSON.stringify(['app', 'protocolVersion']));
+  expect(
+    'window.layup keys',
+    JSON.stringify(probe.layupKeys),
+    JSON.stringify(['app', 'control', 'protocolVersion']),
+  );
   expect('app:info protocolVersion', probe.appInfo && probe.appInfo.protocolVersion, 1);
   expect('discards smuggled payload', probe.smuggledPayloadDiscarded, true);
 
