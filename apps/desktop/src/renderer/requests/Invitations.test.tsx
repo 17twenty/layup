@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Invitations } from './Invitations';
 import type { RequestsResponse } from '../../shared/ipc';
 
-const incoming: RequestsResponse['incoming'][number] = {
+const NOW = Date.parse('2026-08-13T09:00:00.000Z');
+
+const invitation: RequestsResponse['incoming'][number] = {
   id: 'jrq_devaaaaab',
   type: 'INVITE_USER_TO_NEW_LAYUP',
   state: 'PENDING',
@@ -13,8 +15,8 @@ const incoming: RequestsResponse['incoming'][number] = {
   toUserId: 'usr_devkarlx',
   toName: 'Karl',
   note: 'Auth is doing something dumb',
-  createdAt: '2026-08-13T09:00:00Z',
-  expiresAt: '2026-08-13T09:01:00Z',
+  createdAt: '2026-08-13T09:00:00.000Z',
+  expiresAt: '2026-08-13T09:01:00.000Z',
 };
 
 function stub(initial: RequestsResponse) {
@@ -22,6 +24,7 @@ function stub(initial: RequestsResponse) {
   const api = {
     list: vi.fn(async () => initial),
     invite: vi.fn(),
+    knock: vi.fn(),
     accept: vi.fn(async () => undefined),
     decline: vi.fn(async () => undefined),
     cancel: vi.fn(async () => undefined),
@@ -40,61 +43,124 @@ function stub(initial: RequestsResponse) {
   return { api, push: (state: RequestsResponse) => push?.(state) };
 }
 
-describe('invitations', () => {
-  it('shows who wants you and why, with accept and decline', async () => {
-    const bridge = stub({ incoming: [incoming], outgoing: [] });
-    render(<Invitations />);
+beforeEach(() => {
+  vi.setSystemTime(NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+describe('incoming invitation experience', () => {
+  it('is obvious and complete without taking over the app', async () => {
+    stub({ incoming: [invitation], outgoing: [] });
+    const view = render(<Invitations />);
 
     await waitFor(() => expect(screen.getByText('Nick wants you in a layup')).toBeTruthy());
     expect(screen.getByText('“Auth is doing something dumb”')).toBeTruthy();
+    expect(screen.getByTestId(`expiry-${invitation.id}`).textContent).toBe('60s left');
+
+    // It is a section in the page, not a modal that blocks everything else.
+    expect(screen.getByRole('region', { name: 'Invitations' })).toBeTruthy();
+    expect(view.container.querySelector('dialog')).toBeNull();
+  });
+
+  it('accepting removes the card immediately', async () => {
+    const bridge = stub({ incoming: [invitation], outgoing: [] });
+    let release: (() => void) | undefined;
+    bridge.api.accept.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          release = () => resolve(undefined);
+        }),
+    );
+
+    render(<Invitations />);
+    await waitFor(() => expect(screen.getByTestId(`incoming-${invitation.id}`)).toBeTruthy());
 
     await userEvent.click(screen.getByRole('button', { name: 'Join' }));
-    expect(bridge.api.accept).toHaveBeenCalledWith('jrq_devaaaaab');
+    // Gone before the round trip finishes.
+    expect(screen.queryByTestId(`incoming-${invitation.id}`)).toBeNull();
+    act(() => release?.());
+  });
+
+  it('restores the card and explains when a command fails', async () => {
+    const bridge = stub({ incoming: [invitation], outgoing: [] });
+    bridge.api.decline.mockRejectedValueOnce(new Error('POST failed with HTTP 409'));
+
+    render(<Invitations />);
+    await waitFor(() => expect(screen.getByTestId(`incoming-${invitation.id}`)).toBeTruthy());
 
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
-    expect(bridge.api.decline).toHaveBeenCalledWith('jrq_devaaaaab');
+    await waitFor(() => expect(screen.getByText(/HTTP 409/)).toBeTruthy());
+    expect(screen.getByTestId(`incoming-${invitation.id}`)).toBeTruthy();
   });
 
-  it('shows an outgoing request as waiting, with cancel', async () => {
-    const bridge = stub({ incoming: [], outgoing: [incoming] });
-    render(<Invitations />);
-
-    await waitFor(() => expect(screen.getByText('Waiting for Karl…')).toBeTruthy());
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(bridge.api.cancel).toHaveBeenCalledWith('jrq_devaaaaab');
-  });
-
-  it('renders nothing when there is nothing pending', async () => {
-    stub({ incoming: [], outgoing: [] });
-    const view = render(<Invitations />);
-    await waitFor(() => expect(view.container.firstChild).toBeNull());
-  });
-
-  it('disappears as soon as the request is resolved elsewhere', async () => {
-    const bridge = stub({ incoming: [incoming], outgoing: [] });
-    render(<Invitations />);
-    await waitFor(() => expect(screen.getByTestId(`incoming-${incoming.id}`)).toBeTruthy());
-
-    act(() => bridge.push({ incoming: [], outgoing: [] }));
-    await waitFor(() => expect(screen.queryByTestId(`incoming-${incoming.id}`)).toBeNull());
-  });
-
-  it('names a knock as a knock and never invents a private title', async () => {
+  it('filters context by request type: a knock never names the layup', async () => {
     stub({
-      incoming: [{ ...incoming, type: 'KNOCK_TO_JOIN', note: undefined, layupTitle: undefined }],
+      incoming: [
+        { ...invitation, type: 'KNOCK_TO_JOIN', note: undefined, layupId: undefined, layupTitle: undefined },
+      ],
       outgoing: [],
     });
     render(<Invitations />);
+
     await waitFor(() => expect(screen.getByText('Nick is knocking')).toBeTruthy());
+    expect(screen.getByText('They want to join the layup you are in')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Let them in' })).toBeTruthy();
   });
 
-  it('surfaces a failed action', async () => {
-    const bridge = stub({ incoming: [incoming], outgoing: [] });
-    bridge.api.accept.mockRejectedValueOnce(new Error('POST failed with HTTP 409'));
+  it('shows a layup title only when the server sent one', async () => {
+    stub({
+      incoming: [{ ...invitation, type: 'INVITE_USER_TO_LAYUP', layupTitle: 'Capture path' }],
+      outgoing: [],
+    });
     render(<Invitations />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Join' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('“Capture path”')).toBeTruthy());
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Join' }));
-    await waitFor(() => expect(screen.getByText(/HTTP 409/)).toBeTruthy());
+  it('counts down and drops a request that runs out', async () => {
+    vi.useRealTimers();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    stub({ incoming: [invitation], outgoing: [] });
+    render(<Invitations />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId(`expiry-${invitation.id}`).textContent).toBe('60s left');
+
+    act(() => {
+      vi.setSystemTime(NOW + 30_000);
+      vi.advanceTimersByTime(1000);
+    });
+    // The tick that fires at +31s is what re-renders, so 29 seconds remain.
+    expect(screen.getByTestId(`expiry-${invitation.id}`).textContent).toBe('29s left');
+
+    act(() => {
+      vi.setSystemTime(NOW + 61_000);
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.queryByTestId(`incoming-${invitation.id}`)).toBeNull();
+  });
+
+  it('disappears as soon as the request is resolved elsewhere', async () => {
+    const bridge = stub({ incoming: [invitation], outgoing: [] });
+    render(<Invitations />);
+    await waitFor(() => expect(screen.getByTestId(`incoming-${invitation.id}`)).toBeTruthy());
+
+    act(() => bridge.push({ incoming: [], outgoing: [] }));
+    await waitFor(() => expect(screen.queryByTestId(`incoming-${invitation.id}`)).toBeNull());
+  });
+
+  it('shows an outgoing knock as knocking, with cancel', async () => {
+    const bridge = stub({ incoming: [], outgoing: [{ ...invitation, type: 'KNOCK_TO_JOIN' }] });
+    render(<Invitations />);
+
+    await waitFor(() => expect(screen.getByText('Knocking…')).toBeTruthy());
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(bridge.api.cancel).toHaveBeenCalledWith(invitation.id);
   });
 });

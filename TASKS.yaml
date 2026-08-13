@@ -809,7 +809,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Incoming invitation experience
-  status: todo
+  status: done
   goal: Create the prominent in-app incoming request card and accept/decline interactions.
   user_visible_behaviour: Create the prominent in-app incoming request card and accept/decline interactions.
   depends_on:

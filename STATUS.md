@@ -6,36 +6,35 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0208
-- completed: 25
+- next task: P1-0209
+- completed: 26
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0207 link-join layups
+- task: P1-0208 incoming invitation experience
 - result: done
-- tests: `make test-go` (4 link cases), typecheck/lint/fmt green, `npm test` (100 passed)
+- tests: `npm test` (102 passed incl. 8 invitation cases), typecheck/lint green
 - evidence:
-  - invitation links are opaque 128-bit random tokens mapped server-side to a layup: nothing
-    about the layup can be recovered from a token and it cannot be forged by editing a field
-    (`TestLinkTokensRevealNothing` asserts the token contains no id, title or organisation)
-  - `POST /api/layups/{id}/link` (participants only, 403 otherwise) and
-    `POST /api/links/{token}/join` - a valid link joins the intended layup as an ordinary
-    membership (`TestAValidLinkJoinsTheIntendedLayup`)
-  - invalid, unknown and ended-layup links all fail the same way (410 with "ask for a new one"),
-    so a link is not an oracle for which layups exist
-  - links never cross the organisation boundary, and are refused entirely when policy
-    disallows link layups
-  - desktop: `layup:link` / `layup:joinLink` IPC on top of the control client
+  - `Invitations` is a page section, not a modal: it sits above People so you can see who is
+    asking without losing the app (asserted: a `region` labelled Invitations, no `dialog`)
+  - accept/decline update immediately - the card is removed on click, before the round trip
+    completes, and is restored with the reason if the command fails
+    (`accepting removes the card immediately`, `restores the card and explains when a command fails`)
+  - context is privacy-filtered by type: a knock says "They want to join the layup you are in"
+    and never names it; an invitation shows a title only when the server sent one
+  - a live countdown shows how long is left and the card disappears when the request runs out,
+    so an expired invitation is never clickable
+  - 8 renderer tests cover all of the above
 
 ## Recent runs
 
-- P1-0203 done - invite person into existing layup
 - P1-0204 done - knock on private layup
 - P1-0205 done - collapse, cancel and expire requests
 - P1-0206 done - organisation-open layups and Happening Now
 - P1-0207 done - link-join layups
+- P1-0208 done - incoming invitation experience
 
 ## Known issues / decisions needed
 
