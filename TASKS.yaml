@@ -713,7 +713,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Collapse, cancel and expire requests
-  status: todo
+  status: done
   goal: Prevent notification spam by collapsing duplicate pending requests and supporting sender cancel/automatic expiry.
   user_visible_behaviour: Prevent notification spam by collapsing duplicate pending requests and supporting sender cancel/automatic
     expiry.

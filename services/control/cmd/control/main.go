@@ -47,13 +47,18 @@ func run() error {
 		"environment", cfg.Environment,
 	)
 
+	api := httpapi.New(cfg, httpapi.Options{Logger: log})
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
-		Handler: logging.Middleware(log)(httpapi.New(cfg, httpapi.Options{Logger: log})),
+		Handler: logging.Middleware(log)(api),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Requests expire on their own deadline; this only decides how promptly
+	// both sides are told.
+	api.StartExpirySweeper(ctx, httpapi.DefaultExpirySweep)
 
 	errCh := make(chan error, 1)
 	go func() {
