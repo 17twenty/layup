@@ -46,6 +46,9 @@ func (c *Conn) ID() string { return c.id }
 // UserID implements Sink.
 func (c *Conn) UserID() domain.UserID { return c.user.ID }
 
+// User is the identity this connection is authenticated as.
+func (c *Conn) User() domain.User { return c.user }
+
 // OrganisationID implements Sink.
 func (c *Conn) OrganisationID() domain.OrganisationID { return c.user.OrganisationID }
 
@@ -90,6 +93,8 @@ type ServeOptions struct {
 	OnReady func(*Conn)
 	// OnMessage handles a validated inbound envelope.
 	OnMessage func(context.Context, *Conn, protocol.Envelope) error
+	// OnClosed is called once the connection has been removed from the hub.
+	OnClosed func(*Conn)
 }
 
 // Serve runs the read/write loops until the connection ends. It owns the
@@ -120,7 +125,12 @@ func Serve(ctx context.Context, socket *websocket.Conn, id string, user domain.U
 	socket.SetReadLimit(maxMessageBytes)
 
 	hub.Add(conn)
-	defer hub.Remove(conn.id)
+	defer func() {
+		hub.Remove(conn.id)
+		if opts.OnClosed != nil {
+			opts.OnClosed(conn)
+		}
+	}()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

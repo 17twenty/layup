@@ -28,6 +28,7 @@ const goodHandlers: Handlers = {
   'control:status': () => controlState,
   'identity:current': () => ({ devUser: 'nick', resolved: false }),
   'realtime:status': () => ({ status: 'idle' as const, attempt: 0 }),
+  'people:list': () => ({ people: [] }),
 };
 
 describe('main IPC boundary', () => {
@@ -49,6 +50,7 @@ describe('main IPC boundary', () => {
       'control:status',
       'identity:current',
       'realtime:status',
+      'people:list',
     ]);
   });
 

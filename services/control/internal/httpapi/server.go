@@ -13,6 +13,7 @@ import (
 	"github.com/layup-app/layup/services/control/internal/config"
 	"github.com/layup-app/layup/services/control/internal/directory"
 	"github.com/layup-app/layup/services/control/internal/domain"
+	"github.com/layup-app/layup/services/control/internal/presencefeed"
 	"github.com/layup-app/layup/services/control/internal/realtime"
 )
 
@@ -29,6 +30,8 @@ type Server struct {
 	directory directory.Directory
 	layups    *domain.LayupService
 	hub       *realtime.Hub
+	presence  *domain.PresenceService
+	feed      *presencefeed.Feed
 	// heartbeatInterval is overridable so tests do not wait seconds.
 	heartbeatInterval time.Duration
 	onRealtimeReady   func(*realtime.Conn)
@@ -41,6 +44,7 @@ type Options struct {
 	Directory         directory.Directory
 	Layups            *domain.LayupService
 	Hub               *realtime.Hub
+	Presence          *domain.PresenceService
 	HeartbeatInterval time.Duration
 }
 
@@ -70,6 +74,10 @@ func New(cfg config.Config, opts Options) *Server {
 	if heartbeat <= 0 {
 		heartbeat = realtime.DefaultHeartbeatInterval
 	}
+	presence := opts.Presence
+	if presence == nil {
+		presence = domain.NewPresenceService(layups, nil)
+	}
 	s := &Server{
 		cfg:               cfg,
 		log:               log,
@@ -79,14 +87,22 @@ func New(cfg config.Config, opts Options) *Server {
 		directory:         dir,
 		layups:            layups,
 		hub:               hub,
+		presence:          presence,
 		heartbeatInterval: heartbeat,
 	}
+	s.feed = presencefeed.New(hub, presence, dir, log)
 	s.routes()
 	return s
 }
 
 // Hub exposes the realtime fan-out so other components can publish to it.
 func (s *Server) Hub() *realtime.Hub { return s.hub }
+
+// Layups exposes the layup service for wiring and tests.
+func (s *Server) Layups() *domain.LayupService { return s.layups }
+
+// Presence exposes the presence service for wiring and tests.
+func (s *Server) Presence() *domain.PresenceService { return s.presence }
 
 func (s *Server) routes() {
 	// Unversioned discovery: reachable by any client, including one whose

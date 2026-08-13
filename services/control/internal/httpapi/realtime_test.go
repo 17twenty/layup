@@ -96,10 +96,7 @@ func TestRealtimeHeartbeatArrivesAndIsAcknowledged(t *testing.T) {
 	conn := dial(t, srv, "v=1&devUser=nick")
 	_ = readEnvelope(t, conn) // hello.ok
 
-	beat := readEnvelope(t, conn)
-	if beat.Type != protocol.TypeHeartbeat {
-		t.Fatalf("expected a heartbeat, got %q", beat.Type)
-	}
+	beat := awaitHeartbeat(t, conn)
 	var payload protocol.HeartbeatPayload
 	if err := protocol.DecodePayload(beat, &payload); err != nil {
 		t.Fatalf("heartbeat payload: %v", err)
@@ -113,9 +110,7 @@ func TestRealtimeHeartbeatArrivesAndIsAcknowledged(t *testing.T) {
 	writeRaw(t, conn, string(data))
 
 	// A second heartbeat proves the connection survived the ack.
-	if next := readEnvelope(t, conn); next.Type != protocol.TypeHeartbeat {
-		t.Fatalf("expected another heartbeat, got %q", next.Type)
-	}
+	_ = awaitHeartbeat(t, conn)
 }
 
 func TestRealtimeRejectsMalformedMessagesWithoutClosing(t *testing.T) {
@@ -126,13 +121,7 @@ func TestRealtimeRejectsMalformedMessagesWithoutClosing(t *testing.T) {
 	for _, bad := range []string{`not json`, `{"type":"heartbeat.ack"}`, `{"v":99,"type":"heartbeat.ack"}`} {
 		writeRaw(t, conn, bad)
 
-		var env protocol.Envelope
-		for {
-			env = readEnvelope(t, conn)
-			if env.Type != protocol.TypeHeartbeat {
-				break
-			}
-		}
+		env := readIgnoringBackground(t, conn)
 		if env.Type != protocol.TypeError {
 			t.Fatalf("expected an error envelope for %q, got %q", bad, env.Type)
 		}
@@ -145,9 +134,16 @@ func TestRealtimeRejectsMalformedMessagesWithoutClosing(t *testing.T) {
 		}
 	}
 
-	// The connection is still usable afterwards.
-	if beat := readEnvelope(t, conn); beat.Type != protocol.TypeHeartbeat {
-		t.Fatalf("connection should survive malformed input, got %q", beat.Type)
+	// The connection is still usable afterwards: heartbeats keep arriving.
+	deadline := time.Now().Add(2 * time.Second)
+	sawHeartbeat := false
+	for time.Now().Before(deadline) && !sawHeartbeat {
+		if readEnvelope(t, conn).Type == protocol.TypeHeartbeat {
+			sawHeartbeat = true
+		}
+	}
+	if !sawHeartbeat {
+		t.Fatal("connection should survive malformed input")
 	}
 }
 
@@ -185,7 +181,7 @@ func TestHubFansOutWithinTheOrganisationOnly(t *testing.T) {
 
 	waitFor(t, func() bool { return api.Hub().Connections() == 2 })
 
-	notice, _ := protocol.NewEnvelope("presence.update", map[string]string{"userId": "usr_devnickx"})
+	notice, _ := protocol.NewEnvelope("layup.test-broadcast", map[string]string{"userId": "usr_devnickx"})
 	if delivered := api.Hub().BroadcastToOrganisation("org_devlayup", notice); delivered != 2 {
 		t.Fatalf("expected delivery to both connections, got %d", delivered)
 	}
@@ -194,14 +190,8 @@ func TestHubFansOutWithinTheOrganisationOnly(t *testing.T) {
 	}
 
 	for _, conn := range []*websocket.Conn{first, second} {
-		var env protocol.Envelope
-		for {
-			env = readEnvelope(t, conn)
-			if env.Type != protocol.TypeHeartbeat {
-				break
-			}
-		}
-		if env.Type != "presence.update" {
+		env := readIgnoringBackground(t, conn)
+		if env.Type != "layup.test-broadcast" {
 			t.Fatalf("expected the broadcast, got %q", env.Type)
 		}
 	}
@@ -238,6 +228,35 @@ func TestHubDropsAConnectionThatCannotKeepUp(t *testing.T) {
 	if !slow.closed {
 		t.Fatal("a slow connection must be closed, not buffered indefinitely")
 	}
+}
+
+// awaitHeartbeat reads until the next heartbeat arrives.
+func awaitHeartbeat(t *testing.T, conn *websocket.Conn) protocol.Envelope {
+	t.Helper()
+	for i := 0; i < 40; i++ {
+		if env := readEnvelope(t, conn); env.Type == protocol.TypeHeartbeat {
+			return env
+		}
+	}
+	t.Fatal("no heartbeat arrived")
+	return protocol.Envelope{}
+}
+
+// readIgnoringBackground skips heartbeats and presence traffic, which flow
+// continuously, and returns the next interesting envelope.
+func readIgnoringBackground(t *testing.T, conn *websocket.Conn) protocol.Envelope {
+	t.Helper()
+	for i := 0; i < 40; i++ {
+		env := readEnvelope(t, conn)
+		switch env.Type {
+		case protocol.TypeHeartbeat, "presence.snapshot", "presence.update":
+			continue
+		default:
+			return env
+		}
+	}
+	t.Fatal("no non-background envelope arrived")
+	return protocol.Envelope{}
 }
 
 func waitFor(t *testing.T, condition func() bool) {

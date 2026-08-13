@@ -6,6 +6,7 @@ import type { EventName } from '../shared/ipc';
 import { createControlSupervisor, DEFAULT_CONTROL_URL, DEFAULT_DEV_USER } from './control';
 import { createLogger, newCorrelationId } from './logging';
 import { createRealtimeSupervisor } from './realtime';
+import { createPeopleStore, TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE } from '../core/people-store';
 import { secureWebPreferences } from './window';
 
 /**
@@ -41,8 +42,29 @@ const realtime = createRealtimeSupervisor({
   baseUrl: controlUrl,
   devUser,
   log: log.with({ component: 'realtime' }),
-  onState: (state) => broadcast('realtime:state', state),
+  onState: (state) => {
+    broadcast('realtime:state', state);
+    // A dropped connection means the people list is stale, not empty: the next
+    // snapshot replaces it wholesale.
+    if (state.status === 'reconnecting') log.debug('people list may be stale');
+  },
 });
+
+/** People and their presence, fed only by realtime events. */
+const people = createPeopleStore();
+
+for (const type of [TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE]) {
+  realtime.client.on(type, (message) => {
+    try {
+      if (people.apply(message)) broadcast('people:changed', { people: people.people() });
+    } catch (error) {
+      log.warn('rejected presence payload', {
+        type,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+}
 
 function buildHandlers(): Handlers {
   return {
@@ -54,6 +76,7 @@ function buildHandlers(): Handlers {
     'control:status': () => control.status(),
     'identity:current': () => control.identity(),
     'realtime:status': () => realtime.state(),
+    'people:list': () => ({ people: people.people() }),
   };
 }
 

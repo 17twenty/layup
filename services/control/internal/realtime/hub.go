@@ -112,6 +112,52 @@ func (h *Hub) SendToUsers(users []domain.UserID, env protocol.Envelope) int {
 	return h.send(env, func(s Sink) bool { return wanted[s.UserID()] })
 }
 
+// BroadcastPerRecipient builds a separate envelope for each connection in an
+// organisation. Presence is redacted per viewer, so one shared payload would
+// leak private layup detail to someone not entitled to it (SPEC.md §5.3).
+func (h *Hub) BroadcastPerRecipient(
+	org domain.OrganisationID,
+	build func(recipient domain.UserID) (protocol.Envelope, bool),
+) int {
+	h.mu.RLock()
+	targets := make([]Sink, 0, len(h.conns))
+	for _, sink := range h.conns {
+		if sink.OrganisationID() == org {
+			targets = append(targets, sink)
+		}
+	}
+	h.mu.RUnlock()
+
+	delivered := 0
+	for _, sink := range targets {
+		env, ok := build(sink.UserID())
+		if !ok {
+			continue
+		}
+		if sink.Send(env) {
+			delivered++
+			continue
+		}
+		h.log.Warn("dropping slow realtime connection",
+			"connectionId", sink.ID(), "userId", string(sink.UserID()), "type", env.Type)
+		sink.Close("client too slow")
+	}
+	return delivered
+}
+
+// ConnectionsForUser counts live connections belonging to one user.
+func (h *Hub) ConnectionsForUser(user domain.UserID) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	count := 0
+	for _, sink := range h.conns {
+		if sink.UserID() == user {
+			count++
+		}
+	}
+	return count
+}
+
 func (h *Hub) send(env protocol.Envelope, match func(Sink) bool) int {
 	h.mu.RLock()
 	targets := make([]Sink, 0, len(h.conns))

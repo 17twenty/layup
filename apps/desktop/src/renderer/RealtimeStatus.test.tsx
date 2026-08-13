@@ -12,6 +12,7 @@ function stub() {
       app: { info: vi.fn() },
       control: { status: vi.fn() },
       identity: { current: vi.fn() },
+      people: { list: vi.fn(async () => ({ people: [] })), onChanged: vi.fn(() => () => {}) },
       realtime: {
         status: vi.fn(async () => ({ status: 'connecting', attempt: 0 }) as RealtimeStateResponse),
         onState: vi.fn((handler: (state: RealtimeStateResponse) => void) => {

@@ -64,12 +64,52 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 	s.log.InfoContext(ctx, "realtime client connected",
 		"connectionId", connectionID, "userId", string(user.ID))
 
-	realtime.Serve(context.WithoutCancel(ctx), socket, connectionID, user, s.hub, realtime.ServeOptions{
+	serveCtx := context.WithoutCancel(ctx)
+	realtime.Serve(serveCtx, socket, connectionID, user, s.hub, realtime.ServeOptions{
 		Logger:            s.log,
 		HeartbeatInterval: s.heartbeatInterval,
-		OnReady:           s.onRealtimeReady,
+		OnReady: func(conn *realtime.Conn) {
+			// The client sees the whole picture first, then only deltas.
+			if snapshot, err := s.feed.Snapshot(serveCtx, conn.User()); err == nil {
+				conn.Send(snapshot)
+			} else {
+				s.log.WarnContext(serveCtx, "could not build presence snapshot", "error", err.Error())
+			}
+			s.feed.UserConnected(serveCtx, conn.User())
+			if s.onRealtimeReady != nil {
+				s.onRealtimeReady(conn)
+			}
+		},
+		OnMessage: s.handleRealtimeMessage,
+		OnClosed: func(conn *realtime.Conn) {
+			s.feed.UserDisconnected(serveCtx, conn.User())
+		},
 	})
 }
+
+// handleRealtimeMessage handles client-originated realtime messages.
+func (s *Server) handleRealtimeMessage(ctx context.Context, conn *realtime.Conn, env protocol.Envelope) error {
+	switch env.Type {
+	case TypePresenceSet:
+		var payload struct {
+			Personal string `json:"personal"`
+		}
+		if err := protocol.DecodePayload(env, &payload); err != nil {
+			return err
+		}
+		state := domain.PersonalPresence(payload.Personal)
+		if err := s.presence.SetPersonal(conn.UserID(), state); err != nil {
+			return err
+		}
+		s.feed.PublishUser(ctx, conn.User())
+		return nil
+	default:
+		return errors.New("unsupported message type " + env.Type)
+	}
+}
+
+// TypePresenceSet lets a client say AVAILABLE/AWAY/DND about itself.
+const TypePresenceSet = "presence.set"
 
 func realtimeVersion(r *http.Request) (int, error) {
 	raw := r.Header.Get(protocol.HeaderVersion)

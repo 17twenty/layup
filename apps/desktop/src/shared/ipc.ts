@@ -7,6 +7,7 @@
  * renderer nor a buggy handler can push unchecked data across the boundary.
  */
 import {
+  isArrayOf,
   isBoolean,
   isEnum,
   isFiniteNumber,
@@ -72,11 +73,33 @@ export const realtimeStateResponse = isObject({
 });
 export type RealtimeStateResponse = ReturnType<typeof realtimeStateResponse>;
 
+/** Mirrors Person in core/people-store.ts. */
+export const personShape = isObject({
+  userId: isString,
+  displayName: isString,
+  statusMessage: optional(isString),
+  personal: isEnum(['AVAILABLE', 'AWAY', 'DND', 'OFFLINE'] as const),
+  activity: isEnum([
+    'NONE',
+    'IN_PRIVATE_LAYUP',
+    'IN_OPEN_LAYUP',
+    'INVITING_YOU',
+    'WAITING_FOR_YOU',
+  ] as const),
+  layupId: optional(isString),
+  layupTitle: optional(isString),
+  participantCount: optional(isInteger({ min: 0 })),
+});
+
+export const peopleResponse = isObject({ people: isArrayOf(personShape, { max: 500 }) });
+export type PeopleResponse = ReturnType<typeof peopleResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'control:status': channel(isVoid, controlStatusResponse),
   'identity:current': channel(isVoid, identityResponse),
   'realtime:status': channel(isVoid, realtimeStateResponse),
+  'people:list': channel(isVoid, peopleResponse),
 } as const;
 
 /**
@@ -87,6 +110,7 @@ export const ipcChannels = {
  */
 export const ipcEvents = {
   'realtime:state': realtimeStateResponse,
+  'people:changed': peopleResponse,
 } as const;
 
 export type EventName = keyof typeof ipcEvents;

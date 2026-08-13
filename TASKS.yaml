@@ -459,7 +459,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Presence publication and fan-out
-  status: todo
+  status: done
   goal: Publish presence/activity changes to relevant organisation clients.
   user_visible_behaviour: Publish presence/activity changes to relevant organisation clients.
   depends_on:

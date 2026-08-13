@@ -6,43 +6,39 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0107
-- completed: 14
+- next task: P1-0108
+- completed: 15
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0106 realtime WebSocket envelope
+- task: P1-0107 presence publication and fan-out
 - result: done
-- tests: `make test-go` (incl. 7 realtime cases), `npm test` (61 passed), `make test-smoke` (6 passed), boundary OK
+- tests: `make test-go` (5 presence wire cases), `npm test` (67 passed), `make test-smoke` (9 passed), boundary OK
 - evidence:
-  - Go: `internal/realtime` (hub + connection) and `GET /api/realtime` (coder/websocket).
-    Handshake travels on the query string (`?v=1&devUser=karl`) because the desktop runtime's
-    WebSocket cannot set headers; headers still work when present
-  - server sends `hello.ok` (connectionId, userId, organisationId, protocol version, heartbeat
-    interval), then heartbeats; clients ack. Malformed frames get an error envelope and the
-    connection survives (`TestRealtimeRejectsMalformedMessagesWithoutClosing`)
-  - fan-out is organisation-scoped, and a connection whose queue is full is dropped rather than
-    buffered without limit (`TestHubDropsAConnectionThatCannotKeepUp`)
-  - desktop `src/core/realtime-client.ts`: backoff+jitter reconnect, heartbeat watchdog
-    (interval x3), subscriptions held on the client so a reconnect never duplicates handlers,
-    malformed events rejected (10 unit tests)
-  - main process owns the socket and pushes validated `realtime:state` events to windows;
-    preload validates every push before the UI sees it
-  - real smoke evidence (`make test-smoke`, 6 passed): two clients connect independently;
-    killing the server puts the client into `reconnecting` and it reconnects by itself with
-    exactly one `hello.ok` handler invocation per connection
-  - fixed: the logging middleware hid `http.Hijacker`, which turned every upgrade into a 501
-    (`TestMiddlewareKeepsWebSocketUpgradesPossible`)
+  - `services/control/internal/presencefeed` - `presence.snapshot` on connect, then
+    `presence.update` deltas. Every recipient gets its own rendering
+    (`Hub.BroadcastPerRecipient`), because redaction is viewer-dependent
+  - connect -> AVAILABLE, last client closing -> OFFLINE (a second window keeps you online);
+    `presence.set` lets a client declare AWAY/DND and it is published to others
+  - wire-level redaction proof: an outsider's snapshot of someone in a private layup titled
+    "Acquisition of Initech" contains no title, no layup id and no participant count
+    (`TestPresencePayloadsDoNotLeakPrivateLayupDetail`)
+  - desktop `src/core/people-store.ts` - snapshot replaces, update patches, malformed payloads
+    rejected; main process pushes validated `people:changed` events, `people:list` for the
+    initial read
+  - real two-client evidence (`make test-smoke`, 9 passed): Nick sees the whole organisation on
+    connect, sees Karl go AVAILABLE then OFFLINE with no polling, and never receives private
+    layup detail
 
 ## Recent runs
 
-- P1-0102 done - layup lifecycle service
 - P1-0103 done - creator privilege devolution invariant
 - P1-0104 done - development user and organisation directory
 - P1-0105 done - presence state model
 - P1-0106 done - realtime WebSocket envelope
+- P1-0107 done - presence publication and fan-out
 
 ## Known issues / decisions needed
 

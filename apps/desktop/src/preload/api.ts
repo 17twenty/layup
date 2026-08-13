@@ -67,6 +67,13 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       /** Who this desktop is running as (PLAN-1 development identity). */
       current: () => invoke('identity:current', undefined),
     },
+    people: {
+      /** Everyone in the organisation with their presence. */
+      list: () => invoke('people:list', undefined),
+      /** Subscribe to people/presence changes. Returns unsubscribe. */
+      onChanged: (handler: (payload: EventPayload<'people:changed'>) => void) =>
+        subscribe('people:changed', handler),
+    },
     realtime: {
       /** Current realtime connection state. */
       status: () => invoke('realtime:status', undefined),

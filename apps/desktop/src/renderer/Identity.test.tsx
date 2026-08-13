@@ -10,6 +10,7 @@ function stub(identity: IdentityResponse) {
       app: { info: vi.fn() },
       control: { status: vi.fn() },
       identity: { current: vi.fn(async () => identity) },
+      people: { list: vi.fn(async () => ({ people: [] })), onChanged: vi.fn(() => () => {}) },
       realtime: { status: vi.fn(), onState: vi.fn(() => () => {}) },
     },
     configurable: true,
