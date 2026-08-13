@@ -6,37 +6,36 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0105
-- completed: 12
+- next task: P1-0106
+- completed: 13
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0104 development user and organisation directory
+- task: P1-0105 presence state model
 - result: done
-- tests: `go test ./...` ok (directory+httpapi), `npm test` (49 passed), `make test-smoke` (3), `make test-boundary` OK
+- tests: `go test ./internal/domain/...` ok (22 cases incl. 7 presence)
 - evidence:
-  - `services/control/internal/directory` - deterministic dev directory: one organisation
-    `org_devlayup` and four people (nick/karl/emelia/priya) with stable IDs derived from their
-    handles, no passwords/tokens/provider
-  - `internal/httpapi/identity.go` - `X-Layup-Dev-User` resolves against the directory;
-    missing/unknown -> 401. Organisation always comes from the directory entry, never the
-    request (`TestIdentityCannotChooseItsOwnOrganisation`)
-  - `GET /api/me` and `GET /api/directory` (versioned + identified);
-    `GET /api/protocol` stays identity-free
-  - desktop: `LAYUP_DEV_USER` selects the identity, control client sends the header,
-    `identity:current` IPC + renderer line "You are Karl · Layup Development · LAYUP_DEV_USER=karl";
-    unresolved identity states the reason
-  - `apps/desktop/README.md` documents running two clients side by side
+  - `services/control/internal/domain/presence.go` - `PersonalPresence`
+    (AVAILABLE/AWAY/DND/OFFLINE) and `ActivityPresence`
+    (NONE/IN_PRIVATE_LAYUP/IN_OPEN_LAYUP/INVITING_YOU/WAITING_FOR_YOU) as independent axes;
+    activity is derived from live membership, personal state is what the person declares
+  - orthogonality proven: DND + IN_PRIVATE_LAYUP, and joining a layup never changes personal
+    presence (`TestActivityIsOrthogonalToPersonalPresence`)
+  - redaction is per viewer: an outsider on a private layup gets coarse busy state with no
+    layup id, title or participant count; participants and the person themselves see detail;
+    an organisation-open layup exposes title/participants
+    (`TestPrivateLayupDetailIsRedactedForOutsiders`, `TestOpenLayupActivityIsDistinctFromPrivate`)
+  - unknown users are OFFLINE; unknown states are rejected with ErrInvalid
 
 ## Recent runs
 
-- P1-0008 done - latency benchmark harness skeleton
 - P1-0101 done - domain IDs and core types
 - P1-0102 done - layup lifecycle service
 - P1-0103 done - creator privilege devolution invariant
 - P1-0104 done - development user and organisation directory
+- P1-0105 done - presence state model
 
 ## Known issues / decisions needed
 

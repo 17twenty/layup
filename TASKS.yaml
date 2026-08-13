@@ -395,7 +395,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Presence state model
-  status: todo
+  status: done
   goal: Implement personal and activity presence as orthogonal state.
   user_visible_behaviour: Implement personal and activity presence as orthogonal state.
   depends_on:
