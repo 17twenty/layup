@@ -214,3 +214,90 @@ body {
   border-color: #2a2e39;
   color: var(--muted);
 }
+
+/* Invitations */
+.requests {
+  display: grid;
+  gap: 8px;
+}
+
+.request {
+  border: 1px solid #2f4a63;
+  background: #16202b;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.request--outgoing {
+  border-color: #2a2e39;
+  background: #161920;
+}
+
+.request__headline {
+  margin: 0;
+  font-weight: 600;
+}
+
+.request__note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.request__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.layup {
+  border-top: 1px solid #23262e;
+  padding-top: 12px;
+}
+
+.layup__header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.layup__header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.layup__visibility,
+.layup__tag {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid #2a2e39;
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 6px;
+}
+
+.layup__participants {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.layup__note {
+  color: #e0b452;
+  font-size: 12px;
+  margin: 4px 0;
+}
+
+.layup__error {
+  color: #f0805a;
+  font-size: 12px;
+}
+
+.layup__empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 8px;
+}

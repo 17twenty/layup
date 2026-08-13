@@ -141,6 +141,53 @@ const membershipResultShape = isObject({
 });
 export type MembershipResult = ReturnType<typeof membershipResultShape>;
 
+export const REQUEST_TYPES = [
+  'INVITE_USER_TO_NEW_LAYUP',
+  'INVITE_USER_TO_LAYUP',
+  'KNOCK_TO_JOIN',
+] as const;
+export type RequestType = (typeof REQUEST_TYPES)[number];
+
+export const REQUEST_STATES = ['PENDING', 'ACCEPTED', 'DECLINED', 'EXPIRED', 'CANCELLED'] as const;
+export type RequestState = (typeof REQUEST_STATES)[number];
+
+export const joinRequestShape = isObject({
+  id: isString,
+  type: isEnum(REQUEST_TYPES),
+  state: isEnum(REQUEST_STATES),
+  fromUserId: isString,
+  fromName: isString,
+  toUserId: optional(isString),
+  toName: optional(isString),
+  note: optional(isString),
+  createdAt: isString,
+  expiresAt: isString,
+  layupId: optional(isString),
+  layupTitle: optional(isString),
+  resultLayupId: optional(isString),
+});
+export type JoinRequest = ReturnType<typeof joinRequestShape>;
+
+const requestListShape = isObject({
+  incoming: isArrayOf(joinRequestShape, { max: 100 }),
+  outgoing: isArrayOf(joinRequestShape, { max: 100 }),
+});
+export type RequestList = ReturnType<typeof requestListShape>;
+
+const acceptResultShape = isObject({
+  request: joinRequestShape,
+  layup: layupShape,
+  yourMembershipId: isString,
+});
+export type AcceptResult = ReturnType<typeof acceptResultShape>;
+
+export interface CreateRequestInput {
+  type: RequestType;
+  toUserId?: string;
+  layupId?: string;
+  note?: string;
+}
+
 export interface CreateLayupInput {
   title?: string;
   visibility?: Visibility;
@@ -178,6 +225,16 @@ export interface ControlClient {
   leaveLayup(layupId: string): Promise<MembershipResult>;
   /** Reads current layup state. */
   getLayup(layupId: string): Promise<Layup>;
+  /** Sends an invitation or knock. */
+  createRequest(input: CreateRequestInput): Promise<JoinRequest>;
+  /** Pending requests to and from this user. */
+  listRequests(): Promise<RequestList>;
+  /** Accepts an invitation or admits a knocker. */
+  acceptRequest(requestId: string): Promise<AcceptResult>;
+  /** Declines a request addressed to you. */
+  declineRequest(requestId: string): Promise<JoinRequest>;
+  /** Cancels a request you sent. */
+  cancelRequest(requestId: string): Promise<JoinRequest>;
 }
 
 export function createControlClient(options: ControlClientOptions): ControlClient {
@@ -300,6 +357,42 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         `/api/layups/${encodeURIComponent(layupId)}`,
       );
       return layupShape(envelope.payload, 'layup.state');
+    },
+
+    async createRequest(input: CreateRequestInput): Promise<JoinRequest> {
+      const envelope = await this.apiPost<{ payload?: unknown }>('/api/requests', {
+        type: input.type,
+        toUserId: input.toUserId ?? '',
+        layupId: input.layupId ?? '',
+        note: input.note ?? '',
+      });
+      return joinRequestShape(envelope.payload, 'request.created');
+    },
+
+    async listRequests(): Promise<RequestList> {
+      const envelope = await this.apiGet<{ payload?: unknown }>('/api/requests');
+      return requestListShape(envelope.payload, 'request.list');
+    },
+
+    async acceptRequest(requestId: string): Promise<AcceptResult> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/requests/${encodeURIComponent(requestId)}/accept`,
+      );
+      return acceptResultShape(envelope.payload, 'request.accepted');
+    },
+
+    async declineRequest(requestId: string): Promise<JoinRequest> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/requests/${encodeURIComponent(requestId)}/decline`,
+      );
+      return joinRequestShape(envelope.payload, 'request.resolved');
+    },
+
+    async cancelRequest(requestId: string): Promise<JoinRequest> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/requests/${encodeURIComponent(requestId)}/cancel`,
+      );
+      return joinRequestShape(envelope.payload, 'request.resolved');
     },
 
     async apiPost<T>(path: string, body?: unknown): Promise<T> {

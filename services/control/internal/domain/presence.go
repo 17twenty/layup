@@ -71,12 +71,20 @@ type PresenceView struct {
 }
 
 // PresenceService owns personal presence and derives activity presence from
-// layup membership.
+// layup membership and pending requests.
 type PresenceService struct {
 	mu       sync.RWMutex
 	personal map[UserID]personalRecord
 	layups   *LayupService
+	requests *RequestService
 	now      func() time.Time
+}
+
+// WithRequests enables the viewer-relative activity states INVITING_YOU and
+// WAITING_FOR_YOU, which depend on requests in flight between two people.
+func (s *PresenceService) WithRequests(requests *RequestService) *PresenceService {
+	s.requests = requests
+	return s
 }
 
 type personalRecord struct {
@@ -137,6 +145,23 @@ func (s *PresenceService) ViewFor(ctx context.Context, viewer, subject UserID) (
 	}
 	if known {
 		view.Personal = record.state
+	}
+
+	// Viewer-relative states come first: a request in flight between these two
+	// people is the most important thing on that tile (SPEC.md §5.1).
+	if s.requests != nil && viewer != "" && viewer != subject {
+		for _, request := range s.requests.PendingForUser(viewer) {
+			if request.FromUserID == subject {
+				view.Activity = ActivityInvitingYou
+				return view, nil
+			}
+		}
+		for _, request := range s.requests.PendingFromUser(viewer) {
+			if request.ToUserID == subject {
+				view.Activity = ActivityWaitingForYou
+				return view, nil
+			}
+		}
 	}
 
 	active, err := s.layups.ActiveLayupsForUser(ctx, subject)

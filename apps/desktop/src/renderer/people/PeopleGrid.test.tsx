@@ -36,6 +36,7 @@ function stubBridge(initial: People) {
       app: { info: vi.fn() },
       control: { status: vi.fn() },
       identity: { current: vi.fn() },
+      requests: { list: vi.fn(async () => ({ incoming: [], outgoing: [] })), invite: vi.fn(), accept: vi.fn(), decline: vi.fn(), cancel: vi.fn(), onChanged: vi.fn(() => () => {}) },
       layup: { current: vi.fn(), create: vi.fn(), join: vi.fn(), leave: vi.fn(), onChanged: vi.fn(() => () => {}) },
       realtime: { status: vi.fn(), onState: vi.fn(() => () => {}) },
       people: {

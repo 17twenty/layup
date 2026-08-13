@@ -88,6 +88,19 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       onChanged: (handler: (state: EventPayload<'layup:changed'>) => void) =>
         subscribe('layup:changed', handler),
     },
+    requests: {
+      /** Pending invitations and knocks, incoming and outgoing. */
+      list: () => invoke('requests:list', undefined),
+      /** Invites someone into a new layup. Starts no media by itself. */
+      invite: (toUserId: string, note?: string) =>
+        invoke('requests:invite', note === undefined ? { toUserId } : { toUserId, note }),
+      accept: (requestId: string) => invoke('requests:accept', { requestId }),
+      decline: (requestId: string) => invoke('requests:decline', { requestId }),
+      cancel: (requestId: string) => invoke('requests:cancel', { requestId }),
+      /** Subscribe to pending-request changes. Returns unsubscribe. */
+      onChanged: (handler: (state: EventPayload<'requests:changed'>) => void) =>
+        subscribe('requests:changed', handler),
+    },
     realtime: {
       /** Current realtime connection state. */
       status: () => invoke('realtime:status', undefined),

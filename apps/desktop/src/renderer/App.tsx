@@ -5,6 +5,7 @@ import { Identity } from './Identity';
 import { RealtimeStatus } from './RealtimeStatus';
 import { PeopleGrid } from './people/PeopleGrid';
 import { LayupPanel } from './layup/LayupPanel';
+import { Invitations } from './requests/Invitations';
 import type { IdentityResponse } from '../shared/ipc';
 
 /**
@@ -34,7 +35,14 @@ export function App() {
         <p className="tagline">People → Layup → Share → Collaborate</p>
       </header>
 
-      <PeopleGrid selfUserId={identity?.userId} />
+      <Invitations />
+      <PeopleGrid
+        selfUserId={identity?.userId}
+        onAction={(person, action) => {
+          // A click is a social request, never a media start (SPEC.md §4).
+          if (action.kind === 'start') void window.layup.requests.invite(person.userId);
+        }}
+      />
       <LayupPanel />
 
       <footer className="shell__footer">

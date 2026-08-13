@@ -141,6 +141,41 @@ func (s *LayupService) CreateLayup(ctx context.Context, in CreateLayupInput) (La
 	return s.view(layup.ID)
 }
 
+// CreateLayupWithGuests creates a layup, the creator membership and one
+// membership per guest in a single call.
+//
+// This is what accepting an invitation does: one layup and both memberships
+// appear together, or nothing does (SPEC.md §6.1). If any part fails, the layup
+// is ended immediately rather than left half-formed.
+func (s *LayupService) CreateLayupWithGuests(
+	ctx context.Context,
+	in CreateLayupInput,
+	guests ...UserID,
+) (LayupView, error) {
+	view, err := s.CreateLayup(ctx, in)
+	if err != nil {
+		return LayupView{}, err
+	}
+
+	for _, guest := range guests {
+		if _, _, err := s.Join(ctx, view.Layup.ID, guest); err != nil {
+			// Roll back: end the layup we just made so no half-formed layup
+			// survives an invitation that could not complete.
+			layup, getErr := s.repo.GetLayup(view.Layup.ID)
+			if getErr == nil {
+				ended := s.now()
+				layup.EndedAt = &ended
+				layup.CreatorMembershipID = nil
+				_ = s.repo.SaveLayup(layup)
+			}
+			s.log.WarnContext(ctx, "invitation could not be completed; layup discarded",
+				"layupId", string(view.Layup.ID), "guestUserId", string(guest), "error", err.Error())
+			return LayupView{}, err
+		}
+	}
+	return s.view(view.Layup.ID)
+}
+
 // Join adds a user to an active layup and returns the resulting view.
 //
 // Joining is idempotent for a user who is already present: the existing active

@@ -31,6 +31,7 @@ type Server struct {
 	layups    *domain.LayupService
 	hub       *realtime.Hub
 	presence  *domain.PresenceService
+	requests  *domain.RequestService
 	feed      *presencefeed.Feed
 	// heartbeatInterval is overridable so tests do not wait seconds.
 	heartbeatInterval time.Duration
@@ -45,6 +46,7 @@ type Options struct {
 	Layups            *domain.LayupService
 	Hub               *realtime.Hub
 	Presence          *domain.PresenceService
+	Requests          *domain.RequestService
 	HeartbeatInterval time.Duration
 }
 
@@ -78,6 +80,14 @@ func New(cfg config.Config, opts Options) *Server {
 	if presence == nil {
 		presence = domain.NewPresenceService(layups, nil)
 	}
+	requests := opts.Requests
+	if requests == nil {
+		requests = domain.NewRequestService(layups, domain.RequestServiceOptions{
+			TTL:    dir.Organisation().Policy.RequestTTL,
+			Logger: log,
+		})
+	}
+	presence.WithRequests(requests)
 	s := &Server{
 		cfg:               cfg,
 		log:               log,
@@ -88,6 +98,7 @@ func New(cfg config.Config, opts Options) *Server {
 		layups:            layups,
 		hub:               hub,
 		presence:          presence,
+		requests:          requests,
 		heartbeatInterval: heartbeat,
 	}
 	s.feed = presencefeed.New(hub, presence, dir, log)
@@ -100,6 +111,9 @@ func (s *Server) Hub() *realtime.Hub { return s.hub }
 
 // Layups exposes the layup service for wiring and tests.
 func (s *Server) Layups() *domain.LayupService { return s.layups }
+
+// Requests exposes the request service for wiring and tests.
+func (s *Server) Requests() *domain.RequestService { return s.requests }
 
 // Presence exposes the presence service for wiring and tests.
 func (s *Server) Presence() *domain.PresenceService { return s.presence }
@@ -125,6 +139,11 @@ func (s *Server) routes() {
 	authed.HandleFunc("GET /api/layups/{id}", s.handleGetLayup)
 	authed.HandleFunc("POST /api/layups/{id}/join", s.handleJoinLayup)
 	authed.HandleFunc("POST /api/layups/{id}/leave", s.handleLeaveLayup)
+	authed.HandleFunc("GET /api/requests", s.handleListRequests)
+	authed.HandleFunc("POST /api/requests", s.handleCreateRequest)
+	authed.HandleFunc("POST /api/requests/{id}/accept", s.handleAcceptRequest)
+	authed.HandleFunc("POST /api/requests/{id}/decline", s.handleDeclineRequest)
+	authed.HandleFunc("POST /api/requests/{id}/cancel", s.handleCancelRequest)
 	public.Handle("/api/", s.requireIdentity(authed))
 
 	s.mux.Handle("/api/", s.requireProtocolVersion(public))

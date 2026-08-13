@@ -131,6 +131,31 @@ export const createLayupRequest = isObject({
 
 export const joinLayupRequest = isObject({ layupId: isString });
 
+export const joinRequestShape = isObject({
+  id: isString,
+  type: isEnum(['INVITE_USER_TO_NEW_LAYUP', 'INVITE_USER_TO_LAYUP', 'KNOCK_TO_JOIN'] as const),
+  state: isEnum(['PENDING', 'ACCEPTED', 'DECLINED', 'EXPIRED', 'CANCELLED'] as const),
+  fromUserId: isString,
+  fromName: isString,
+  toUserId: optional(isString),
+  toName: optional(isString),
+  note: optional(isString),
+  createdAt: isString,
+  expiresAt: isString,
+  layupId: optional(isString),
+  layupTitle: optional(isString),
+  resultLayupId: optional(isString),
+});
+
+export const requestsResponse = isObject({
+  incoming: isArrayOf(joinRequestShape, { max: 100 }),
+  outgoing: isArrayOf(joinRequestShape, { max: 100 }),
+});
+export type RequestsResponse = ReturnType<typeof requestsResponse>;
+
+export const inviteRequest = isObject({ toUserId: isString, note: optional(isString) });
+export const requestIdRequest = isObject({ requestId: isString });
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'control:status': channel(isVoid, controlStatusResponse),
@@ -141,6 +166,11 @@ export const ipcChannels = {
   'layup:create': channel(createLayupRequest, layupStateResponse),
   'layup:join': channel(joinLayupRequest, layupStateResponse),
   'layup:leave': channel(isVoid, layupStateResponse),
+  'requests:list': channel(isVoid, requestsResponse),
+  'requests:invite': channel(inviteRequest, joinRequestShape),
+  'requests:accept': channel(requestIdRequest, isVoid),
+  'requests:decline': channel(requestIdRequest, isVoid),
+  'requests:cancel': channel(requestIdRequest, isVoid),
 } as const;
 
 /**
@@ -153,6 +183,7 @@ export const ipcEvents = {
   'realtime:state': realtimeStateResponse,
   'people:changed': peopleResponse,
   'layup:changed': layupStateResponse,
+  'requests:changed': requestsResponse,
 } as const;
 
 export type EventName = keyof typeof ipcEvents;

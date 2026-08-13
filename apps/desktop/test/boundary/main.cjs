@@ -33,6 +33,19 @@ app.whenReady().then(async () => {
     'layup:create': () => ({ youAreCreatorMembership: false }),
     'layup:join': () => ({ youAreCreatorMembership: false }),
     'layup:leave': () => ({ youAreCreatorMembership: false }),
+    'requests:list': () => ({ incoming: [], outgoing: [] }),
+    'requests:invite': () => ({
+      id: 'jrq_devaaaaab',
+      type: 'INVITE_USER_TO_NEW_LAYUP',
+      state: 'PENDING',
+      fromUserId: 'usr_devnickx',
+      fromName: 'Nick',
+      createdAt: '2026-08-13T09:00:00Z',
+      expiresAt: '2026-08-13T09:01:00Z',
+    }),
+    'requests:accept': () => undefined,
+    'requests:decline': () => undefined,
+    'requests:cancel': () => undefined,
   });
 
   const win = new BrowserWindow({
@@ -81,7 +94,16 @@ app.whenReady().then(async () => {
   expect(
     'window.layup keys',
     JSON.stringify(probe.layupKeys),
-    JSON.stringify(['app', 'control', 'identity', 'layup', 'people', 'protocolVersion', 'realtime']),
+    JSON.stringify([
+      'app',
+      'control',
+      'identity',
+      'layup',
+      'people',
+      'protocolVersion',
+      'realtime',
+      'requests',
+    ]),
   );
   expect('app:info protocolVersion', probe.appInfo && probe.appInfo.protocolVersion, 1);
   expect('discards smuggled payload', probe.smuggledPayloadDiscarded, true);

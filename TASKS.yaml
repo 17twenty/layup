@@ -614,7 +614,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Invite available person to new layup
-  status: todo
+  status: done
   goal: Clicking an available person sends an invitation; acceptance atomically creates the layup and both memberships.
   user_visible_behaviour: Clicking an available person sends an invitation; acceptance atomically creates the layup and both
     memberships.

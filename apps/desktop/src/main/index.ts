@@ -9,6 +9,7 @@ import { createRealtimeSupervisor } from './realtime';
 import { createPeopleStore, TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE } from '../core/people-store';
 import { createControlClient } from '../core/control-client';
 import { createLayupSupervisor } from './layups';
+import { createRequestsSupervisor } from './requests';
 import { secureWebPreferences } from './window';
 
 /**
@@ -78,6 +79,24 @@ const layups = createLayupSupervisor({
   onChange: (state) => broadcast('layup:changed', state),
 });
 
+const requests = createRequestsSupervisor({
+  client: controlClient,
+  realtime: realtime.client,
+  log: log.with({ component: 'requests' }),
+  onChange: (state) => broadcast('requests:changed', state),
+  // Accepting an invitation puts this desktop into the resulting layup.
+  onAccepted: (result) => layups.adopt(result.layup, result.yourMembershipId),
+});
+
+// A fresh connection means the server may know about requests we do not.
+realtime.client.on('hello.ok', () => {
+  void requests.refresh().catch((error: unknown) => {
+    log.warn('could not refresh requests', {
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  });
+});
+
 function buildHandlers(): Handlers {
   return {
     'app:info': () => ({
@@ -93,6 +112,11 @@ function buildHandlers(): Handlers {
     'layup:create': (input) => layups.create(input),
     'layup:join': (input) => layups.join(input.layupId),
     'layup:leave': () => layups.leave(),
+    'requests:list': () => requests.state(),
+    'requests:invite': (input) => requests.invite(input.toUserId, input.note),
+    'requests:accept': (input) => requests.accept(input.requestId).then(() => undefined),
+    'requests:decline': (input) => requests.decline(input.requestId).then(() => undefined),
+    'requests:cancel': (input) => requests.cancel(input.requestId).then(() => undefined),
   };
 }
 

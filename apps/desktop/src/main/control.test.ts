@@ -30,6 +30,11 @@ function harness(states: ControlConnectionState[]) {
     joinLayup: unusedHere,
     leaveLayup: unusedHere,
     getLayup: unusedHere,
+    createRequest: unusedHere,
+    listRequests: unusedHere,
+    acceptRequest: unusedHere,
+    declineRequest: unusedHere,
+    cancelRequest: unusedHere,
     me: async () => ({
       user: { id: 'usr_devkarlx', displayName: 'Karl' },
       organisation: { id: 'org_devlayup', name: 'Layup Development' },

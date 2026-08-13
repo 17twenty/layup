@@ -6,38 +6,40 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0202
-- completed: 19
+- next task: P1-0203
+- completed: 20
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0201 join request domain and lifecycle
+- task: P1-0202 invite available person to new layup
 - result: done
-- tests: `go test ./internal/domain/...` ok (9 new request cases)
+- tests: `make test-go` (6 request cases), `npm test` (100 passed), `make test-e2e` (4 scenarios), boundary OK
 - evidence:
-  - `services/control/internal/domain/requests.go` - one `JoinRequest` object with
-    `INVITE_USER_TO_NEW_LAYUP` / `INVITE_USER_TO_LAYUP` / `KNOCK_TO_JOIN` and states
-    PENDING/ACCEPTED/DECLINED/EXPIRED/CANCELLED
-  - transitions are validated: only terminal targets are accepted, and a terminal request can
-    never be re-resolved (`TestTerminalStatesAreFinal` covers all 9 combinations)
-  - expiry is deterministic - driven by the injected clock, resolved exactly at the deadline,
-    and an expired request cannot be accepted and disappears from both sides
-    (`TestExpiryIsDeterministic`)
-  - duplicate collapse is in the domain, not the UI: an equivalent pending request from the
-    same requester is returned instead of creating a second notification
-    (`TestDuplicateRequestsCollapse`, `TestKnocksCollapseByRequesterAndLayup`)
-  - shape rules enforced: invitations need a recipient, knocks need a layup, an invitation to a
-    new layup must not name one, and you cannot invite yourself
+  - `POST /api/requests` + `/accept|/decline|/cancel` + `GET /api/requests`; only the recipient
+    may accept/decline and only the sender may cancel (403 otherwise), and a resolved request
+    cannot be re-resolved (409)
+  - accepting `INVITE_USER_TO_NEW_LAYUP` calls `CreateLayupWithGuests`, so one layup and both
+    memberships appear together; a failure discards the layup rather than leaving it half-formed
+  - the inviter's membership is the creator membership; the accepter joins as ordinary
+  - viewer-relative presence is live: the recipient's tile for the sender reads INVITING_YOU and
+    the sender's tile for the recipient reads WAITING_FOR_YOU
+    (`TestInvitationChangesViewerRelativeActivity`)
+  - repeated clicks collapse: one `request.incoming` push, one entry in the recipient's list
+  - desktop: `main/requests.ts` supervisor + `requests:*` IPC + `Invitations` UI (6 tests);
+    the People tile's "Start layup" sends an invitation and starts no media
+  - e2e (`make test-e2e`, 4 scenarios): click -> invitation -> accept -> one layup with both
+    people, creator authority held by the inviter, both sides told over realtime; and repeated
+    clicks produce exactly one notification with declining being final
 
 ## Recent runs
 
-- P1-0107 done - presence publication and fan-out
 - P1-0108 done - people home grid
 - P1-0109 done - logical layup create/join/leave API
 - P1-0110 done - creator devolution end-to-end test
 - P1-0201 done - join request domain and lifecycle
+- P1-0202 done - invite available person to new layup
 
 ## Known issues / decisions needed
 

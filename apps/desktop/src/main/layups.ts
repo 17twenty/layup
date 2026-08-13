@@ -29,6 +29,9 @@ export interface LayupSupervisorOptions {
 
 export interface LayupSupervisor {
   state(): LayupState;
+  /** Adopts a layup this desktop entered through some other path (an accepted
+   *  invitation), so local state matches the server immediately. */
+  adopt(layup: Layup, membershipId: string): LayupState;
   create(input?: CreateLayupInput): Promise<LayupState>;
   join(layupId: string): Promise<LayupState>;
   leave(): Promise<LayupState>;
@@ -88,6 +91,11 @@ export function createLayupSupervisor(options: LayupSupervisorOptions): LayupSup
 
   return {
     state: () => state,
+
+    adopt(layup, membershipId) {
+      publish(derive(layup, membershipId));
+      return state;
+    },
 
     async create(input) {
       const result = await client.createLayup(input);
