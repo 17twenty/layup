@@ -163,3 +163,26 @@ func TestSuppliedRequestIDIsHonoured(t *testing.T) {
 		t.Fatal("log line must use the client request id")
 	}
 }
+
+func TestMiddlewareKeepsWebSocketUpgradesPossible(t *testing.T) {
+	// A wrapper that hides http.Hijacker turns every realtime connection into
+	// a 501, so the wrapper must forward it.
+	var buf bytes.Buffer
+	log := New(Options{Level: "info", Format: "json", Writer: &buf})
+
+	var seen http.ResponseWriter
+	handler := Middleware(log)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		seen = w
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/realtime", nil))
+
+	if _, ok := seen.(http.Hijacker); !ok {
+		t.Fatal("wrapped ResponseWriter must implement http.Hijacker")
+	}
+	if _, ok := seen.(http.Flusher); !ok {
+		t.Fatal("wrapped ResponseWriter must implement http.Flusher")
+	}
+	if unwrapper, ok := seen.(interface{ Unwrap() http.ResponseWriter }); !ok || unwrapper.Unwrap() == nil {
+		t.Fatal("wrapped ResponseWriter must support Unwrap")
+	}
+}

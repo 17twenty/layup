@@ -27,6 +27,7 @@ const goodHandlers: Handlers = {
   'app:info': () => ({ appVersion: '0.1.0', protocolVersion: 1, platform: 'darwin' }),
   'control:status': () => controlState,
   'identity:current': () => ({ devUser: 'nick', resolved: false }),
+  'realtime:status': () => ({ status: 'idle' as const, attempt: 0 }),
 };
 
 describe('main IPC boundary', () => {
@@ -43,7 +44,12 @@ describe('main IPC boundary', () => {
   it('registers exactly the declared channels', () => {
     const ipc = fakeIpcMain();
     registerIpcHandlers(ipc.target, goodHandlers);
-    expect([...ipc.registered.keys()]).toEqual(['app:info', 'control:status', 'identity:current']);
+    expect([...ipc.registered.keys()]).toEqual([
+      'app:info',
+      'control:status',
+      'identity:current',
+      'realtime:status',
+    ]);
   });
 
   it('rejects an unexpected payload before the handler runs', async () => {

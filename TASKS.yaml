@@ -425,7 +425,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Realtime WebSocket envelope
-  status: todo
+  status: done
   goal: Implement authenticated/dev-identified WSS connection, event envelope, reconnect-safe subscription and heartbeat.
   user_visible_behaviour: Implement authenticated/dev-identified WSS connection, event envelope, reconnect-safe subscription
     and heartbeat.

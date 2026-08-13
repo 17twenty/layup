@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { createLayupApi } from './api';
 
 /**
@@ -7,5 +7,12 @@ import { createLayupApi } from './api';
  */
 contextBridge.exposeInMainWorld(
   'layup',
-  createLayupApi((channel, payload) => ipcRenderer.invoke(channel, payload)),
+  createLayupApi(
+    (channel, payload) => ipcRenderer.invoke(channel, payload),
+    (channel, listener) => {
+      const wrapped = (_event: IpcRendererEvent, payload: unknown) => listener(payload);
+      ipcRenderer.on(channel, wrapped);
+      return () => ipcRenderer.removeListener(channel, wrapped);
+    },
+  ),
 );

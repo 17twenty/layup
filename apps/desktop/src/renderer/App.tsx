@@ -1,6 +1,7 @@
 import { PROTOCOL_VERSION } from '@layup/protocol';
 import { ControlStatus } from './ControlStatus';
 import { Identity } from './Identity';
+import { RealtimeStatus } from './RealtimeStatus';
 
 export function App() {
   return (
@@ -9,6 +10,7 @@ export function App() {
       <p className="tagline">People → Layup → Share → Collaborate</p>
       <Identity />
       <ControlStatus />
+      <RealtimeStatus />
       <p className="meta">protocol v{PROTOCOL_VERSION}</p>
     </main>
   );

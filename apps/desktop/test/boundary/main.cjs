@@ -27,6 +27,7 @@ app.whenReady().then(async () => {
       checkedAtMs: 0,
     }),
     'identity:current': () => ({ devUser: 'nick', resolved: false, detail: 'no control service' }),
+    'realtime:status': () => ({ status: 'idle', attempt: 0 }),
   });
 
   const win = new BrowserWindow({
@@ -75,7 +76,7 @@ app.whenReady().then(async () => {
   expect(
     'window.layup keys',
     JSON.stringify(probe.layupKeys),
-    JSON.stringify(['app', 'control', 'identity', 'protocolVersion']),
+    JSON.stringify(['app', 'control', 'identity', 'protocolVersion', 'realtime']),
   );
   expect('app:info protocolVersion', probe.appInfo && probe.appInfo.protocolVersion, 1);
   expect('discards smuggled payload', probe.smuggledPayloadDiscarded, true);

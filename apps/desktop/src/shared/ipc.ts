@@ -60,11 +60,40 @@ export const identityResponse = isObject({
 });
 export type IdentityResponse = ReturnType<typeof identityResponse>;
 
+/** Mirrors RealtimeState in core/realtime-client.ts. */
+export const realtimeStateResponse = isObject({
+  status: isEnum(['idle', 'connecting', 'connected', 'reconnecting', 'stopped'] as const),
+  connectionId: optional(isString),
+  userId: optional(isString),
+  organisationId: optional(isString),
+  attempt: isInteger({ min: 0 }),
+  lastError: optional(isString),
+  lastMessageAtMs: optional(isFiniteNumber),
+});
+export type RealtimeStateResponse = ReturnType<typeof realtimeStateResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'control:status': channel(isVoid, controlStatusResponse),
   'identity:current': channel(isVoid, identityResponse),
+  'realtime:status': channel(isVoid, realtimeStateResponse),
 } as const;
+
+/**
+ * Main -> renderer push events.
+ *
+ * Payloads are validated on arrival exactly like request/response channels: a
+ * privileged process bug must not become unchecked renderer state.
+ */
+export const ipcEvents = {
+  'realtime:state': realtimeStateResponse,
+} as const;
+
+export type EventName = keyof typeof ipcEvents;
+export type EventPayload<E extends EventName> =
+  (typeof ipcEvents)[E] extends Validator<infer P> ? P : never;
+
+export const eventNames = Object.keys(ipcEvents) as EventName[];
 
 export type IpcChannels = typeof ipcChannels;
 export type ChannelName = keyof IpcChannels;

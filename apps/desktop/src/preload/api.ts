@@ -1,16 +1,20 @@
-import {
-  PROTOCOL_VERSION,
-} from '@layup/protocol';
+import { PROTOCOL_VERSION } from '@layup/protocol';
 import {
   ipcChannels,
+  ipcEvents,
   type ChannelName,
   type ChannelSpec,
+  type EventName,
+  type EventPayload,
   type RequestOf,
   type ResponseOf,
 } from '../shared/ipc';
 
 /** How the preload reaches the main process. Injected so it can be tested. */
 export type Invoker = (channel: string, payload: unknown) => Promise<unknown>;
+
+/** How the preload receives pushes from the main process. */
+export type Subscriber = (channel: string, listener: (payload: unknown) => void) => () => void;
 
 /**
  * Builds the object exposed to the renderer as `window.layup`.
@@ -19,7 +23,7 @@ export type Invoker = (channel: string, payload: unknown) => Promise<unknown>;
  * string passed in from the renderer, and no Node/Electron handle in the
  * returned object (SPEC.md §13.1).
  */
-export function createLayupApi(invoker: Invoker) {
+export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => () => {}) {
   async function invoke<C extends ChannelName>(
     channel: C,
     request: RequestOf<C>,
@@ -30,6 +34,24 @@ export function createLayupApi(invoker: Invoker) {
     const validatedRequest = spec.request(request, channel);
     const raw = await invoker(channel, validatedRequest);
     return spec.response(raw, `${channel}.response`);
+  }
+
+  /** Subscribes to a push event, validating every payload before delivery. */
+  function subscribe<E extends EventName>(
+    event: E,
+    handler: (payload: EventPayload<E>) => void,
+  ): () => void {
+    const validate = ipcEvents[event];
+    return subscriber(event, (raw) => {
+      let payload: EventPayload<E>;
+      try {
+        payload = validate(raw, event) as EventPayload<E>;
+      } catch {
+        // A malformed push is dropped, never handed to the UI.
+        return;
+      }
+      handler(payload);
+    });
   }
 
   return {
@@ -44,6 +66,13 @@ export function createLayupApi(invoker: Invoker) {
     identity: {
       /** Who this desktop is running as (PLAN-1 development identity). */
       current: () => invoke('identity:current', undefined),
+    },
+    realtime: {
+      /** Current realtime connection state. */
+      status: () => invoke('realtime:status', undefined),
+      /** Subscribe to realtime connection-state changes. Returns unsubscribe. */
+      onState: (handler: (state: EventPayload<'realtime:state'>) => void) =>
+        subscribe('realtime:state', handler),
     },
   } as const;
 }

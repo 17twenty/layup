@@ -2,8 +2,10 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as path from 'node:path';
 import { PROTOCOL_VERSION } from '@layup/protocol';
 import { registerIpcHandlers, type Handlers } from './ipc';
+import type { EventName } from '../shared/ipc';
 import { createControlSupervisor, DEFAULT_CONTROL_URL, DEFAULT_DEV_USER } from './control';
 import { createLogger, newCorrelationId } from './logging';
+import { createRealtimeSupervisor } from './realtime';
 import { secureWebPreferences } from './window';
 
 /**
@@ -19,10 +21,27 @@ const log = createLogger({
   base: { component: 'desktop-main', appSessionId: newCorrelationId() },
 });
 
+const controlUrl = process.env.LAYUP_CONTROL_URL || DEFAULT_CONTROL_URL;
+const devUser = process.env.LAYUP_DEV_USER || DEFAULT_DEV_USER;
+
 const control = createControlSupervisor({
-  baseUrl: process.env.LAYUP_CONTROL_URL || DEFAULT_CONTROL_URL,
-  devUser: process.env.LAYUP_DEV_USER || DEFAULT_DEV_USER,
+  baseUrl: controlUrl,
+  devUser,
   log: log.with({ component: 'control-client' }),
+});
+
+/** Pushes a validated event to every open window. */
+function broadcast(event: EventName, payload: unknown) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(event, payload);
+  }
+}
+
+const realtime = createRealtimeSupervisor({
+  baseUrl: controlUrl,
+  devUser,
+  log: log.with({ component: 'realtime' }),
+  onState: (state) => broadcast('realtime:state', state),
 });
 
 function buildHandlers(): Handlers {
@@ -34,6 +53,7 @@ function buildHandlers(): Handlers {
     }),
     'control:status': () => control.status(),
     'identity:current': () => control.identity(),
+    'realtime:status': () => realtime.state(),
   };
 }
 
@@ -81,6 +101,7 @@ app.whenReady().then(() => {
   });
 
   createMainWindow();
+  realtime.start();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -88,6 +109,8 @@ app.whenReady().then(() => {
     }
   });
 });
+
+app.on('before-quit', () => realtime.stop());
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

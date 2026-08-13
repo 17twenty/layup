@@ -13,6 +13,7 @@ import (
 	"github.com/layup-app/layup/services/control/internal/config"
 	"github.com/layup-app/layup/services/control/internal/directory"
 	"github.com/layup-app/layup/services/control/internal/domain"
+	"github.com/layup-app/layup/services/control/internal/realtime"
 )
 
 // Clock lets tests control time without sleeping.
@@ -27,14 +28,20 @@ type Server struct {
 	mux       *http.ServeMux
 	directory directory.Directory
 	layups    *domain.LayupService
+	hub       *realtime.Hub
+	// heartbeatInterval is overridable so tests do not wait seconds.
+	heartbeatInterval time.Duration
+	onRealtimeReady   func(*realtime.Conn)
 }
 
 // Options configures a Server. Zero values fall back to production defaults.
 type Options struct {
-	Logger    *slog.Logger
-	Now       Clock
-	Directory directory.Directory
-	Layups    *domain.LayupService
+	Logger            *slog.Logger
+	Now               Clock
+	Directory         directory.Directory
+	Layups            *domain.LayupService
+	Hub               *realtime.Hub
+	HeartbeatInterval time.Duration
 }
 
 // New builds a Server with every route registered.
@@ -55,18 +62,31 @@ func New(cfg config.Config, opts Options) *Server {
 	if layups == nil {
 		layups = domain.NewLayupService(domain.NewMemoryRepository(), domain.LayupServiceOptions{Logger: log})
 	}
+	hub := opts.Hub
+	if hub == nil {
+		hub = realtime.NewHub(log)
+	}
+	heartbeat := opts.HeartbeatInterval
+	if heartbeat <= 0 {
+		heartbeat = realtime.DefaultHeartbeatInterval
+	}
 	s := &Server{
-		cfg:       cfg,
-		log:       log,
-		now:       now,
-		startedAt: now(),
-		mux:       http.NewServeMux(),
-		directory: dir,
-		layups:    layups,
+		cfg:               cfg,
+		log:               log,
+		now:               now,
+		startedAt:         now(),
+		mux:               http.NewServeMux(),
+		directory:         dir,
+		layups:            layups,
+		hub:               hub,
+		heartbeatInterval: heartbeat,
 	}
 	s.routes()
 	return s
 }
+
+// Hub exposes the realtime fan-out so other components can publish to it.
+func (s *Server) Hub() *realtime.Hub { return s.hub }
 
 func (s *Server) routes() {
 	// Unversioned discovery: reachable by any client, including one whose
@@ -76,6 +96,10 @@ func (s *Server) routes() {
 	// Versioned but unauthenticated: how a client learns what we speak.
 	public := http.NewServeMux()
 	public.HandleFunc("GET /api/protocol", s.handleProtocolInfo)
+
+	// The realtime endpoint authenticates itself (handshake on the query
+	// string), so it sits beside the versioned REST routes.
+	s.mux.HandleFunc("GET /api/realtime", s.handleRealtime)
 
 	// Everything else additionally requires a resolvable identity.
 	authed := http.NewServeMux()

@@ -1,9 +1,12 @@
 package logging
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 )
@@ -38,6 +41,27 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 	n, err := r.ResponseWriter.Write(b)
 	r.bytes += n
 	return n, err
+}
+
+// Unwrap lets http.ResponseController reach the real writer.
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
+// Hijack keeps the WebSocket upgrade working: a wrapper that hides Hijacker
+// turns every realtime connection into a 501.
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("logging: underlying writer does not support hijacking")
+	}
+	r.status = http.StatusSwitchingProtocols
+	return hijacker.Hijack()
+}
+
+// Flush keeps streaming responses streaming.
+func (r *statusRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // Middleware attaches a request ID to the context and logs one structured line

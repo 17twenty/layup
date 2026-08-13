@@ -6,36 +6,43 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0106
-- completed: 13
+- next task: P1-0107
+- completed: 14
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0105 presence state model
+- task: P1-0106 realtime WebSocket envelope
 - result: done
-- tests: `go test ./internal/domain/...` ok (22 cases incl. 7 presence)
+- tests: `make test-go` (incl. 7 realtime cases), `npm test` (61 passed), `make test-smoke` (6 passed), boundary OK
 - evidence:
-  - `services/control/internal/domain/presence.go` - `PersonalPresence`
-    (AVAILABLE/AWAY/DND/OFFLINE) and `ActivityPresence`
-    (NONE/IN_PRIVATE_LAYUP/IN_OPEN_LAYUP/INVITING_YOU/WAITING_FOR_YOU) as independent axes;
-    activity is derived from live membership, personal state is what the person declares
-  - orthogonality proven: DND + IN_PRIVATE_LAYUP, and joining a layup never changes personal
-    presence (`TestActivityIsOrthogonalToPersonalPresence`)
-  - redaction is per viewer: an outsider on a private layup gets coarse busy state with no
-    layup id, title or participant count; participants and the person themselves see detail;
-    an organisation-open layup exposes title/participants
-    (`TestPrivateLayupDetailIsRedactedForOutsiders`, `TestOpenLayupActivityIsDistinctFromPrivate`)
-  - unknown users are OFFLINE; unknown states are rejected with ErrInvalid
+  - Go: `internal/realtime` (hub + connection) and `GET /api/realtime` (coder/websocket).
+    Handshake travels on the query string (`?v=1&devUser=karl`) because the desktop runtime's
+    WebSocket cannot set headers; headers still work when present
+  - server sends `hello.ok` (connectionId, userId, organisationId, protocol version, heartbeat
+    interval), then heartbeats; clients ack. Malformed frames get an error envelope and the
+    connection survives (`TestRealtimeRejectsMalformedMessagesWithoutClosing`)
+  - fan-out is organisation-scoped, and a connection whose queue is full is dropped rather than
+    buffered without limit (`TestHubDropsAConnectionThatCannotKeepUp`)
+  - desktop `src/core/realtime-client.ts`: backoff+jitter reconnect, heartbeat watchdog
+    (interval x3), subscriptions held on the client so a reconnect never duplicates handlers,
+    malformed events rejected (10 unit tests)
+  - main process owns the socket and pushes validated `realtime:state` events to windows;
+    preload validates every push before the UI sees it
+  - real smoke evidence (`make test-smoke`, 6 passed): two clients connect independently;
+    killing the server puts the client into `reconnecting` and it reconnects by itself with
+    exactly one `hello.ok` handler invocation per connection
+  - fixed: the logging middleware hid `http.Hijacker`, which turned every upgrade into a 501
+    (`TestMiddlewareKeepsWebSocketUpgradesPossible`)
 
 ## Recent runs
 
-- P1-0101 done - domain IDs and core types
 - P1-0102 done - layup lifecycle service
 - P1-0103 done - creator privilege devolution invariant
 - P1-0104 done - development user and organisation directory
 - P1-0105 done - presence state model
+- P1-0106 done - realtime WebSocket envelope
 
 ## Known issues / decisions needed
 
