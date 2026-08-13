@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "scenario": "synthetic-latency",
+  "unit": "ms",
+  "startedAt": "2026-08-13T11:29:25.331Z",
+  "endedAt": "2026-08-13T11:29:25.331Z",
+  "wallClockMs": 0.174,
+  "samples": {
+    "count": 500,
+    "min": 18.043,
+    "max": 90.888,
+    "mean": 27.086,
+    "percentiles": {
+      "p50": 25.413,
+      "p75": 29.12,
+      "p90": 31.039,
+      "p95": 31.843,
+      "p99": 79.97
+    }
+  },
+  "budgets": [
+    {
+      "metric": "p50",
+      "limit": 40,
+      "actual": 25.413,
+      "withinBudget": true
+    },
+    {
+      "metric": "p95",
+      "limit": 90,
+      "actual": 31.843,
+      "withinBudget": true
+    }
+  ],
+  "withinBudget": true,
+  "context": {
+    "generator": "mulberry32",
+    "seed": 20260813,
+    "requestedSamples": 500
+  },
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "25.5.0",
+    "cpuModel": "Apple M5",
+    "cpuCount": 10,
+    "totalMemoryMb": 24576,
+    "nodeVersion": "v26.5.0",
+    "gitCommit": "e30a9b8"
+  },
+  "harness": {
+    "overheadPerSampleNs": 33,
+    "notes": "synthetic samples; no real media involved"
+  }
+}

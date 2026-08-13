@@ -66,13 +66,21 @@ test-boundary: build-js ## Prove the Electron renderer boundary in a real window
 test-smoke: ## Desktop control client against a real Go control service
 	npm run test:smoke --workspace apps/desktop
 
+.PHONY: bench
+bench: ## Run every benchmark scenario and write result JSON
+	node test/latency/run.mjs
+
+.PHONY: test-bench
+test-bench: ## Unit-test the benchmark harness itself
+	node --test test/latency/harness.test.mjs
+
 .PHONY: fmt-check
 fmt-check: ## Fail if any Go file needs gofmt
 	@unformatted="$$(gofmt -l $(GO_MODULES))"; \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed for:"; echo "$$unformatted"; exit 1; fi
 
 .PHONY: ci
-ci: validate-tasks fmt-check typecheck lint test build ## Everything CI runs, locally
+ci: validate-tasks fmt-check typecheck lint test test-bench build ## Everything CI runs, locally
 
 .PHONY: check
 check: typecheck lint test build ## Full local gate: typecheck, lint, test, build

@@ -108,6 +108,20 @@ jobs:
             apps/desktop/dist
           retention-days: 7
 
+  benchmarks:
+    name: Benchmark harness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Harness unit tests
+        run: make test-bench
+      - name: Run scenarios (results are not committed from CI)
+        # CI machines are noisy; this proves the harness runs, not the numbers.
+        run: node test/latency/run.mjs --no-write --samples 50
+
   smoke:
     name: Desktop to control smoke path
     runs-on: ubuntu-latest

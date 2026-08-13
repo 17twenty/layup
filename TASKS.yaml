@@ -239,7 +239,7 @@ tasks:
   plan: PLAN-1
   phase: A
   title: Latency benchmark harness skeleton
-  status: todo
+  status: done
   goal: Create a repeatable harness and result schema for timestamped interaction/media benchmarks before real media is implemented.
   user_visible_behaviour: Create a repeatable harness and result schema for timestamped interaction/media benchmarks before
     real media is implemented.

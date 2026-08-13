@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "scenario": "loopback-rtt",
+  "unit": "ms",
+  "startedAt": "2026-08-13T11:29:25.343Z",
+  "endedAt": "2026-08-13T11:29:25.669Z",
+  "wallClockMs": 326.218,
+  "samples": {
+    "count": 200,
+    "min": 0.22,
+    "max": 2.235,
+    "mean": 1.522,
+    "percentiles": {
+      "p50": 1.507,
+      "p75": 1.559,
+      "p90": 1.66,
+      "p95": 1.729,
+      "p99": 2.073
+    }
+  },
+  "budgets": [
+    {
+      "metric": "p95",
+      "limit": 25,
+      "actual": 1.729,
+      "withinBudget": true
+    }
+  ],
+  "withinBudget": true,
+  "context": {
+    "transport": "http/1.1 loopback",
+    "requestedSamples": 200
+  },
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "25.5.0",
+    "cpuModel": "Apple M5",
+    "cpuCount": 10,
+    "totalMemoryMb": 24576,
+    "nodeVersion": "v26.5.0",
+    "gitCommit": "e30a9b8"
+  },
+  "harness": {
+    "overheadPerSampleNs": 21,
+    "notes": "loopback only; no Layup component in the path yet"
+  }
+}

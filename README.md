@@ -70,6 +70,17 @@ make check         # typecheck + lint + test + build for every component
 
 `make help` lists every developer command.
 
+Evidence harnesses:
+
+```bash
+make test-smoke     # desktop control client against a real Go control service
+make test-boundary  # renderer privilege proof in a real Electron window
+make bench          # latency scenarios -> benchmarks/results/**.json
+```
+
+See `benchmarks/README.md` for the result schema and `test/e2e/README.md` for the
+cross-component harnesses.
+
 ## Repository shape
 
 ```text
