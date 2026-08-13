@@ -191,6 +191,19 @@ export const openLayupShape = isObject({
   youAreInIt: isBoolean,
 });
 
+const iceServerShape = isObject({
+  urls: isArrayOf(isString, { max: 20 }),
+  username: optional(isString),
+  credential: optional(isString),
+});
+
+const iceConfigurationShape = isObject({
+  iceServers: isArrayOf(iceServerShape, { max: 20 }),
+  expiresAt: isString,
+  forceRelay: isBoolean,
+});
+export type IceConfiguration = ReturnType<typeof iceConfigurationShape>;
+
 const invitationLinkShape = isObject({ token: isString, expiresAt: isString });
 export type InvitationLink = ReturnType<typeof invitationLinkShape>;
 
@@ -243,6 +256,8 @@ export interface ControlClient {
   getLayup(layupId: string): Promise<Layup>;
   /** Organisation-open layups (Happening Now). */
   openLayups(): Promise<OpenLayups>;
+  /** ICE servers plus short-lived TURN credentials, and the relay policy. */
+  turnCredentials(): Promise<IceConfiguration>;
   /** Mints an opaque invitation link for a layup you are in. */
   createLink(layupId: string): Promise<InvitationLink>;
   /** Joins a layup using an invitation link token. */
@@ -415,6 +430,11 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         `/api/requests/${encodeURIComponent(requestId)}/cancel`,
       );
       return joinRequestShape(envelope.payload, 'request.resolved');
+    },
+
+    async turnCredentials(): Promise<IceConfiguration> {
+      const envelope = await this.apiGet<{ payload?: unknown }>('/api/turn');
+      return iceConfigurationShape(envelope.payload, 'turn.credentials');
     },
 
     async createLink(layupId: string): Promise<InvitationLink> {

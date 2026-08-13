@@ -45,11 +45,20 @@ app.whenReady().then(async () => {
   console.log(JSON.stringify(result, null, 2));
 
   const failures = [];
+  const direct = result.direct ?? {};
+  const relay = result.forcedRelayWithoutTurn ?? {};
+
   if (result.error) failures.push(result.error);
-  if (!result.connected) failures.push('the two peers never reached connected');
-  if (!result.gotTrack) failures.push('no video track arrived at the far side');
-  if (result.receivedTrackKind !== 'video') failures.push(`unexpected track kind ${result.receivedTrackKind}`);
-  if (!result.offers || !result.answers) failures.push('offer/answer did not complete');
+  if (!direct.connected) failures.push('the two peers never reached connected');
+  if (!direct.gotTrack) failures.push('no video track arrived at the far side');
+  if (direct.receivedTrackKind !== 'video') failures.push(`unexpected track kind ${direct.receivedTrackKind}`);
+  if (!direct.offers || !direct.answers) failures.push('offer/answer did not complete');
+
+  // Forced relay must actually change behaviour: relay-only with no TURN
+  // server must gather no host candidates and must not connect.
+  if (relay.iceTransportPolicy !== 'relay') failures.push('forceRelay did not set iceTransportPolicy=relay');
+  if (relay.connected) failures.push('relay-only connected with no TURN server - the policy was ignored');
+  if (relay.hostCandidatesGathered !== 0) failures.push('relay-only gathered host candidates');
 
   if (failures.length > 0) {
     console.error('WEBRTC FAILURES:\n' + failures.map((f) => ` - ${f}`).join('\n'));

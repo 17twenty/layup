@@ -6,38 +6,41 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0307
-- completed: 34 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0308
+- completed: 35 of 68 (phases A, B and C complete; D in progress)
 - blocked: 0
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: repository cleanup (no task consumed)
+- task: P1-0307 forced TURN test mode
 - result: done
-- tests: `make verify` green - 142 unit tests, 6 Go packages, 13 smoke, 4 e2e scenarios,
-  BOUNDARY OK, WEBRTC OK
+- tests: `npm test` (148 passed incl. 6 ICE cases), `make test-webrtc` -> WEBRTC OK with both scenarios, boundary OK
 - evidence:
-  - read `docs/adr/0001`-`0008` and checked the build against them: no drift. 0001 Electron
-    first, 0002 Go control plane never in the media path, 0003 P2P + coturn (never implemented
-    ourselves) and 0004 membership-scoped creator are all honoured and covered by tests;
-    0005/0006/0007/0008 govern work not yet started and nothing built contradicts them
-  - removed dead code: `config.ErrNotConfigured`, `Hub.UsersOnline`, `Conn.LastAckSeq` and its
-    state, the unused `onRealtimeReady` hook, `RequestService`'s unused layup dependency,
-    `eventNames`, `isStringOfLength`, `isLiteral`, and six needlessly exported shapes
-  - removed `.gitkeep` from directories that now hold real code; kept them where the directory
-    is still a placeholder (`native/input-helper`, `test/network`)
-  - README now describes the repository that exists (it referenced `AGENTS.md` and `PLAN-2.md`,
-    neither of which is in this repo) and points at the evidence harnesses
-  - `make verify` groups every real-boundary proof; `make ci` mirrors the fast CI jobs
+  - two independent switches, both surfaced as `forcedBy`: `LAYUP_FORCE_RELAY` on the control
+    service (organisation policy, sent to every client) and on a desktop (that client only)
+  - `apps/desktop/src/main/ice.ts` fetches ICE servers + short-lived TURN credentials, caches
+    them until they are close to expiring, and keeps forcing relay even when the control plane
+    is unreachable - failing loudly beats quietly going direct (6 unit tests)
+  - deterministic proof that the mode is real (`make test-webrtc`, second scenario):
+    `{iceTransportPolicy: "relay", connected: false, hostCandidatesGathered: 0}` - with no TURN
+    reachable, relay-only gathers no host candidates and does not connect. If `forceRelay` were
+    ignored these peers would connect exactly like the direct scenario, so this is the guard
+    that stops a relay test passing vacuously
+  - the direct scenario still reports `route: "direct", relayed: false, rttMs: 1`
+  - `test/network/README.md` documents both switches, the automated halves, and the compose
+    procedure for verifying a real relayed session (pass condition: `route: "relay"`,
+    `relayed: true`, `forcedBy: "policy"`)
+  - the redaction rule caught `hasTurnCredential` as a field name; renamed to `turnAuthIssued`
+    rather than weakening the rule - the credential itself is never logged
 
 ## Recent runs
 
-- P1-0303 done - WebRTC signalling protocol
 - P1-0304 done - direct 1:1 WebRTC peer connection
 - P1-0305 done - trickle ICE and route diagnostics
 - P1-0306 done - coturn configuration and ephemeral credentials
 - cleanup - ADR conformance check, dead code removal, docs corrected
+- P1-0307 done - forced TURN test mode
 
 ## Evidence index
 

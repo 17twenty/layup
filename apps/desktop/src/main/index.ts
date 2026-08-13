@@ -13,6 +13,7 @@ import { createRequestsSupervisor } from './requests';
 import { createAttentionController } from './attention';
 import { createCaptureService } from './capture';
 import { createPermissionService } from './permissions';
+import { createIceSupervisor } from './ice';
 import { secureWebPreferences } from './window';
 
 /**
@@ -137,6 +138,13 @@ const permissions = createPermissionService({
   log: log.with({ component: 'permissions' }),
 });
 
+const ice = createIceSupervisor({
+  client: controlClient,
+  log: log.with({ component: 'ice' }),
+  // Local switch for exercising the TURN path: LAYUP_FORCE_RELAY=true
+  forceRelay: /^(1|true|yes)$/i.test(process.env.LAYUP_FORCE_RELAY ?? ''),
+});
+
 function buildHandlers(): Handlers {
   return {
     'app:info': () => ({
@@ -156,6 +164,7 @@ function buildHandlers(): Handlers {
     'layup:join': (input) => layups.join(input.layupId),
     'layup:leave': () => layups.leave(),
     'layup:open': () => controlClient.openLayups(),
+    'ice:config': () => ice.configuration(),
     'layup:link': () => {
       const current = layups.state().layup;
       if (!current) throw new Error('you are not in a layup');

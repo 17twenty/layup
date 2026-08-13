@@ -199,6 +199,20 @@ export const capturePermissionResponse = isObject({
 });
 export type CapturePermissionResponse = ReturnType<typeof capturePermissionResponse>;
 
+const iceServerShape = isObject({
+  urls: isArrayOf(isString, { max: 20 }),
+  username: optional(isString),
+  credential: optional(isString),
+});
+
+export const iceConfigResponse = isObject({
+  iceServers: isArrayOf(iceServerShape, { max: 20 }),
+  expiresAt: isString,
+  forceRelay: isBoolean,
+  forcedBy: optional(isEnum(['policy', 'local'] as const)),
+});
+export type IceConfigResponse = ReturnType<typeof iceConfigResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'capture:sources': channel(isVoid, captureSourcesResponse),
@@ -213,6 +227,7 @@ export const ipcChannels = {
   'layup:join': channel(joinLayupRequest, layupStateResponse),
   'layup:leave': channel(isVoid, layupStateResponse),
   'layup:open': channel(isVoid, openLayupsResponse),
+  'ice:config': channel(isVoid, iceConfigResponse),
   'layup:link': channel(isVoid, isObject({ token: isString, expiresAt: isString })),
   'layup:joinLink': channel(isObject({ token: isString }), layupStateResponse),
   'requests:list': channel(isVoid, requestsResponse),

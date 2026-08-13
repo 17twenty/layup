@@ -82,6 +82,10 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       onChanged: (handler: (payload: EventPayload<'people:changed'>) => void) =>
         subscribe('people:changed', handler),
     },
+    ice: {
+      /** ICE servers, TURN credentials and the relay policy for new peers. */
+      config: () => invoke('ice:config', undefined),
+    },
     layup: {
       /** The layup this desktop is in, if any. */
       current: () => invoke('layup:current', undefined),

@@ -1089,7 +1089,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Forced TURN test mode
-  status: todo
+  status: done
   goal: Add deterministic config/test mode that forces relay so TURN is continuously verifiable.
   user_visible_behaviour: Add deterministic config/test mode that forces relay so TURN is continuously verifiable.
   depends_on:

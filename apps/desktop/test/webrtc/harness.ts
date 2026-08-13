@@ -115,4 +115,66 @@ async function waitFor(predicate: () => boolean, label: string, timeoutMs = 1500
   return false;
 }
 
-window.__layupWebRTC = run();
+/**
+ * Forced relay with no TURN server reachable.
+ *
+ * This is the deterministic half of the TURN test mode: if `forceRelay` were
+ * quietly ignored, these two peers would connect over host candidates exactly
+ * like the run above. They must not. The other half - that a forced-relay
+ * session *does* connect through a real TURN server - needs coturn, and is run
+ * with the compose stack (see test/network/README.md).
+ */
+async function runForcedRelay(): Promise<Record<string, unknown>> {
+  const peers: Record<string, ReturnType<typeof createPeerConnection>> = {};
+  const relay = (from: 'a' | 'b') => (type: string, payload: SignalMessage) => {
+    const target = from === 'a' ? 'b' : 'a';
+    void peers[target]?.accept(type, payload);
+  };
+
+  const candidateTypes: string[] = [];
+  for (const [id, remote] of [
+    ['a', 'b'],
+    ['b', 'a'],
+  ] as const) {
+    peers[id] = createPeerConnection({
+      layupId: 'lay_relayonly',
+      localMembershipId: `mem_${id}`,
+      remoteMembershipId: `mem_${remote}`,
+      sendSignal: (type, payload) => {
+        if (type === 'signal.candidate' && payload.candidate) {
+          // "typ host" / "typ srflx" / "typ relay"
+          const match = /typ (\w+)/.exec(payload.candidate);
+          if (match?.[1]) candidateTypes.push(match[1]);
+        }
+        relay(id)(type, payload);
+      },
+      createPeerConnection: (config) => new RTCPeerConnection(config),
+      // Relay forced, but no TURN server is configured or reachable.
+      forceRelay: true,
+      iceServers: [],
+    });
+  }
+
+  peers.a!.createDataChannel('probe');
+  await peers.a!.negotiate();
+
+  // Give ICE a fair chance to do something it must not be able to do.
+  const connected = await waitFor(() => peers.a!.state().connected, 'a connection', 4000);
+  const config = (peers.a!.pc as RTCPeerConnection & { getConfiguration?: () => RTCConfiguration })
+    .getConfiguration?.();
+
+  peers.a!.close();
+  peers.b!.close();
+
+  return {
+    iceTransportPolicy: config?.iceTransportPolicy ?? 'unset',
+    connected,
+    hostCandidatesGathered: candidateTypes.filter((type) => type === 'host').length,
+    candidateTypes: [...new Set(candidateTypes)],
+  };
+}
+
+window.__layupWebRTC = (async () => ({
+  direct: await run(),
+  forcedRelayWithoutTurn: await runForcedRelay(),
+}))();
