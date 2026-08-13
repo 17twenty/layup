@@ -53,7 +53,14 @@ func New(cfg config.Config, opts Options) *Server {
 }
 
 func (s *Server) routes() {
+	// Unversioned discovery: reachable by any client, including one whose
+	// protocol version this build cannot serve.
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)
+
+	// Everything under /api/ must declare a supported protocol version.
+	api := http.NewServeMux()
+	api.HandleFunc("GET /api/protocol", s.handleProtocolInfo)
+	s.mux.Handle("/api/", s.requireProtocolVersion(api))
 }
 
 // ServeHTTP makes Server a plain http.Handler.

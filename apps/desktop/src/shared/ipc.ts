@@ -13,7 +13,7 @@ import {
   isString,
   isVoid,
   type Validator,
-} from './validate';
+} from '@layup/protocol';
 
 export interface ChannelSpec<Req, Res> {
   request: Validator<Req>;

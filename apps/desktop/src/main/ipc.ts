@@ -6,7 +6,7 @@ import {
   type RequestOf,
   type ResponseOf,
 } from '../shared/ipc';
-import { ValidationError } from '../shared/validate';
+import { ValidationError } from '@layup/protocol';
 
 /**
  * Privileged side of the IPC boundary.

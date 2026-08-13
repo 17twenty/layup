@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IpcMainInvokeEvent } from 'electron';
 import { registerIpcHandlers, type HandleTarget, type Handlers } from './ipc';
-import { ValidationError } from '../shared/validate';
+import { ValidationError } from '@layup/protocol';
 
 function fakeIpcMain() {
   const registered = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();

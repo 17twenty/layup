@@ -1,4 +1,7 @@
 import {
+  PROTOCOL_VERSION,
+} from '@layup/protocol';
+import {
   ipcChannels,
   type ChannelName,
   type ChannelSpec,
@@ -30,7 +33,7 @@ export function createLayupApi(invoker: Invoker) {
   }
 
   return {
-    protocolVersion: 1,
+    protocolVersion: PROTOCOL_VERSION,
     app: {
       info: () => invoke('app:info', undefined),
     },

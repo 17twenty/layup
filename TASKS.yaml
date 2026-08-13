@@ -107,7 +107,7 @@ tasks:
   plan: PLAN-1
   phase: A
   title: Shared protocol version contract
-  status: todo
+  status: done
   goal: Define a protocol version/envelope shared conceptually by desktop and Go service and reject unsupported versions.
   user_visible_behaviour: Define a protocol version/envelope shared conceptually by desktop and Go service and reject unsupported
     versions.

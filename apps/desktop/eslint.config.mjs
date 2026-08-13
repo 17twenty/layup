@@ -15,6 +15,17 @@ export default tseslint.config(
     },
   },
   {
+    // Electron-hosted harnesses run as CommonJS in the main process.
+    files: ['test/**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { ...globals.node },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
     files: ['src/renderer/**/*.ts', 'src/renderer/**/*.tsx'],
     languageOptions: {
       globals: { ...globals.browser },

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createLayupApi } from './api';
-import { ValidationError } from '../shared/validate';
+import { ValidationError } from '@layup/protocol';
 
 describe('preload bridge surface', () => {
   it('exposes only the declared API and nothing from Node or Electron', () => {
