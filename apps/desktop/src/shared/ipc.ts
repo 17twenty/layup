@@ -161,6 +161,22 @@ export const inviteRequest = isObject({
 });
 export const requestIdRequest = isObject({ requestId: isString });
 
+/** One organisation-open layup on the Happening Now surface. */
+export const openLayupShape = isObject({
+  id: isString,
+  title: optional(isString),
+  participantCount: isInteger({ min: 0 }),
+  participants: isArrayOf(isString, { max: 200 }),
+  presenterName: optional(isString),
+  canJoin: isBoolean,
+  youAreInIt: isBoolean,
+});
+
+export const openLayupsResponse = isObject({
+  layups: isArrayOf(openLayupShape, { max: 200 }),
+});
+export type OpenLayupsResponse = ReturnType<typeof openLayupsResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'control:status': channel(isVoid, controlStatusResponse),
@@ -171,6 +187,7 @@ export const ipcChannels = {
   'layup:create': channel(createLayupRequest, layupStateResponse),
   'layup:join': channel(joinLayupRequest, layupStateResponse),
   'layup:leave': channel(isVoid, layupStateResponse),
+  'layup:open': channel(isVoid, openLayupsResponse),
   'requests:list': channel(isVoid, requestsResponse),
   'requests:invite': channel(inviteRequest, joinRequestShape),
   'requests:knock': channel(isObject({ toUserId: isString }), joinRequestShape),

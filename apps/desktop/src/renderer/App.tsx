@@ -5,6 +5,7 @@ import { Identity } from './Identity';
 import { RealtimeStatus } from './RealtimeStatus';
 import { PeopleGrid } from './people/PeopleGrid';
 import { LayupPanel } from './layup/LayupPanel';
+import { HappeningNow } from './layup/HappeningNow';
 import { Invitations } from './requests/Invitations';
 import type { IdentityResponse, LayupStateResponse } from '../shared/ipc';
 
@@ -48,6 +49,7 @@ export function App() {
       </header>
 
       <Invitations />
+      <HappeningNow />
       <PeopleGrid
         selfUserId={identity?.userId}
         onAction={(person, action) => {

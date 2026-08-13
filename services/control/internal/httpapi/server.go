@@ -135,6 +135,7 @@ func (s *Server) routes() {
 	authed := http.NewServeMux()
 	authed.HandleFunc("GET /api/me", s.handleMe)
 	authed.HandleFunc("GET /api/directory", s.handleDirectory)
+	authed.HandleFunc("GET /api/layups", s.handleListOpenLayups)
 	authed.HandleFunc("POST /api/layups", s.handleCreateLayup)
 	authed.HandleFunc("GET /api/layups/{id}", s.handleGetLayup)
 	authed.HandleFunc("POST /api/layups/{id}/join", s.handleJoinLayup)

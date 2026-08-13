@@ -348,3 +348,28 @@ func (s *LayupService) view(id LayupID) (LayupView, error) {
 		HasCreatorAuthority: layup.HasCreatorAuthority(),
 	}, nil
 }
+
+// OpenLayups returns the active, organisation-visible layups of one
+// organisation. Private and link layups are never discoverable this way
+// (SPEC.md §5.3).
+func (s *LayupService) OpenLayups(_ context.Context, org OrganisationID) ([]LayupView, error) {
+	layups, err := s.repo.ListLayups(org)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LayupView, 0, len(layups))
+	for _, layup := range layups {
+		if !layup.Active() || !layup.Visibility.Open() {
+			continue
+		}
+		view, err := s.view(layup.ID)
+		if err != nil {
+			return nil, err
+		}
+		if len(view.ActiveParticipants()) == 0 {
+			continue
+		}
+		out = append(out, view)
+	}
+	return out, nil
+}

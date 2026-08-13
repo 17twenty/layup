@@ -320,3 +320,62 @@ func decodeJSON(r *http.Request, target any) error {
 	}
 	return nil
 }
+
+// OpenLayupDTO is one discoverable layup on the Happening Now surface.
+//
+// Only ORGANISATION layups appear here. A private layup is never listed, and
+// its title and participants are never rendered for an outsider (SPEC.md §5.3).
+type OpenLayupDTO struct {
+	ID               string   `json:"id"`
+	Title            string   `json:"title,omitempty"`
+	ParticipantCount int      `json:"participantCount"`
+	Participants     []string `json:"participants"`
+	// PresenterName is empty while nobody is sharing a screen. Screen sharing
+	// arrives in Phase D; the field exists so the surface does not change shape.
+	PresenterName string `json:"presenterName,omitempty"`
+	CanJoin       bool   `json:"canJoin"`
+	// YouAreInIt is true when the viewer is already a participant.
+	YouAreInIt bool `json:"youAreInIt"`
+}
+
+// OpenLayupsDTO is the payload of GET /api/layups.
+type OpenLayupsDTO struct {
+	Layups []OpenLayupDTO `json:"layups"`
+}
+
+func (s *Server) handleListOpenLayups(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFrom(r.Context())
+	if !ok {
+		s.writeAPIError(w, r, http.StatusUnauthorized, "unauthenticated", "no identity on request")
+		return
+	}
+
+	layups, err := s.layups.OpenLayups(r.Context(), identity.OrganisationID())
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+
+	out := make([]OpenLayupDTO, 0, len(layups))
+	for _, view := range layups {
+		participants := make([]string, 0, len(view.Participants))
+		inside := false
+		for _, participant := range view.ActiveParticipants() {
+			if user, err := s.directory.UserByID(participant.UserID); err == nil {
+				participants = append(participants, user.DisplayName)
+			}
+			if participant.UserID == identity.User.ID {
+				inside = true
+			}
+		}
+		out = append(out, OpenLayupDTO{
+			ID:               string(view.Layup.ID),
+			Title:            view.Layup.Title,
+			ParticipantCount: len(view.ActiveParticipants()),
+			Participants:     participants,
+			CanJoin:          !inside,
+			YouAreInIt:       inside,
+		})
+	}
+	s.writeEnvelope(w, r, "layup.open", OpenLayupsDTO{Layups: out})
+}

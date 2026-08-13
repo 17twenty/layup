@@ -33,6 +33,7 @@ app.whenReady().then(async () => {
     'layup:create': () => ({ youAreCreatorMembership: false }),
     'layup:join': () => ({ youAreCreatorMembership: false }),
     'layup:leave': () => ({ youAreCreatorMembership: false }),
+    'layup:open': () => ({ layups: [] }),
     'requests:list': () => ({ incoming: [], outgoing: [] }),
     'requests:invite': () => ({
       id: 'jrq_devaaaaab',

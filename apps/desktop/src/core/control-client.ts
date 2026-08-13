@@ -181,6 +181,19 @@ const acceptResultShape = isObject({
 });
 export type AcceptResult = ReturnType<typeof acceptResultShape>;
 
+export const openLayupShape = isObject({
+  id: isString,
+  title: optional(isString),
+  participantCount: isInteger({ min: 0 }),
+  participants: isArrayOf(isString, { max: 200 }),
+  presenterName: optional(isString),
+  canJoin: isBoolean,
+  youAreInIt: isBoolean,
+});
+
+const openLayupsShape = isObject({ layups: isArrayOf(openLayupShape, { max: 200 }) });
+export type OpenLayups = ReturnType<typeof openLayupsShape>;
+
 export interface CreateRequestInput {
   type: RequestType;
   toUserId?: string;
@@ -225,6 +238,8 @@ export interface ControlClient {
   leaveLayup(layupId: string): Promise<MembershipResult>;
   /** Reads current layup state. */
   getLayup(layupId: string): Promise<Layup>;
+  /** Organisation-open layups (Happening Now). */
+  openLayups(): Promise<OpenLayups>;
   /** Sends an invitation or knock. */
   createRequest(input: CreateRequestInput): Promise<JoinRequest>;
   /** Pending requests to and from this user. */
@@ -393,6 +408,11 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         `/api/requests/${encodeURIComponent(requestId)}/cancel`,
       );
       return joinRequestShape(envelope.payload, 'request.resolved');
+    },
+
+    async openLayups(): Promise<OpenLayups> {
+      const envelope = await this.apiGet<{ payload?: unknown }>('/api/layups');
+      return openLayupsShape(envelope.payload, 'layup.open');
     },
 
     async apiPost<T>(path: string, body?: unknown): Promise<T> {

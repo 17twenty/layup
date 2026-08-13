@@ -84,6 +84,8 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       join: (layupId: string) => invoke('layup:join', { layupId }),
       /** Ends your own membership. Nobody can remove anyone else. */
       leave: () => invoke('layup:leave', undefined),
+      /** Organisation-open layups you could walk into. */
+      open: () => invoke('layup:open', undefined),
       /** Subscribe to layup state changes. Returns unsubscribe. */
       onChanged: (handler: (state: EventPayload<'layup:changed'>) => void) =>
         subscribe('layup:changed', handler),

@@ -6,37 +6,34 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0206
-- completed: 23
+- next task: P1-0207
+- completed: 24
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0205 collapse, cancel and expire requests
+- task: P1-0206 organisation-open layups and Happening Now
 - result: done
-- tests: `make test-go` (4 expiry/collapse cases incl. background sweeper), fmt/vet green
+- tests: `make test-go` (3 discovery cases), `npm test` (100 passed), typecheck/lint green
 - evidence:
-  - collapse: repeated invitations and repeated knocks reuse the one pending request, so the
-    recipient sees a single entry and receives a single `request.incoming` push
-    (`TestRepeatedKnocksDoNotRepeatNotifications`)
-  - cancel: only the sender may cancel; the recipient is told over realtime and the request can
-    never be accepted afterwards (`TestSenderCanCancelAndBothSidesAreTold`)
-  - expiry: `SweepExpiredRequests` publishes `request.resolved` with state EXPIRED to both
-    sides, the request disappears from both lists, and accepting it is 409
-    (`TestExpiredRequestsDisappearAndAreAnnounced`)
-  - `StartExpirySweeper` runs the sweep in the background (wired into `cmd/control`); expiry
-    itself stays deterministic - the sweep only decides how promptly people are told
-  - the desktop drops expired requests locally too, so a stalled connection cannot leave a
-    stale invitation on screen
+  - `GET /api/layups` lists only active ORGANISATION layups in the caller's organisation, with
+    title, participant names, count, a presenter placeholder (Phase D fills it) and join state
+  - private layups never appear - asserted on the raw response body, not just the parsed one
+    (`TestHappeningNowShowsOrganisationOpenLayupsOnly`)
+  - listings track reality: joining raises the count, and a layup with no active participants
+    disappears rather than lingering as an empty room
+  - an organisation member can join an open layup with no invitation at all
+  - desktop: `HappeningNow` renders the surface and refreshes on presence/layup pushes; the
+    entry you are already in says "You are here" instead of offering Join
 
 ## Recent runs
 
-- P1-0201 done - join request domain and lifecycle
 - P1-0202 done - invite available person to new layup
 - P1-0203 done - invite person into existing layup
 - P1-0204 done - knock on private layup
 - P1-0205 done - collapse, cancel and expire requests
+- P1-0206 done - organisation-open layups and Happening Now
 
 ## Known issues / decisions needed
 

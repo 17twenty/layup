@@ -112,6 +112,7 @@ function buildHandlers(): Handlers {
     'layup:create': (input) => layups.create(input),
     'layup:join': (input) => layups.join(input.layupId),
     'layup:leave': () => layups.leave(),
+    'layup:open': () => controlClient.openLayups(),
     'requests:list': () => requests.state(),
     'requests:invite': (input) =>
       input.layupId

@@ -746,7 +746,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Organisation-open layups and Happening Now
-  status: todo
+  status: done
   goal: Implement ORGANISATION visibility, discovery and a lightweight Happening Now surface.
   user_visible_behaviour: Implement ORGANISATION visibility, discovery and a lightweight Happening Now surface.
   depends_on:
