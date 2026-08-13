@@ -98,6 +98,11 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		input.LayupID = domain.LayupID(body.LayupID)
 	}
 
+	if err := s.mayRequest(r.Context(), input, identity); err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+
 	request, created, err := s.requests.Create(r.Context(), input)
 	if err != nil {
 		s.writeDomainError(w, r, err)
@@ -108,6 +113,51 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		s.publishRequest(r.Context(), request)
 	}
 	s.writeEnvelope(w, r, "request.created", s.requestDTOFor(r.Context(), request, identity.User.ID))
+}
+
+// mayRequest decides whether an identity may send this request.
+//
+//   - inviting someone into a layup requires being in it (there is no way to
+//     invite people into a layup you are not part of);
+//   - knocking requires the layup to exist and be active, and you must not
+//     already be inside it.
+func (s *Server) mayRequest(ctx context.Context, in domain.CreateRequestInput, identity Identity) error {
+	if in.LayupID == "" {
+		return nil
+	}
+	view, err := s.layups.View(ctx, in.LayupID)
+	if err != nil {
+		return err
+	}
+	if view.Layup.OrganisationID != identity.OrganisationID() {
+		return domain.ErrNotFound
+	}
+	if !view.Active() {
+		return domain.ErrConflict
+	}
+
+	inside := false
+	for _, participant := range view.ActiveParticipants() {
+		if participant.UserID == identity.User.ID {
+			inside = true
+		}
+		if in.Type == domain.RequestInviteToLayup && participant.UserID == in.ToUser {
+			// Already here: nothing to invite them to.
+			return domain.ErrConflict
+		}
+	}
+
+	switch in.Type {
+	case domain.RequestInviteToLayup:
+		if !inside {
+			return domain.ErrForbidden
+		}
+	case domain.RequestKnock:
+		if inside {
+			return domain.ErrConflict
+		}
+	}
+	return nil
 }
 
 func (s *Server) handleListRequests(w http.ResponseWriter, r *http.Request) {

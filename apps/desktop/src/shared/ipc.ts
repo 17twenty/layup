@@ -153,7 +153,12 @@ export const requestsResponse = isObject({
 });
 export type RequestsResponse = ReturnType<typeof requestsResponse>;
 
-export const inviteRequest = isObject({ toUserId: isString, note: optional(isString) });
+export const inviteRequest = isObject({
+  toUserId: isString,
+  note: optional(isString),
+  /** When present, invites into this existing layup instead of a new one. */
+  layupId: optional(isString),
+});
 export const requestIdRequest = isObject({ requestId: isString });
 
 export const ipcChannels = {

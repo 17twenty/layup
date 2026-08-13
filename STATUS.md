@@ -6,40 +6,37 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0203
-- completed: 20
+- next task: P1-0204
+- completed: 21
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0202 invite available person to new layup
+- task: P1-0203 invite person into existing layup
 - result: done
-- tests: `make test-go` (6 request cases), `npm test` (100 passed), `make test-e2e` (4 scenarios), boundary OK
+- tests: `make test-go` (4 new cases), `npm test` (100 passed), lint/fmt green
 - evidence:
-  - `POST /api/requests` + `/accept|/decline|/cancel` + `GET /api/requests`; only the recipient
-    may accept/decline and only the sender may cancel (403 otherwise), and a resolved request
-    cannot be re-resolved (409)
-  - accepting `INVITE_USER_TO_NEW_LAYUP` calls `CreateLayupWithGuests`, so one layup and both
-    memberships appear together; a failure discards the layup rather than leaving it half-formed
-  - the inviter's membership is the creator membership; the accepter joins as ordinary
-  - viewer-relative presence is live: the recipient's tile for the sender reads INVITING_YOU and
-    the sender's tile for the recipient reads WAITING_FOR_YOU
-    (`TestInvitationChangesViewerRelativeActivity`)
-  - repeated clicks collapse: one `request.incoming` push, one entry in the recipient's list
-  - desktop: `main/requests.ts` supervisor + `requests:*` IPC + `Invitations` UI (6 tests);
-    the People tile's "Start layup" sends an invitation and starts no media
-  - e2e (`make test-e2e`, 4 scenarios): click -> invitation -> accept -> one layup with both
-    people, creator authority held by the inviter, both sides told over realtime; and repeated
-    clicks produce exactly one notification with declining being final
+  - `INVITE_USER_TO_LAYUP`: accepting joins the existing layup rather than creating another,
+    and creator authority is untouched by the new arrival
+    (`TestInvitingIntoAnExistingLayupJoinsThatLayup`)
+  - only an active participant may invite into a layup (403 otherwise); inviting someone
+    already inside is a 409, as is inviting into an ended layup
+  - the recipient gets the layup context they are entitled to - `layupId` and title are
+    included for the invited person even for a private layup, because they are being asked in
+  - declining changes nothing: memberships, creator authority and layup state are identical
+    afterwards, and the invitee still cannot join a private layup on their own
+    (`TestDecliningAnInvitationChangesNoMemberships`)
+  - desktop: clicking a person while already in a layup invites them *here*
+    (`requests.invite(userId, {layupId})`), not into a second layup
 
 ## Recent runs
 
-- P1-0108 done - people home grid
 - P1-0109 done - logical layup create/join/leave API
 - P1-0110 done - creator devolution end-to-end test
 - P1-0201 done - join request domain and lifecycle
 - P1-0202 done - invite available person to new layup
+- P1-0203 done - invite person into existing layup
 
 ## Known issues / decisions needed
 

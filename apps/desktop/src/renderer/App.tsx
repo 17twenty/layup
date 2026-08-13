@@ -6,7 +6,7 @@ import { RealtimeStatus } from './RealtimeStatus';
 import { PeopleGrid } from './people/PeopleGrid';
 import { LayupPanel } from './layup/LayupPanel';
 import { Invitations } from './requests/Invitations';
-import type { IdentityResponse } from '../shared/ipc';
+import type { IdentityResponse, LayupStateResponse } from '../shared/ipc';
 
 /**
  * People are the home screen (SPEC.md §2.1). Connection and identity detail is
@@ -14,6 +14,7 @@ import type { IdentityResponse } from '../shared/ipc';
  */
 export function App() {
   const [identity, setIdentity] = useState<IdentityResponse | undefined>();
+  const [layup, setLayup] = useState<LayupStateResponse | undefined>();
 
   useEffect(() => {
     let cancelled = false;
@@ -23,8 +24,19 @@ export function App() {
         if (!cancelled) setIdentity(next);
       })
       .catch(() => undefined);
+    const unsubscribe = window.layup.layup.onChanged((next) => {
+      if (!cancelled) setLayup(next);
+    });
+    void window.layup.layup
+      .current()
+      .then((next) => {
+        if (!cancelled) setLayup((current) => current ?? next);
+      })
+      .catch(() => undefined);
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -40,7 +52,13 @@ export function App() {
         selfUserId={identity?.userId}
         onAction={(person, action) => {
           // A click is a social request, never a media start (SPEC.md §4).
-          if (action.kind === 'start') void window.layup.requests.invite(person.userId);
+          if (action.kind !== 'start') return;
+          // Already in a layup? Invite them here rather than starting another.
+          const currentLayupId = layup?.layup?.id;
+          void window.layup.requests.invite(
+            person.userId,
+            currentLayupId ? { layupId: currentLayupId } : {},
+          );
         }}
       />
       <LayupPanel />

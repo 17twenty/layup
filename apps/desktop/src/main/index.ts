@@ -113,7 +113,10 @@ function buildHandlers(): Handlers {
     'layup:join': (input) => layups.join(input.layupId),
     'layup:leave': () => layups.leave(),
     'requests:list': () => requests.state(),
-    'requests:invite': (input) => requests.invite(input.toUserId, input.note),
+    'requests:invite': (input) =>
+      input.layupId
+        ? requests.inviteToLayup(input.toUserId, input.layupId)
+        : requests.invite(input.toUserId, input.note),
     'requests:accept': (input) => requests.accept(input.requestId).then(() => undefined),
     'requests:decline': (input) => requests.decline(input.requestId).then(() => undefined),
     'requests:cancel': (input) => requests.cancel(input.requestId).then(() => undefined),

@@ -92,8 +92,12 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       /** Pending invitations and knocks, incoming and outgoing. */
       list: () => invoke('requests:list', undefined),
       /** Invites someone into a new layup. Starts no media by itself. */
-      invite: (toUserId: string, note?: string) =>
-        invoke('requests:invite', note === undefined ? { toUserId } : { toUserId, note }),
+      invite: (toUserId: string, options: { note?: string; layupId?: string } = {}) =>
+        invoke('requests:invite', {
+          toUserId,
+          ...(options.note === undefined ? {} : { note: options.note }),
+          ...(options.layupId === undefined ? {} : { layupId: options.layupId }),
+        }),
       accept: (requestId: string) => invoke('requests:accept', { requestId }),
       decline: (requestId: string) => invoke('requests:decline', { requestId }),
       cancel: (requestId: string) => invoke('requests:cancel', { requestId }),

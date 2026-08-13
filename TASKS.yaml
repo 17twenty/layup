@@ -648,7 +648,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Invite person into existing layup
-  status: todo
+  status: done
   goal: A participant can invite a person into the layup they are currently in.
   user_visible_behaviour: A participant can invite a person into the layup they are currently in.
   depends_on:
