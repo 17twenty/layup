@@ -6,35 +6,36 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0103
-- completed: 10
+- next task: P1-0104
+- completed: 11
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0102 layup lifecycle service
+- task: P1-0103 creator privilege devolution invariant
 - result: done
-- tests: `go test ./internal/domain/...` ok (10 lifecycle cases), `make fmt-check` clean
+- tests: `go test ./internal/domain/...` ok (16 cases incl. 6 devolution regressions), `make fmt-check` clean
 - evidence:
-  - `services/control/internal/domain/repository.go` - `Repository` interface plus a
-    concurrent-safe `MemoryRepository` (PLAN-1 in-memory only; persistence must implement the
-    same interface rather than reshape the domain)
-  - `layups.go` - `LayupService.CreateLayup/Join/Leave/View/ActiveLayupsForUser`
-  - proven: first membership activates the layup; layup survives while any membership remains;
-    the final leave stamps `EndedAt`; an ownerless layup still accepts joins
-    (`TestFirstMembershipActivatesLayup`, `TestLayupRemainsActiveWhileAnyMembershipRemains`,
-    `TestFinalMembershipLeavingEndsLayup`, `TestNoOwnerRequirementForAnActiveLayup`)
-  - join is idempotent for a present user, joining an ended layup is `ErrConflict`, leaving
-    twice is a no-op
+  - `services/control/internal/domain/creator.go` is the single place that answers "who, if
+    anyone, holds creator authority": `CreatorMembership`, `RequireCreator(layup, MembershipID)`
+    and `AuthorityOf`. There is deliberately no UserID-based overload, no host election and no
+    reassignment path
+  - regression tests, one per statement of the invariant (`creator_test.go`):
+    creator holds authority while active; leaving elects nobody (all remaining memberships get
+    `ErrForbidden`); the layup stays active and usable; the same user rejoining gets a new
+    membership id with no privilege and authority does not reappear
+  - the historical `Membership.IsCreatorMembership` flag is kept for audit but can never grant
+    anything: views and authorisation read the layup pointer
+    (`TestStoredCreatorFlagCannotGrantAuthorityAfterDevolution`)
 
 ## Recent runs
 
-- P1-0006 done - CI build and test matrix
 - P1-0007 done - desktop-to-control smoke path
 - P1-0008 done - latency benchmark harness skeleton
 - P1-0101 done - domain IDs and core types
 - P1-0102 done - layup lifecycle service
+- P1-0103 done - creator privilege devolution invariant
 
 ## Known issues / decisions needed
 

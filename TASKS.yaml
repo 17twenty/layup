@@ -330,7 +330,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Creator privilege devolution invariant
-  status: todo
+  status: done
   goal: Implement creator authority scoped to the original membership and permanently lost when it leaves.
   user_visible_behaviour: Implement creator authority scoped to the original membership and permanently lost when it leaves.
   depends_on:
