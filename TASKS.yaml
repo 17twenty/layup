@@ -1150,7 +1150,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Single active screen-share domain
-  status: todo
+  status: done
   goal: Tie screen publication to ScreenShare domain state and enforce zero-or-one active shared desktop per layup.
   user_visible_behaviour: Tie screen publication to ScreenShare domain state and enforce zero-or-one active shared desktop
     per layup.

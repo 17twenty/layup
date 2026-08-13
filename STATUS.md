@@ -6,39 +6,42 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0309
-- completed: 36 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0310
+- completed: 37 of 68 (phases A, B and C complete; D in progress)
 - blocked: 0
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0308 publish and render shared desktop
+- task: P1-0309 single active screen-share domain
 - result: done
-- tests: `npm test` (162 passed incl. 14 session/screen cases), `make test-webrtc` -> WEBRTC OK with decoded 320x240 screen share
+- tests: `make test-go` (7 domain + 4 wire share cases), fmt/vet green
 - evidence:
-  - `apps/desktop/src/core/session.ts` owns a layup's peer connections and what is published on
-    them: publish/unpublish the shared desktop, route relayed signalling to the right peer,
-    render what each peer sends, and report per-peer connection state (10 unit tests)
-  - exactly one shared desktop per peer (ADR-0007): re-sharing calls `replaceTrack` rather than
-    adding a second sender, and a peer that joins after sharing started receives it
-  - stopping the share replaces the track with null - the peer connection and the layup survive
-    (`stops publishing without touching the peer connection`)
-  - real proof in Chromium (`make test-webrtc`, third scenario): a captured stream is published
-    through the session, arrives at the far side, and **decodes** into a video element at
-    `320x240` - `{received: true, decoded: true, inbound: {width: 320, height: 240},
-    route: "direct", connectedAfterUnpublish: true}`. Decoding is asserted because a track that
-    arrives but never decodes is a black screen share
-  - `SharedScreen` renders the presenter's stream, names them, flags a reconnecting presenter,
-    and treats "nobody is sharing" as a normal state rather than an error (4 renderer tests)
+  - `services/control/internal/domain/screenshare.go` owns the rule, not the media layer: who
+    may present is a domain question and holds even while a track is still negotiating
+  - zero-or-one enforced: taking over ends the previous share in the same operation, and after
+    three successive takeovers exactly one share is live
+    (`TestOnlyOneSharedDesktopExistsAtATime`)
+  - takeover rules follow SPEC §7.2: in a private/collaborative layup anyone may take the
+    screen with no approval dialog, and the previous presenter gets a `screen.takeover` notice;
+    in an advertised ORGANISATION layup only the creator membership or the current presenter
+    may hand it over, and with nobody presenting anyone may start
+  - stopping a share leaves the layup and its participants completely untouched
+    (`TestStoppingAShareKeepsTheLayupAlive`) - a layup with no screen is a valid layup
+  - only the presenter may stop their own share; there is no moderator who can stop someone
+    else's (`TestShareControlIsNotModeration`)
+  - a presenter who leaves the layup has their share ended automatically, so no phantom share
+    survives (`TestAPresenterLeavingEndsTheirShare`)
+  - `POST /api/layups/{id}/share` and `/share/stop`; the active share (with presenter name and
+    the presenter's drawing/pointer/keyboard defaults) now rides on layup state and Happening Now
 
 ## Recent runs
 
-- P1-0305 done - trickle ICE and route diagnostics
 - P1-0306 done - coturn configuration and ephemeral credentials
 - cleanup - ADR conformance check, dead code removal, docs corrected
 - P1-0307 done - forced TURN test mode
 - P1-0308 done - publish and render shared desktop
+- P1-0309 done - single active screen-share domain
 
 ## Evidence index
 

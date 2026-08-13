@@ -241,6 +241,11 @@ func (s *LayupService) Leave(ctx context.Context, membershipID MembershipID) (La
 	}
 
 	if membership.Active() {
+		// A presenter walking out must not leave a phantom share behind.
+		if err := s.EndSharesForMembership(ctx, membershipID); err != nil {
+			return LayupView{}, err
+		}
+
 		now := s.now()
 		membership.LeftAt = &now
 		if err := s.repo.SaveMembership(membership); err != nil {
@@ -278,6 +283,11 @@ func (s *LayupService) Leave(ctx context.Context, membershipID MembershipID) (La
 	}
 
 	return s.view(layup.ID)
+}
+
+// Membership returns one membership by id.
+func (s *LayupService) Membership(id MembershipID) (Membership, error) {
+	return s.repo.GetMembership(id)
 }
 
 // View returns the current read model of a layup.

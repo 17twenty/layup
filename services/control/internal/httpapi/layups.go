@@ -40,6 +40,8 @@ type LayupDTO struct {
 	HasCreatorAuthority bool             `json:"hasCreatorAuthority"`
 	CreatorMembershipID string           `json:"creatorMembershipId,omitempty"`
 	Participants        []ParticipantDTO `json:"participants"`
+	// ActiveShare is absent when nobody is sharing, which is a normal state.
+	ActiveShare *ScreenShareDTO `json:"activeShare,omitempty"`
 }
 
 // MembershipResultDTO is returned by create/join: the layup plus which
@@ -293,6 +295,9 @@ func (s *Server) layupDTO(view domain.LayupView) LayupDTO {
 	if id, ok := domain.CreatorMembership(view.Layup); ok {
 		dto.CreatorMembershipID = string(id)
 	}
+	if share, err := s.layups.ActiveScreenShare(context.Background(), view.Layup.ID); err == nil {
+		dto.ActiveShare = s.shareDTO(share)
+	}
 	return dto
 }
 
@@ -368,8 +373,15 @@ func (s *Server) handleListOpenLayups(w http.ResponseWriter, r *http.Request) {
 				inside = true
 			}
 		}
+		presenterName := ""
+		if share, err := s.layups.ActiveScreenShare(r.Context(), view.Layup.ID); err == nil && share != nil {
+			if dto := s.shareDTO(share); dto != nil {
+				presenterName = dto.PresenterName
+			}
+		}
 		out = append(out, OpenLayupDTO{
 			ID:               string(view.Layup.ID),
+			PresenterName:    presenterName,
 			Title:            view.Layup.Title,
 			ParticipantCount: len(view.ActiveParticipants()),
 			Participants:     participants,

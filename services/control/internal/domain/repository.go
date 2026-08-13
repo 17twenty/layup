@@ -20,6 +20,9 @@ type Repository interface {
 	GetMembership(MembershipID) (Membership, error)
 	MembershipsForLayup(LayupID) ([]Membership, error)
 	MembershipsForUser(UserID) ([]Membership, error)
+
+	SaveScreenShare(ScreenShare) error
+	ScreenSharesForLayup(LayupID) ([]ScreenShare, error)
 }
 
 // MemoryRepository is a deterministic in-memory Repository. It is safe for
@@ -28,9 +31,11 @@ type MemoryRepository struct {
 	mu          sync.RWMutex
 	layups      map[LayupID]Layup
 	memberships map[MembershipID]Membership
+	shares      map[ScreenShareID]ScreenShare
 	// Insertion order keeps listings stable, which keeps tests and the UI calm.
 	layupOrder      []LayupID
 	membershipOrder []MembershipID
+	shareOrder      []ScreenShareID
 }
 
 // NewMemoryRepository returns an empty repository.
@@ -38,6 +43,7 @@ func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
 		layups:      map[LayupID]Layup{},
 		memberships: map[MembershipID]Membership{},
+		shares:      map[ScreenShareID]ScreenShare{},
 	}
 }
 
@@ -112,6 +118,39 @@ func (r *MemoryRepository) MembershipsForLayup(id LayupID) ([]Membership, error)
 // MembershipsForUser returns every membership held by a user.
 func (r *MemoryRepository) MembershipsForUser(id UserID) ([]Membership, error) {
 	return r.filterMemberships(func(m Membership) bool { return m.UserID == id }), nil
+}
+
+// SaveScreenShare inserts or replaces a screen share.
+func (r *MemoryRepository) SaveScreenShare(share ScreenShare) error {
+	if err := share.ID.Validate(); err != nil {
+		return err
+	}
+	if err := share.LayupID.Validate(); err != nil {
+		return err
+	}
+	if err := share.PresenterMembershipID.Validate(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.shares[share.ID]; !exists {
+		r.shareOrder = append(r.shareOrder, share.ID)
+	}
+	r.shares[share.ID] = share
+	return nil
+}
+
+// ScreenSharesForLayup returns every share of a layup, newest last.
+func (r *MemoryRepository) ScreenSharesForLayup(id LayupID) ([]ScreenShare, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]ScreenShare, 0, 2)
+	for _, shareID := range r.shareOrder {
+		if share := r.shares[shareID]; share.LayupID == id {
+			out = append(out, share)
+		}
+	}
+	return out, nil
 }
 
 func (r *MemoryRepository) filterMemberships(keep func(Membership) bool) []Membership {
