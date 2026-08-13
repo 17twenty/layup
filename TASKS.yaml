@@ -5,7 +5,7 @@ tasks:
   plan: PLAN-1
   phase: A
   title: Bootstrap repository and pin toolchains
-  status: todo
+  status: done
   goal: Create the Electron/React/TypeScript desktop workspace, Go control service module, root developer commands and pinned
     toolchain versions.
   user_visible_behaviour: Create the Electron/React/TypeScript desktop workspace, Go control service module, root developer

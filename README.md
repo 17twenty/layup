@@ -50,6 +50,26 @@ To validate the task graph:
 python3 scripts/validate_tasks.py
 ```
 
+## Toolchains
+
+Pinned in `.tool-versions` / `mise.toml`:
+
+```text
+node 26.5.0   (npm 11.x workspaces; package manager pinned via packageManager)
+go   1.26.4   (go.work spans protocol/go, services/control)
+```
+
+Install and run:
+
+```bash
+make bootstrap     # npm ci / npm install
+make dev-control   # Go control service
+make dev           # Electron desktop (Vite renderer + compiled main/preload)
+make check         # typecheck + lint + test + build for every component
+```
+
+`make help` lists every developer command.
+
 ## Repository shape
 
 ```text

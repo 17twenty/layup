@@ -1,0 +1,38 @@
+{
+  "name": "@layup/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Layup Electron desktop client.",
+  "main": "dist/main/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.node.json",
+    "build:renderer": "vite build",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@layup/protocol": "*",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "@testing-library/react": "16.3.0",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.0.4",
+    "electron": "43.4.0",
+    "eslint": "9.39.1",
+    "globals": "16.5.0",
+    "jsdom": "27.0.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.2",
+    "vite": "7.3.6",
+    "vitest": "3.2.7"
+  }
+}

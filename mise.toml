@@ -1,0 +1,7 @@
+[tools]
+node = "26.5.0"
+go = "1.26.4"
+
+[env]
+# Control service defaults used by `make dev-control`.
+LAYUP_LISTEN_ADDR = "127.0.0.1:8787"

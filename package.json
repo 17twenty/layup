@@ -1,0 +1,35 @@
+{
+  "name": "layup",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Layup - people-first collaboration. PLAN-1 workspace root.",
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "protocol/ts",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "build:protocol": "npm run build --workspace protocol/ts",
+    "prebuild": "npm run build:protocol",
+    "build": "npm run build --workspaces --if-present",
+    "pretypecheck": "npm run build:protocol",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "pretest": "npm run build:protocol",
+    "test": "npm run test --workspaces --if-present",
+    "dev": "npm run dev --workspace apps/desktop",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "allowScripts": {
+    "electron@43.4.0": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
+  }
+}
