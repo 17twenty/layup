@@ -17,6 +17,7 @@ import (
 	"github.com/layup-app/layup/services/control/internal/buildinfo"
 	"github.com/layup-app/layup/services/control/internal/config"
 	"github.com/layup-app/layup/services/control/internal/httpapi"
+	"github.com/layup-app/layup/services/control/internal/logging"
 )
 
 func main() {
@@ -32,7 +33,8 @@ func run() error {
 		return err
 	}
 
-	log := newLogger(cfg)
+	log := logging.New(logging.Options{Level: cfg.LogLevel, Format: cfg.LogFormat, Writer: os.Stdout})
+	slog.SetDefault(log)
 	build := buildinfo.Get()
 	// Startup log carries build and listen address, never secrets.
 	log.Info("starting layup control plane",
@@ -47,7 +49,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
-		Handler: httpapi.New(cfg, httpapi.Options{Logger: log}),
+		Handler: logging.Middleware(log)(httpapi.New(cfg, httpapi.Options{Logger: log})),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -71,28 +73,4 @@ func run() error {
 		defer cancel()
 		return server.Shutdown(shutdownCtx)
 	}
-}
-
-func newLogger(cfg config.Config) *slog.Logger {
-	var level slog.Level
-	switch cfg.LogLevel {
-	case "debug":
-		level = slog.LevelDebug
-	case "warn":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo
-	}
-	opts := &slog.HandlerOptions{Level: level}
-	var handler slog.Handler
-	if cfg.LogFormat == "text" {
-		handler = slog.NewTextHandler(os.Stdout, opts)
-	} else {
-		handler = slog.NewJSONHandler(os.Stdout, opts)
-	}
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
-	return logger
 }

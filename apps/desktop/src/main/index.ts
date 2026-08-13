@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as path from 'node:path';
 import { PROTOCOL_VERSION } from '@layup/protocol';
 import { registerIpcHandlers, type Handlers } from './ipc';
+import { createLogger, newCorrelationId } from './logging';
 import { secureWebPreferences } from './window';
 
 /**
@@ -10,6 +11,12 @@ import { secureWebPreferences } from './window';
  */
 
 const RENDERER_DEV_URL = process.env.LAYUP_RENDERER_URL;
+
+/** Every line from this process carries the component and app session id. */
+const log = createLogger({
+  level: (process.env.LAYUP_LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error') || 'info',
+  base: { component: 'desktop-main', appSessionId: newCorrelationId() },
+});
 
 function buildHandlers(): Handlers {
   return {
@@ -52,9 +59,15 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  log.info('desktop starting', {
+    protocolVersion: PROTOCOL_VERSION,
+    platform: process.platform,
+    electron: process.versions.electron,
+  });
+
   registerIpcHandlers(ipcMain, buildHandlers(), {
     onRejected: (channel, error) => {
-      console.error(`[layup] rejected IPC payload on ${channel}: ${error.message}`);
+      log.warn('rejected IPC payload', { channel, reason: error.message });
     },
   });
 

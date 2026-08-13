@@ -139,7 +139,7 @@ tasks:
   plan: PLAN-1
   phase: A
   title: Structured logging baseline
-  status: todo
+  status: done
   goal: Add structured logging to desktop main process and Go control service with correlation/session fields.
   user_visible_behaviour: Add structured logging to desktop main process and Go control service with correlation/session fields.
   depends_on:
