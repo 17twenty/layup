@@ -86,6 +86,10 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       leave: () => invoke('layup:leave', undefined),
       /** Organisation-open layups you could walk into. */
       open: () => invoke('layup:open', undefined),
+      /** Mints an opaque invitation link for the layup you are in. */
+      link: () => invoke('layup:link', undefined),
+      /** Joins using an invitation link token. */
+      joinLink: (token: string) => invoke('layup:joinLink', { token }),
       /** Subscribe to layup state changes. Returns unsubscribe. */
       onChanged: (handler: (state: EventPayload<'layup:changed'>) => void) =>
         subscribe('layup:changed', handler),

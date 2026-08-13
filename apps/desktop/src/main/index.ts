@@ -113,6 +113,15 @@ function buildHandlers(): Handlers {
     'layup:join': (input) => layups.join(input.layupId),
     'layup:leave': () => layups.leave(),
     'layup:open': () => controlClient.openLayups(),
+    'layup:link': () => {
+      const current = layups.state().layup;
+      if (!current) throw new Error('you are not in a layup');
+      return controlClient.createLink(current.id);
+    },
+    'layup:joinLink': async (input) => {
+      const result = await controlClient.joinByLink(input.token);
+      return layups.adopt(result.layup, result.yourMembershipId);
+    },
     'requests:list': () => requests.state(),
     'requests:invite': (input) =>
       input.layupId

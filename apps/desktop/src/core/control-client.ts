@@ -191,6 +191,9 @@ export const openLayupShape = isObject({
   youAreInIt: isBoolean,
 });
 
+const invitationLinkShape = isObject({ token: isString, expiresAt: isString });
+export type InvitationLink = ReturnType<typeof invitationLinkShape>;
+
 const openLayupsShape = isObject({ layups: isArrayOf(openLayupShape, { max: 200 }) });
 export type OpenLayups = ReturnType<typeof openLayupsShape>;
 
@@ -240,6 +243,10 @@ export interface ControlClient {
   getLayup(layupId: string): Promise<Layup>;
   /** Organisation-open layups (Happening Now). */
   openLayups(): Promise<OpenLayups>;
+  /** Mints an opaque invitation link for a layup you are in. */
+  createLink(layupId: string): Promise<InvitationLink>;
+  /** Joins a layup using an invitation link token. */
+  joinByLink(token: string): Promise<MembershipResult>;
   /** Sends an invitation or knock. */
   createRequest(input: CreateRequestInput): Promise<JoinRequest>;
   /** Pending requests to and from this user. */
@@ -408,6 +415,20 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         `/api/requests/${encodeURIComponent(requestId)}/cancel`,
       );
       return joinRequestShape(envelope.payload, 'request.resolved');
+    },
+
+    async createLink(layupId: string): Promise<InvitationLink> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/layups/${encodeURIComponent(layupId)}/link`,
+      );
+      return invitationLinkShape(envelope.payload, 'layup.link');
+    },
+
+    async joinByLink(token: string): Promise<MembershipResult> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/links/${encodeURIComponent(token)}/join`,
+      );
+      return membershipResultShape(envelope.payload, 'layup.joined');
     },
 
     async openLayups(): Promise<OpenLayups> {

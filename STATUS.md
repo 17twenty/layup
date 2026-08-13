@@ -6,34 +6,36 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0207
-- completed: 24
+- next task: P1-0208
+- completed: 25
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0206 organisation-open layups and Happening Now
+- task: P1-0207 link-join layups
 - result: done
-- tests: `make test-go` (3 discovery cases), `npm test` (100 passed), typecheck/lint green
+- tests: `make test-go` (4 link cases), typecheck/lint/fmt green, `npm test` (100 passed)
 - evidence:
-  - `GET /api/layups` lists only active ORGANISATION layups in the caller's organisation, with
-    title, participant names, count, a presenter placeholder (Phase D fills it) and join state
-  - private layups never appear - asserted on the raw response body, not just the parsed one
-    (`TestHappeningNowShowsOrganisationOpenLayupsOnly`)
-  - listings track reality: joining raises the count, and a layup with no active participants
-    disappears rather than lingering as an empty room
-  - an organisation member can join an open layup with no invitation at all
-  - desktop: `HappeningNow` renders the surface and refreshes on presence/layup pushes; the
-    entry you are already in says "You are here" instead of offering Join
+  - invitation links are opaque 128-bit random tokens mapped server-side to a layup: nothing
+    about the layup can be recovered from a token and it cannot be forged by editing a field
+    (`TestLinkTokensRevealNothing` asserts the token contains no id, title or organisation)
+  - `POST /api/layups/{id}/link` (participants only, 403 otherwise) and
+    `POST /api/links/{token}/join` - a valid link joins the intended layup as an ordinary
+    membership (`TestAValidLinkJoinsTheIntendedLayup`)
+  - invalid, unknown and ended-layup links all fail the same way (410 with "ask for a new one"),
+    so a link is not an oracle for which layups exist
+  - links never cross the organisation boundary, and are refused entirely when policy
+    disallows link layups
+  - desktop: `layup:link` / `layup:joinLink` IPC on top of the control client
 
 ## Recent runs
 
-- P1-0202 done - invite available person to new layup
 - P1-0203 done - invite person into existing layup
 - P1-0204 done - knock on private layup
 - P1-0205 done - collapse, cancel and expire requests
 - P1-0206 done - organisation-open layups and Happening Now
+- P1-0207 done - link-join layups
 
 ## Known issues / decisions needed
 

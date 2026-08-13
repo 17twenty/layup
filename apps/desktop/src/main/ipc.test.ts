@@ -34,6 +34,8 @@ const goodHandlers: Handlers = {
   'layup:join': () => ({ youAreCreatorMembership: false }),
   'layup:leave': () => ({ youAreCreatorMembership: false }),
   'layup:open': () => ({ layups: [] }),
+  'layup:link': () => ({ token: 'tok', expiresAt: '2026-08-14T09:00:00Z' }),
+  'layup:joinLink': () => ({ youAreCreatorMembership: false }),
   'requests:list': () => ({ incoming: [], outgoing: [] }),
   'requests:invite': () => ({
     id: 'jrq_devaaaaab',
@@ -83,6 +85,8 @@ describe('main IPC boundary', () => {
       'layup:join',
       'layup:leave',
       'layup:open',
+      'layup:link',
+      'layup:joinLink',
       'requests:list',
       'requests:invite',
       'requests:knock',

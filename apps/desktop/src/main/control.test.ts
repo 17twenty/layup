@@ -31,6 +31,8 @@ function harness(states: ControlConnectionState[]) {
     leaveLayup: unusedHere,
     getLayup: unusedHere,
     openLayups: unusedHere,
+    createLink: unusedHere,
+    joinByLink: unusedHere,
     createRequest: unusedHere,
     listRequests: unusedHere,
     acceptRequest: unusedHere,

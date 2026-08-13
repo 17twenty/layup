@@ -32,6 +32,7 @@ type Server struct {
 	hub       *realtime.Hub
 	presence  *domain.PresenceService
 	requests  *domain.RequestService
+	links     *linkStore
 	feed      *presencefeed.Feed
 	// heartbeatInterval is overridable so tests do not wait seconds.
 	heartbeatInterval time.Duration
@@ -99,6 +100,7 @@ func New(cfg config.Config, opts Options) *Server {
 		hub:               hub,
 		presence:          presence,
 		requests:          requests,
+		links:             newLinkStore(func() time.Time { return now() }),
 		heartbeatInterval: heartbeat,
 	}
 	s.feed = presencefeed.New(hub, presence, dir, log)
@@ -140,6 +142,8 @@ func (s *Server) routes() {
 	authed.HandleFunc("GET /api/layups/{id}", s.handleGetLayup)
 	authed.HandleFunc("POST /api/layups/{id}/join", s.handleJoinLayup)
 	authed.HandleFunc("POST /api/layups/{id}/leave", s.handleLeaveLayup)
+	authed.HandleFunc("POST /api/layups/{id}/link", s.handleCreateLink)
+	authed.HandleFunc("POST /api/links/{token}/join", s.handleJoinByLink)
 	authed.HandleFunc("GET /api/requests", s.handleListRequests)
 	authed.HandleFunc("POST /api/requests", s.handleCreateRequest)
 	authed.HandleFunc("POST /api/requests/{id}/accept", s.handleAcceptRequest)

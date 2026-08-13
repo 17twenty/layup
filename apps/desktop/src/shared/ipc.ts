@@ -188,6 +188,8 @@ export const ipcChannels = {
   'layup:join': channel(joinLayupRequest, layupStateResponse),
   'layup:leave': channel(isVoid, layupStateResponse),
   'layup:open': channel(isVoid, openLayupsResponse),
+  'layup:link': channel(isVoid, isObject({ token: isString, expiresAt: isString })),
+  'layup:joinLink': channel(isObject({ token: isString }), layupStateResponse),
   'requests:list': channel(isVoid, requestsResponse),
   'requests:invite': channel(inviteRequest, joinRequestShape),
   'requests:knock': channel(isObject({ toUserId: isString }), joinRequestShape),

@@ -778,7 +778,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Link-join layups
-  status: todo
+  status: done
   goal: Implement LINK visibility and signed/opaque invitation links appropriate for PLAN-1.
   user_visible_behaviour: Implement LINK visibility and signed/opaque invitation links appropriate for PLAN-1.
   depends_on:
