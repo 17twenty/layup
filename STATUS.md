@@ -6,35 +6,32 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0006
-- completed: 5
+- next task: P1-0007
+- completed: 6
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0005 structured logging baseline
+- task: P1-0006 CI build and test matrix
 - result: done
-- tests: `make test-go` (logging ok), `npm test` (30 passed), typecheck/lint green, live request-log check
+- tests: `make fmt-check`, cross-builds (windows/linux), `validate_tasks.py` OK: 68 tasks
 - evidence:
-  - Go: `services/control/internal/logging` - slog JSON handler wrapped by a redacting
-    handler; correlation fields ride on the context (`WithFields`), HTTP middleware mints or
-    reuses `X-Layup-Request-ID`
-  - desktop: `apps/desktop/src/main/logging.ts` - one JSON object per line, `with()` child
-    loggers for session/layup correlation, same redaction rule including nested fields
-  - forbidden content (credentials, keystrokes, clipboard, pixels, audio/video, raw cursor
-    coordinates) is redacted at handler level, proven both sides:
-    `logging_test.go:TestForbiddenFieldsAreRedacted`, `logging.test.ts` redaction case
-  - live: two requests to `/healthz` logged with `requestId` `516c2078...` and a
-    client-supplied `demo-123`; startup line carries build + listen address, no secrets
+  - `.github/workflows/ci.yml` jobs: `tasks` (validates TASKS.yaml), `go` (gofmt, vet, test,
+    build), `go-cross` (linux/amd64, darwin/arm64, windows/amd64), `desktop`
+    (ubuntu+macos+windows: typecheck, lint, unit tests, bundle build, artefact upload),
+    `boundary` (xvfb + real Electron window renderer-privilege proof)
+  - local equivalent `make ci` = validate-tasks + fmt-check + typecheck + lint + test + build
+  - verified locally: `make fmt-check` clean, cross-builds for windows/amd64 and linux/amd64
+    succeed from macOS, `scripts/validate_tasks.py` reports 68 valid PLAN-1 tasks
 
 ## Recent runs
 
-- P1-0001 done - workspace, toolchain pins, root developer commands.
 - P1-0002 done - hardened Electron boundary, validated IPC, real-window boundary proof.
 - P1-0003 done - control service health and config
 - P1-0004 done - shared protocol version contract
 - P1-0005 done - structured logging baseline
+- P1-0006 done - CI build and test matrix
 
 ## Known issues / decisions needed
 
