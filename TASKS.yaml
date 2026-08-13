@@ -271,7 +271,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: Domain IDs and core types
-  status: todo
+  status: done
   goal: Implement User, Organisation, Layup and Membership domain types with stable opaque IDs.
   user_visible_behaviour: Implement User, Organisation, Layup and Membership domain types with stable opaque IDs.
   depends_on:

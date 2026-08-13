@@ -6,16 +6,16 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0101
-- completed: 8
+- next task: P1-0102
+- completed: 9
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0008 latency benchmark harness skeleton
+- task: P1-0101 domain IDs and core types
 - result: done
-- tests: `make test-bench` (6 passed), `make bench` wrote two result files, both within budget
+- tests: `go test ./internal/domain/...` ok (8 cases), `make fmt-check`, `make test-go` green
 - evidence:
   - `test/latency/harness.mjs` - result schema v1: scenario, unit, startedAt/endedAt,
     wallClockMs, samples{count,min,max,mean,percentiles p50/p75/p90/p95/p99}, budgets with
@@ -32,11 +32,11 @@ PLAN-1 gate: IN PROGRESS
 
 ## Recent runs
 
-- P1-0004 done - shared protocol version contract
 - P1-0005 done - structured logging baseline
 - P1-0006 done - CI build and test matrix
 - P1-0007 done - desktop-to-control smoke path
 - P1-0008 done - latency benchmark harness skeleton
+- P1-0101 done - domain IDs and core types
 
 ## Known issues / decisions needed
 
