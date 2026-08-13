@@ -1055,7 +1055,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: coturn configuration and ephemeral credentials
-  status: todo
+  status: done
   goal: Add self-hosted coturn development deployment/config and control-plane issuance of short-lived TURN credentials.
   user_visible_behaviour: Add self-hosted coturn development deployment/config and control-plane issuance of short-lived TURN
     credentials.

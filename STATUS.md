@@ -6,35 +6,36 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0306
-- completed: 33
+- next task: P1-0307
+- completed: 34
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0305 trickle ICE and route diagnostics
+- task: P1-0306 coturn configuration and ephemeral credentials
 - result: done
-- tests: `npm test` (142 passed incl. 5 diagnostics cases), `make test-webrtc` -> WEBRTC OK with route diagnostics
+- tests: `make test-go` (4 TURN cases incl. config validation), fmt/vet green
 - evidence:
-  - trickle ICE was already in the peer module (candidates relayed as discovered, end-of-
-    candidates not relayed); this task adds the diagnostics that make a connection explainable
-  - `apps/desktop/src/core/ice-diagnostics.ts` classifies the *selected* candidate pair as
-    direct / reflexive / relay / unknown, with candidate types, transport, RTT, available
-    outgoing bitrate and byte counters; `describeRoute` gives the UI a plain phrase
-  - handles both ways browsers expose the selected pair (transport.selectedCandidatePairId and
-    a succeeded pair) and says "unknown" rather than guessing (5 unit tests)
-  - `peer.diagnostics()` reads it from live stats, and the real Electron harness now reports
-    through the production module: `route: "direct", relayed: false, localCandidateType: "host",
-    remoteCandidateType: "host", rttMs: 0, bytesSent: 1758`
+  - `GET /api/turn` issues coturn REST credentials: username `<expiry>:<userId>`, password
+    HMAC-SHA1 of it under a secret shared with coturn's `use-auth-secret`. The secret never
+    leaves the server and is never logged (`TestTurnCredentialsAreShortLivedAndDerived`)
+  - credentials last 12h and are deterministic for a given expiry, so a client can be handed a
+    fresh pair on demand
+  - configuration is validated, not defaulted: TURN URLs without a secret, a non-turn: scheme,
+    or FORCE_RELAY with no TURN server all fail startup with a named complaint
+  - with no TURN configured the endpoint still returns a working STUN-only configuration
+  - `deploy/compose/docker-compose.yml` + `control.Dockerfile`: the minimum self-hostable
+    deployment (control service + coturn, `use-auth-secret` matching the issued credentials,
+    relay port range, distroless non-root image). Layup does not implement TURN
 
 ## Recent runs
 
-- P1-0301 done - enumerate and preview capture sources
 - P1-0302 done - capture permission onboarding
 - P1-0303 done - WebRTC signalling protocol
 - P1-0304 done - direct 1:1 WebRTC peer connection
 - P1-0305 done - trickle ICE and route diagnostics
+- P1-0306 done - coturn configuration and ephemeral credentials
 
 ## Known issues / decisions needed
 

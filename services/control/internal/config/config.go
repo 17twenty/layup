@@ -32,6 +32,17 @@ type Config struct {
 	// AllowedOrigins are the browser origins permitted to open a WebSocket.
 	// The desktop sends its own origin; an empty list means "desktop only".
 	AllowedOrigins []string
+
+	// StunURLs and TurnURLs are handed to clients as ICE servers. Layup does
+	// not implement TURN; it configures coturn (ARCHITECTURE.md §9).
+	StunURLs []string
+	TurnURLs []string
+	// TurnSecret is shared with coturn's `use-auth-secret` and never leaves the
+	// server: clients receive only derived, short-lived credentials.
+	TurnSecret string
+	// ForceRelay makes clients use relay candidates only, for testing the TURN
+	// path and for deployments whose policy requires it.
+	ForceRelay bool
 }
 
 // Default values chosen for local development on a single machine.
@@ -107,6 +118,33 @@ func Load(getenv Getenv) (Config, error) {
 		}
 	}
 
+	cfg.StunURLs = splitList(getenv(EnvPrefix + "STUN_URLS"))
+	if len(cfg.StunURLs) == 0 {
+		cfg.StunURLs = []string{"stun:stun.l.google.com:19302"}
+	}
+	cfg.TurnURLs = splitList(getenv(EnvPrefix + "TURN_URLS"))
+	cfg.TurnSecret = getenv(EnvPrefix + "TURN_SECRET")
+	if len(cfg.TurnURLs) > 0 && cfg.TurnSecret == "" {
+		problems = append(problems, EnvPrefix+"TURN_SECRET is required when "+EnvPrefix+"TURN_URLS is set")
+	}
+	for _, url := range cfg.TurnURLs {
+		if !strings.HasPrefix(url, "turn:") && !strings.HasPrefix(url, "turns:") {
+			problems = append(problems, fmt.Sprintf("%sTURN_URLS entry %q must start turn: or turns:", EnvPrefix, url))
+		}
+	}
+
+	switch strings.ToLower(getenv(EnvPrefix + "FORCE_RELAY")) {
+	case "", "0", "false", "no":
+		cfg.ForceRelay = false
+	case "1", "true", "yes":
+		cfg.ForceRelay = true
+	default:
+		problems = append(problems, EnvPrefix+"FORCE_RELAY must be true or false")
+	}
+	if cfg.ForceRelay && len(cfg.TurnURLs) == 0 {
+		problems = append(problems, EnvPrefix+"FORCE_RELAY needs at least one "+EnvPrefix+"TURN_URLS entry")
+	}
+
 	if len(problems) > 0 {
 		return Config{}, fmt.Errorf("invalid configuration:\n  - %s", strings.Join(problems, "\n  - "))
 	}
@@ -118,3 +156,18 @@ func LoadFromOS() (Config, error) { return Load(os.Getenv) }
 
 // ErrNotConfigured is returned by helpers that need configuration that is absent.
 var ErrNotConfigured = errors.New("not configured")
+
+// splitList parses a comma-separated environment value.
+func splitList(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}

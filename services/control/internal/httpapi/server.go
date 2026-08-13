@@ -144,6 +144,7 @@ func (s *Server) routes() {
 	authed.HandleFunc("POST /api/layups/{id}/leave", s.handleLeaveLayup)
 	authed.HandleFunc("POST /api/layups/{id}/link", s.handleCreateLink)
 	authed.HandleFunc("POST /api/links/{token}/join", s.handleJoinByLink)
+	authed.HandleFunc("GET /api/turn", s.handleTurnCredentials)
 	authed.HandleFunc("GET /api/requests", s.handleListRequests)
 	authed.HandleFunc("POST /api/requests", s.handleCreateRequest)
 	authed.HandleFunc("POST /api/requests/{id}/accept", s.handleAcceptRequest)

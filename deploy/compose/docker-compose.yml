@@ -1,0 +1,52 @@
+# Minimum self-hostable Layup deployment (SPEC.md §14):
+#
+#   control service + coturn
+#
+# Everything here is enterprise-controlled: no vendor SaaS call is required.
+# TLS termination and PostgreSQL belong to PLAN-2.
+services:
+  control:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/control.Dockerfile
+    environment:
+      LAYUP_LISTEN_ADDR: 0.0.0.0:8787
+      LAYUP_ENV: ${LAYUP_ENV:-selfhosted}
+      LAYUP_LOG_FORMAT: json
+      # Clients receive short-lived credentials derived from this secret; the
+      # secret itself never leaves the control service.
+      LAYUP_TURN_SECRET: ${LAYUP_TURN_SECRET:?set a shared TURN secret}
+      LAYUP_TURN_URLS: turn:${LAYUP_TURN_HOST:?set the TURN hostname}:3478?transport=udp
+      LAYUP_STUN_URLS: stun:${LAYUP_TURN_HOST}:3478
+      # Set to true to prove the relay path, or where policy requires it.
+      LAYUP_FORCE_RELAY: ${LAYUP_FORCE_RELAY:-false}
+    ports:
+      - '8787:8787'
+    depends_on:
+      - coturn
+    restart: unless-stopped
+
+  coturn:
+    image: coturn/coturn:4.6
+    # Layup does not implement TURN - it configures coturn
+    # (ARCHITECTURE.md §9). `use-auth-secret` matches the REST credentials the
+    # control service issues.
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=3478
+      - --fingerprint
+      - --use-auth-secret
+      - --static-auth-secret=${LAYUP_TURN_SECRET:?set a shared TURN secret}
+      - --realm=${LAYUP_TURN_HOST:?set the TURN hostname}
+      - --external-ip=${LAYUP_TURN_EXTERNAL_IP:-$$(detect-external-ip)}
+      - --min-port=49160
+      - --max-port=49200
+      - --no-cli
+      - --no-tlsv1
+      - --no-tlsv1_1
+    ports:
+      - '3478:3478/udp'
+      - '3478:3478/tcp'
+      - '49160-49200:49160-49200/udp'
+    restart: unless-stopped
