@@ -13,5 +13,8 @@ describe('bootstrap shell', () => {
     render(<App />);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Layup');
     expect(screen.getByText(/protocol v\d+/)).toBeTruthy();
+    // People are the home surface, not a meeting wizard.
+    expect(screen.getByRole('region', { name: 'People' })).toBeTruthy();
+    expect(screen.queryByText(/new meeting/i)).toBeNull();
   });
 });

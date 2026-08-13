@@ -68,3 +68,149 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
 }
+
+/* People home surface */
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  gap: 24px;
+}
+
+.shell__header h1 {
+  margin: 0;
+}
+
+.shell__footer {
+  margin-top: auto;
+  border-top: 1px solid #23262e;
+  padding-top: 12px;
+}
+
+.people__header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.people__header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.people__hint,
+.people__empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.people__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #23262e;
+  border-radius: 10px;
+  background: #161920;
+}
+
+.tile--offline {
+  opacity: 0.55;
+}
+
+.tile--dnd {
+  border-color: #4a2b2b;
+}
+
+.tile--activity-in_private_layup,
+.tile--activity-in_open_layup {
+  border-color: #2b3a4a;
+}
+
+.tile__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #232733;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 13px;
+  color: #c7cddb;
+}
+
+.tile__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.tile__name {
+  margin: 0;
+  font-weight: 600;
+}
+
+.tile__presence {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tile__status {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #7d8496;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.dot--available { background: #6fd18a; }
+.dot--away      { background: #e0b452; }
+.dot--dnd       { background: #f0805a; }
+.dot--offline   { background: #5a6070; }
+
+.tile__action {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--accent);
+  color: #0b0d11;
+}
+
+.tile__action--secondary {
+  background: transparent;
+  border-color: #333846;
+  color: var(--fg);
+}
+
+.tile__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background: transparent;
+  border-color: #2a2e39;
+  color: var(--muted);
+}

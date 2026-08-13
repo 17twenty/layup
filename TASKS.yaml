@@ -490,7 +490,7 @@ tasks:
   plan: PLAN-1
   phase: B
   title: People home grid
-  status: todo
+  status: done
   goal: Implement the People-first home surface backed by realtime directory/presence data.
   user_visible_behaviour: Implement the People-first home surface backed by realtime directory/presence data.
   depends_on:

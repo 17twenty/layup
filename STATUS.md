@@ -6,39 +6,38 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0108
-- completed: 15
+- next task: P1-0109
+- completed: 16
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0107 presence publication and fan-out
+- task: P1-0108 people home grid
 - result: done
-- tests: `make test-go` (5 presence wire cases), `npm test` (67 passed), `make test-smoke` (9 passed), boundary OK
+- tests: `npm test` (82 passed incl. 13 new people cases), typecheck/lint/build green, boundary OK
 - evidence:
-  - `services/control/internal/presencefeed` - `presence.snapshot` on connect, then
-    `presence.update` deltas. Every recipient gets its own rendering
-    (`Hub.BroadcastPerRecipient`), because redaction is viewer-dependent
-  - connect -> AVAILABLE, last client closing -> OFFLINE (a second window keeps you online);
-    `presence.set` lets a client declare AWAY/DND and it is published to others
-  - wire-level redaction proof: an outsider's snapshot of someone in a private layup titled
-    "Acquisition of Initech" contains no title, no layup id and no participant count
-    (`TestPresencePayloadsDoNotLeakPrivateLayupDetail`)
-  - desktop `src/core/people-store.ts` - snapshot replaces, update patches, malformed payloads
-    rejected; main process pushes validated `people:changed` events, `people:list` for the
-    initial read
-  - real two-client evidence (`make test-smoke`, 9 passed): Nick sees the whole organisation on
-    connect, sees Karl go AVAILABLE then OFFLINE with no polling, and never receives private
-    layup detail
+  - `apps/desktop/src/renderer/people/` - `PeopleGrid` is the home surface: one tile per
+    colleague with avatar initials, name, presence dot, presence/activity label, status
+    message and open-layup participant count. Self is excluded from the grid
+  - `primary-action.ts` encodes SPEC §5.1 as a pure function: AVAILABLE -> Start layup
+    (primary), AWAY -> Start layup (secondary), DND -> disabled unless policy allows,
+    IN_PRIVATE_LAYUP -> Knock, IN_OPEN_LAYUP -> Join, INVITING_YOU -> Join,
+    WAITING_FOR_YOU -> Waiting, OFFLINE -> disabled. 8 unit tests
+  - states are visually distinguishable: per-tile classes (`tile--dnd`, `tile--offline`,
+    `tile--activity-in_open_layup`), coloured presence dots, disabled/secondary buttons
+  - no meeting wizard: the App renders People first with connection/identity chrome in a
+    footer; tests assert no "New Meeting" affordance exists
+  - the grid is fed by realtime pushes (`people:changed`), asserted live in
+    `PeopleGrid.test.tsx` ("updates live when presence is pushed")
 
 ## Recent runs
 
-- P1-0103 done - creator privilege devolution invariant
 - P1-0104 done - development user and organisation directory
 - P1-0105 done - presence state model
 - P1-0106 done - realtime WebSocket envelope
 - P1-0107 done - presence publication and fan-out
+- P1-0108 done - people home grid
 
 ## Known issues / decisions needed
 
