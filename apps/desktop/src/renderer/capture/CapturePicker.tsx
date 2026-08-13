@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocalCapture } from './useLocalCapture';
+import type { CapturePermissionResponse } from '../../shared/ipc';
 
 /**
  * Screen/window picker with a live local preview.
@@ -11,10 +12,16 @@ export function CapturePicker() {
   const capture = useLocalCapture();
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  const [permission, setPermission] = useState<CapturePermissionResponse | undefined>();
+
   const refresh = capture.refresh;
   useEffect(() => {
     // Refreshing once on mount is enough: the picker is opened deliberately.
     void refresh();
+    void window.layup.capture
+      .permission()
+      .then(setPermission)
+      .catch(() => undefined);
   }, [refresh]);
 
   useEffect(() => {
@@ -29,6 +36,21 @@ export function CapturePicker() {
           Refresh sources
         </button>
       </header>
+
+      {permission && !permission.canCapture && (
+        <div className="capture__permission" role="alert" data-testid="capture-permission">
+          <p>{permission.guidance}</p>
+          {permission.canOpenSettings && (
+            <button
+              type="button"
+              className="tile__action"
+              onClick={() => void window.layup.capture.openSettings()}
+            >
+              Open screen recording settings
+            </button>
+          )}
+        </div>
+      )}
 
       {capture.error && <p className="layup__error">{capture.error}</p>}
 

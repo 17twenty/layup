@@ -26,6 +26,14 @@ const controlState = {
 const goodHandlers: Handlers = {
   'app:info': () => ({ appVersion: '0.1.0', protocolVersion: 1, platform: 'darwin' }),
   'capture:sources': () => ({ sources: [] }),
+  'capture:permission': () => ({
+    status: 'granted' as const,
+    canCapture: true,
+    guidance: '',
+    canOpenSettings: true,
+    platform: 'darwin',
+  }),
+  'capture:openSettings': () => true,
   'control:status': () => controlState,
   'identity:current': () => ({ devUser: 'nick', resolved: false }),
   'realtime:status': () => ({ status: 'idle' as const, attempt: 0 }),
@@ -78,6 +86,8 @@ describe('main IPC boundary', () => {
     expect([...ipc.registered.keys()]).toEqual([
       'app:info',
       'capture:sources',
+      'capture:permission',
+      'capture:openSettings',
       'control:status',
       'identity:current',
       'realtime:status',

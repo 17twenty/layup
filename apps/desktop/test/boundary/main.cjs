@@ -20,6 +20,14 @@ app.whenReady().then(async () => {
   registerIpcHandlers(ipcMain, {
     'app:info': () => ({ appVersion: '0.1.0-test', protocolVersion: 1, platform: process.platform }),
     'capture:sources': () => ({ sources: [] }),
+    'capture:permission': () => ({
+      status: 'granted',
+      canCapture: true,
+      guidance: '',
+      canOpenSettings: true,
+      platform: process.platform,
+    }),
+    'capture:openSettings': () => true,
     'control:status': () => ({
       status: 'unreachable',
       baseUrl: 'http://127.0.0.1:8787',

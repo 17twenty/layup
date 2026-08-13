@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import * as path from 'node:path';
 import { PROTOCOL_VERSION } from '@layup/protocol';
 import { registerIpcHandlers, type Handlers } from './ipc';
@@ -12,6 +12,7 @@ import { createLayupSupervisor } from './layups';
 import { createRequestsSupervisor } from './requests';
 import { createAttentionController } from './attention';
 import { createCaptureService } from './capture';
+import { createPermissionService } from './permissions';
 import { secureWebPreferences } from './window';
 
 /**
@@ -130,6 +131,12 @@ const capture = createCaptureService({
   log: log.with({ component: 'capture' }),
 });
 
+const permissions = createPermissionService({
+  systemPreferences,
+  openExternal: (url) => shell.openExternal(url),
+  log: log.with({ component: 'permissions' }),
+});
+
 function buildHandlers(): Handlers {
   return {
     'app:info': () => ({
@@ -138,6 +145,8 @@ function buildHandlers(): Handlers {
       platform: process.platform as 'darwin' | 'win32' | 'linux',
     }),
     'capture:sources': () => capture.listSources().then((sources) => ({ sources })),
+    'capture:permission': () => permissions.capture(),
+    'capture:openSettings': () => permissions.openCaptureSettings(),
     'control:status': () => control.status(),
     'identity:current': () => control.identity(),
     'realtime:status': () => realtime.state(),

@@ -190,9 +190,20 @@ export const captureSourcesResponse = isObject({
 });
 export type CaptureSourcesResponse = ReturnType<typeof captureSourcesResponse>;
 
+export const capturePermissionResponse = isObject({
+  status: isEnum(['granted', 'denied', 'restricted', 'not-determined', 'not-required', 'unknown'] as const),
+  canCapture: isBoolean,
+  guidance: isString,
+  canOpenSettings: isBoolean,
+  platform: isString,
+});
+export type CapturePermissionResponse = ReturnType<typeof capturePermissionResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'capture:sources': channel(isVoid, captureSourcesResponse),
+  'capture:permission': channel(isVoid, capturePermissionResponse),
+  'capture:openSettings': channel(isVoid, isBoolean),
   'control:status': channel(isVoid, controlStatusResponse),
   'identity:current': channel(isVoid, identityResponse),
   'realtime:status': channel(isVoid, realtimeStateResponse),

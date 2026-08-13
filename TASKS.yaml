@@ -933,7 +933,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Capture permission onboarding
-  status: todo
+  status: done
   goal: Implement platform-aware screen-recording permission detection/onboarding where APIs allow.
   user_visible_behaviour: Implement platform-aware screen-recording permission detection/onboarding where APIs allow.
   depends_on:

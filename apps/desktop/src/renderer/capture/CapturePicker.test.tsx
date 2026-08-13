@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CapturePicker } from './CapturePicker';
-import type { CaptureSourcesResponse } from '../../shared/ipc';
+import type { CapturePermissionResponse, CaptureSourcesResponse } from '../../shared/ipc';
 
 const sources: CaptureSourcesResponse = {
   sources: [
@@ -11,9 +11,27 @@ const sources: CaptureSourcesResponse = {
   ],
 };
 
-function stubCapture(getUserMedia: () => Promise<MediaStream>) {
+function stubCapture(
+  getUserMedia: () => Promise<MediaStream>,
+  permission: Partial<CapturePermissionResponse> = {},
+) {
+  const openSettings = vi.fn(async () => true);
   Object.defineProperty(window, 'layup', {
-    value: { protocolVersion: 1, capture: { sources: vi.fn(async () => sources) } },
+    value: {
+      protocolVersion: 1,
+      capture: {
+        sources: vi.fn(async () => sources),
+        permission: vi.fn(async () => ({
+          status: 'granted' as const,
+          canCapture: true,
+          guidance: '',
+          canOpenSettings: true,
+          platform: 'darwin',
+          ...permission,
+        })),
+        openSettings,
+      },
+    },
     configurable: true,
     writable: true,
   });
@@ -21,7 +39,9 @@ function stubCapture(getUserMedia: () => Promise<MediaStream>) {
     value: { getUserMedia: vi.fn(getUserMedia) },
     configurable: true,
   });
-  return navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+  return Object.assign(navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>, {
+    openSettings,
+  });
 }
 
 function fakeStream() {
@@ -98,5 +118,29 @@ describe('capture picker', () => {
     await userEvent.click(screen.getByTestId('source-screen:1:0'));
     await waitFor(() => expect(screen.getByText(/Permission denied/)).toBeTruthy());
     expect(screen.queryByTestId('capture-preview')).toBeNull();
+  });
+});
+
+describe('capture permission onboarding', () => {
+  it('explains a blocked permission and offers the settings page', async () => {
+    const stub = stubCapture(async () => fakeStream().stream, {
+      status: 'denied',
+      canCapture: false,
+      guidance: 'macOS is blocking screen recording for Layup.',
+    });
+    render(<CapturePicker />);
+
+    await waitFor(() => expect(screen.getByTestId('capture-permission')).toBeTruthy());
+    expect(screen.getByRole('alert').textContent).toMatch(/blocking screen recording/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open screen recording settings' }));
+    expect(stub.openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('says nothing when permission is fine', async () => {
+    stubCapture(async () => fakeStream().stream);
+    render(<CapturePicker />);
+    await waitFor(() => expect(screen.getByTestId('source-screen:1:0')).toBeTruthy());
+    expect(screen.queryByTestId('capture-permission')).toBeNull();
   });
 });

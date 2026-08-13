@@ -62,6 +62,10 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
     capture: {
       /** Screens and windows that could be shared. */
       sources: () => invoke('capture:sources', undefined),
+      /** Whether the OS will let us capture, and what to do if not. */
+      permission: () => invoke('capture:permission', undefined),
+      /** Opens the OS screen-recording settings page. */
+      openSettings: () => invoke('capture:openSettings', undefined),
     },
     control: {
       /** Current connection state of the Go control plane. */
