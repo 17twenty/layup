@@ -872,7 +872,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Menu/tray pending attention
-  status: todo
+  status: done
   goal: Add a non-spammy OS-level menu/tray attention state while an incoming request is pending.
   user_visible_behaviour: Add a non-spammy OS-level menu/tray attention state while an incoming request is pending.
   depends_on:

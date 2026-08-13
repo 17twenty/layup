@@ -6,36 +6,35 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0210
-- completed: 27
+- next task: P1-0301
+- completed: 28
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0209 invite while already in a layup
+- task: P1-0210 menu/tray pending attention
 - result: done
-- tests: `make test-go` (3 busy-invite cases), `npm test` (105 passed incl. 3 new UI cases)
+- tests: `npm test` (110 passed incl. 5 attention cases), typecheck/lint green, boundary OK
 - evidence:
-  - "Join theirs" leaves the current layup *first*, then joins the target, in that order, so
-    the two layups never briefly overlap; the abandoned layup continues for the people left in
-    it (`TestJoinTheirsLeavesTheCurrentLayupFirst`)
-  - no graph merge anywhere: the two layups remain two layups with their own participants, and
-    creator authority is unaffected
-  - "Invite them here" sends `INVITE_USER_TO_LAYUP` for the layup you are in and declines
-    theirs; accepting lands the other person in your existing layup, and exactly one layup
-    exists afterwards (`TestInviteThemHereCreatesAnInvitationToTheCurrentLayup`)
-  - declining while busy changes nothing at all
-  - the UI shows the three-way choice only when it applies: a knock never offers to move you,
-    and with no current layup it stays a plain Join / Not now
+  - `apps/desktop/src/main/attention.ts` - badge, tooltip and a single dock bounce / frame
+    flash while a request is pending; wired to the requests supervisor so it always reflects
+    current state rather than a stream of events
+  - no repeated OS notification for repeated clicks: alerting is keyed on request id, and
+    repeated clicks collapse upstream into one request
+    (`does not alert again while the same request stays pending`)
+  - the badge and tooltip clear on accept, decline or expiry; a genuinely new request (new id)
+    alerts again, including after an earlier one was resolved
+  - outgoing requests never raise OS attention - your own waiting is not an interruption
+  - 5 unit tests drive an injected surface, so the rules are proven without Electron
 
 ## Recent runs
 
-- P1-0205 done - collapse, cancel and expire requests
 - P1-0206 done - organisation-open layups and Happening Now
 - P1-0207 done - link-join layups
 - P1-0208 done - incoming invitation experience
 - P1-0209 done - invite while already in a layup
+- P1-0210 done - menu/tray pending attention
 
 ## Known issues / decisions needed
 

@@ -10,6 +10,7 @@ import { createPeopleStore, TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE } from 
 import { createControlClient } from '../core/control-client';
 import { createLayupSupervisor } from './layups';
 import { createRequestsSupervisor } from './requests';
+import { createAttentionController } from './attention';
 import { secureWebPreferences } from './window';
 
 /**
@@ -79,11 +80,37 @@ const layups = createLayupSupervisor({
   onChange: (state) => broadcast('layup:changed', state),
 });
 
+/**
+ * OS attention while someone is waiting: a dock/taskbar badge, a tooltip and a
+ * single bounce per new request. No repeated notification for repeated clicks.
+ */
+const attention = createAttentionController({
+  log: log.with({ component: 'attention' }),
+  surface: {
+    setBadge: (text) => {
+      if (process.platform === 'darwin') app.dock?.setBadge(text);
+      else for (const window of BrowserWindow.getAllWindows()) window.setOverlayIcon(null, text);
+    },
+    setTooltip: (label) => {
+      for (const window of BrowserWindow.getAllWindows()) window.setTitle(label);
+    },
+    alert: () => {
+      if (process.platform === 'darwin') app.dock?.bounce('informational');
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isFocused()) window.flashFrame(true);
+      }
+    },
+  },
+});
+
 const requests = createRequestsSupervisor({
   client: controlClient,
   realtime: realtime.client,
   log: log.with({ component: 'requests' }),
-  onChange: (state) => broadcast('requests:changed', state),
+  onChange: (state) => {
+    broadcast('requests:changed', state);
+    attention.apply(state);
+  },
   // Accepting an invitation puts this desktop into the resulting layup.
   onAccepted: (result) => layups.adopt(result.layup, result.yourMembershipId),
 });
