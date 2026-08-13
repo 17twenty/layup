@@ -6,39 +6,38 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0311
-- completed: 38 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0312
+- completed: 39 of 68 (phases A, B and C complete; D in progress)
 - blocked: 0
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0310 minimal camera and microphone tracks
+- task: P1-0311 join AV default policy
 - result: done
-- tests: `npm test` (171 passed incl. 9 AV/session cases), `make test-webrtc` -> WEBRTC OK, typecheck/lint green
+- tests: `make test-go` (4 policy + 1 wire case), `npm test` (171 passed), lint/fmt green
 - evidence:
-  - `apps/desktop/src/core/av.ts` opens camera and microphone *for a membership*: `start()`
-    refuses without one, so clicking a person can never open the camera - media follows
-    acceptance (`refuses to start without a membership`, SPEC.md §4)
-  - both devices are opened once and the join policy decides what is *enabled*, so unmuting
-    later never re-prompts for permission
-  - muting disables the track rather than stopping it, so coming back needs no renegotiation
-    (`mutes by disabling the track, not by stopping it`)
-  - device failures are explained in words a person can act on: permission refused, no device,
-    or already in use by another application
-  - the session publishes camera+microphone to every peer and replaces tracks in place when
-    devices change; incoming video is classified as the shared desktop **only** for the
-    membership the control plane says is presenting, so ADR-0007 decides what a screen is
-    rather than a guess about track order
-  - 7 AV tests + 2 new session tests; `make test-webrtc` still WEBRTC OK end to end
+  - `services/control/internal/domain/avpolicy.go` implements SPEC §4: joining at a resulting
+    count of 1-4 gives camera ON + microphone ON; participant 5 or later gives camera ON +
+    microphone MUTED, with `mutedByThreshold` so the UI can say *why* rather than looking broken
+  - precedence is enforced, not assumed: personal preference may only narrow what organisation
+    policy allows - a stricter preference wins, a more permissive one is ignored
+    (`TestPersonalPreferenceMayOnlyNarrow`)
+  - the threshold is policy, not a constant: an organisation can move it (3 mutes the third
+    joiner) or disable it entirely (0 never auto-mutes)
+  - every join carries the decision: `layup.created`, `layup.joined` and `request.accepted` all
+    return `media {camera, microphone, participantCount, mutedByThreshold}`, so the client never
+    has to re-derive it (`TestJoinMediaDefaultsRideOnEveryJoin` walks participants 1-4 over the
+    wire and asserts the 5th through the same domain rule the endpoint uses)
+  - the desktop threads it into layup state, and `av.ts` applies it when devices open
 
 ## Recent runs
 
-- cleanup - ADR conformance check, dead code removal, docs corrected
 - P1-0307 done - forced TURN test mode
 - P1-0308 done - publish and render shared desktop
 - P1-0309 done - single active screen-share domain
 - P1-0310 done - minimal camera and microphone tracks
+- P1-0311 done - join AV default policy
 
 ## Evidence index
 

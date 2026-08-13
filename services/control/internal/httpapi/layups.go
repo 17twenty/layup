@@ -45,10 +45,13 @@ type LayupDTO struct {
 }
 
 // MembershipResultDTO is returned by create/join: the layup plus which
-// membership *you* now are.
+// membership *you* now are, and how media should start.
 type MembershipResultDTO struct {
 	Layup            LayupDTO `json:"layup"`
 	YourMembershipID string   `json:"yourMembershipId"`
+	// Media is the join policy for *this* join: camera/microphone defaults for
+	// the participant count that resulted (SPEC.md §4).
+	Media domain.JoinMediaDefaults `json:"media"`
 }
 
 type createLayupRequest struct {
@@ -100,6 +103,7 @@ func (s *Server) handleCreateLayup(w http.ResponseWriter, r *http.Request) {
 	s.writeEnvelope(w, r, "layup.created", MembershipResultDTO{
 		Layup:            s.layupDTO(view),
 		YourMembershipID: string(membershipOf(view, identity.User.ID)),
+		Media:            s.joinMedia(view),
 	})
 }
 
@@ -135,6 +139,7 @@ func (s *Server) handleJoinLayup(w http.ResponseWriter, r *http.Request) {
 	s.writeEnvelope(w, r, "layup.joined", MembershipResultDTO{
 		Layup:            s.layupDTO(view),
 		YourMembershipID: string(membership.ID),
+		Media:            s.joinMedia(view),
 	})
 }
 
@@ -174,6 +179,8 @@ func (s *Server) handleLeaveLayup(w http.ResponseWriter, r *http.Request) {
 		Layup:            s.layupDTO(after),
 		YourMembershipID: string(membershipID),
 	})
+
+	// Media stops when the membership does; nothing to hand back.
 }
 
 func (s *Server) handleGetLayup(w http.ResponseWriter, r *http.Request) {
@@ -299,6 +306,16 @@ func (s *Server) layupDTO(view domain.LayupView) LayupDTO {
 		dto.ActiveShare = s.shareDTO(share)
 	}
 	return dto
+}
+
+// joinMedia applies the organisation policy to the resulting participant count.
+// Personal preference is a PLAN-2 setting; the default follows policy.
+func (s *Server) joinMedia(view domain.LayupView) domain.JoinMediaDefaults {
+	return domain.JoinDefaults(
+		s.directory.Organisation().Policy,
+		domain.DefaultMediaPreference(),
+		len(view.ActiveParticipants()),
+	)
 }
 
 func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err error) {

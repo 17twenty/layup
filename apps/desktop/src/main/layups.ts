@@ -18,6 +18,11 @@ export interface LayupState {
   membershipId?: string;
   /** True while this desktop's own membership holds creator authority. */
   youAreCreatorMembership: boolean;
+  /**
+   * How camera and microphone should start for this join (SPEC.md §4). Absent
+   * until this desktop has actually joined something.
+   */
+  media?: { camera: boolean; microphone: boolean; participantCount: number; mutedByThreshold: boolean };
 }
 
 export interface LayupSupervisorOptions {
@@ -31,7 +36,7 @@ export interface LayupSupervisor {
   state(): LayupState;
   /** Adopts a layup this desktop entered through some other path (an accepted
    *  invitation), so local state matches the server immediately. */
-  adopt(layup: Layup, membershipId: string): LayupState;
+  adopt(layup: Layup, membershipId: string, media?: LayupState['media']): LayupState;
   create(input?: CreateLayupInput): Promise<LayupState>;
   join(layupId: string): Promise<LayupState>;
   leave(): Promise<LayupState>;
@@ -92,8 +97,9 @@ export function createLayupSupervisor(options: LayupSupervisorOptions): LayupSup
   return {
     state: () => state,
 
-    adopt(layup, membershipId) {
-      publish(derive(layup, membershipId));
+    adopt(layup, membershipId, media) {
+      const next = derive(layup, membershipId);
+      publish(media ? { ...next, media } : next);
       return state;
     },
 
@@ -104,14 +110,19 @@ export function createLayupSupervisor(options: LayupSupervisorOptions): LayupSup
         visibility: result.layup.visibility,
         membershipId: result.yourMembershipId,
       });
-      publish(derive(result.layup, result.yourMembershipId));
+      publish({ ...derive(result.layup, result.yourMembershipId), ...(result.media ? { media: result.media } : {}) });
       return state;
     },
 
     async join(layupId) {
       const result = await client.joinLayup(layupId);
-      log.info('layup joined', { layupId, membershipId: result.yourMembershipId });
-      publish(derive(result.layup, result.yourMembershipId));
+      log.info('layup joined', {
+        layupId,
+        membershipId: result.yourMembershipId,
+        cameraOnJoin: result.media?.camera,
+        microphoneOnJoin: result.media?.microphone,
+      });
+      publish({ ...derive(result.layup, result.yourMembershipId), ...(result.media ? { media: result.media } : {}) });
       return state;
     },
 

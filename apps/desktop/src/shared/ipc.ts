@@ -121,6 +121,14 @@ export const layupStateResponse = isObject({
   layup: optional(layupShape),
   membershipId: optional(isString),
   youAreCreatorMembership: isBoolean,
+  media: optional(
+    isObject({
+      camera: isBoolean,
+      microphone: isBoolean,
+      participantCount: isInteger({ min: 0 }),
+      mutedByThreshold: isBoolean,
+    }),
+  ),
 });
 export type LayupStateResponse = ReturnType<typeof layupStateResponse>;
 

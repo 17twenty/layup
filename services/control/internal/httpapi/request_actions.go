@@ -15,6 +15,8 @@ type AcceptResultDTO struct {
 	Layup   LayupDTO   `json:"layup"`
 	// YourMembershipID is the accepter's membership in that layup.
 	YourMembershipID string `json:"yourMembershipId"`
+	// Media is how camera and microphone should start for this join.
+	Media domain.JoinMediaDefaults `json:"media"`
 }
 
 func (s *Server) handleAcceptRequest(w http.ResponseWriter, r *http.Request) {
@@ -51,6 +53,7 @@ func (s *Server) handleAcceptRequest(w http.ResponseWriter, r *http.Request) {
 		Request:          s.requestDTOFor(r.Context(), accepted, identity.User.ID),
 		Layup:            s.layupDTO(view),
 		YourMembershipID: string(membershipID),
+		Media:            s.joinMedia(view),
 	})
 }
 

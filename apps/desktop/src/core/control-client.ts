@@ -135,9 +135,18 @@ export const layupShape = isObject({
 export type Layup = ReturnType<typeof layupShape>;
 export type Participant = ReturnType<typeof participantShape>;
 
+const joinMediaShape = isObject({
+  camera: isBoolean,
+  microphone: isBoolean,
+  participantCount: isInteger({ min: 0 }),
+  mutedByThreshold: isBoolean,
+});
+export type JoinMedia = ReturnType<typeof joinMediaShape>;
+
 const membershipResultShape = isObject({
   layup: layupShape,
   yourMembershipId: isString,
+  media: optional(joinMediaShape),
 });
 export type MembershipResult = ReturnType<typeof membershipResultShape>;
 
@@ -178,6 +187,7 @@ const acceptResultShape = isObject({
   request: joinRequestShape,
   layup: layupShape,
   yourMembershipId: isString,
+  media: optional(joinMediaShape),
 });
 export type AcceptResult = ReturnType<typeof acceptResultShape>;
 

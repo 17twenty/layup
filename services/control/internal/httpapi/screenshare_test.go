@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/layup-app/layup/protocol"
+	"github.com/layup-app/layup/services/control/internal/domain"
 	"github.com/layup-app/layup/services/control/internal/presencefeed"
 )
 
@@ -125,5 +126,43 @@ func TestShareControlIsNotModeration(t *testing.T) {
 	// An outsider cannot start one either.
 	if _, code := startShare(t, s, "emelia", created.Layup.ID, "screen:1:0"); code != http.StatusConflict {
 		t.Fatalf("expected 409 for someone not in the layup, got %d", code)
+	}
+}
+
+func TestJoinMediaDefaultsRideOnEveryJoin(t *testing.T) {
+	s := testServer(t)
+	created := createLayup(t, s, "nick", "Pairing", "ORGANISATION")
+
+	// Participant 1 of 1: camera and microphone on.
+	if !created.Media.Camera || !created.Media.Microphone || created.Media.MutedByThreshold {
+		t.Fatalf("the first participant joins unmuted: %+v", created.Media)
+	}
+	if created.Media.ParticipantCount != 1 {
+		t.Fatalf("unexpected participant count: %+v", created.Media)
+	}
+
+	// Participants 2-4 stay unmuted.
+	for _, who := range []string{"karl", "emelia"} {
+		rec := call(t, s, http.MethodPost, "/api/layups/"+created.Layup.ID+"/join", who, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s join: %d", who, rec.Code)
+		}
+		result := payloadOf[MembershipResultDTO](t, rec)
+		if !result.Media.Microphone || result.Media.MutedByThreshold {
+			t.Fatalf("%s should join unmuted: %+v", who, result.Media)
+		}
+	}
+
+	// Participant 4 is still unmuted; the 5th would be muted, but the
+	// development directory only has four people, so assert the boundary
+	// through the domain rule the endpoint uses.
+	fourth := payloadOf[MembershipResultDTO](t,
+		call(t, s, http.MethodPost, "/api/layups/"+created.Layup.ID+"/join", "priya", nil))
+	if !fourth.Media.Microphone || fourth.Media.ParticipantCount != 4 {
+		t.Fatalf("the fourth participant joins unmuted: %+v", fourth.Media)
+	}
+	fifth := domain.JoinDefaults(domain.DefaultPolicy(), domain.DefaultMediaPreference(), 5)
+	if fifth.Microphone || !fifth.MutedByThreshold || !fifth.Camera {
+		t.Fatalf("the fifth participant joins muted with camera on: %+v", fifth)
 	}
 }

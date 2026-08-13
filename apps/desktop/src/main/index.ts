@@ -115,7 +115,7 @@ const requests = createRequestsSupervisor({
     attention.apply(state);
   },
   // Accepting an invitation puts this desktop into the resulting layup.
-  onAccepted: (result) => layups.adopt(result.layup, result.yourMembershipId),
+  onAccepted: (result) => layups.adopt(result.layup, result.yourMembershipId, result.media),
 });
 
 // A fresh connection means the server may know about requests we do not.

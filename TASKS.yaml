@@ -1215,7 +1215,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Join AV default policy
-  status: todo
+  status: done
   goal: 'Implement default camera/microphone policy: participants 1-4 camera+mic on; participant 5+ camera on and mic muted,
     subject to stricter local/org policy.'
   user_visible_behaviour: 'Implement default camera/microphone policy: participants 1-4 camera+mic on; participant 5+ camera
