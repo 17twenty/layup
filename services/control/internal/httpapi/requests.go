@@ -98,6 +98,26 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		input.LayupID = domain.LayupID(body.LayupID)
 	}
 
+	// A knock is addressed at a *person*, not a layup id: the requester cannot
+	// see which private layup someone is in, so the server resolves it. The
+	// requester never learns the id unless they are admitted (SPEC.md §6.3).
+	if input.Type == domain.RequestKnock && input.LayupID == "" {
+		if input.ToUser == "" {
+			s.writeAPIError(w, r, http.StatusBadRequest, "invalid_request",
+				"a knock needs either a layup or the person you are knocking for")
+			return
+		}
+		target, err := s.layups.ActiveLayupsForUser(r.Context(), input.ToUser)
+		if err != nil || len(target) == 0 {
+			s.writeAPIError(w, r, http.StatusConflict, "conflict", "that person is not in a layup")
+			return
+		}
+		input.LayupID = target[0].Layup.ID
+		// The knock belongs to the layup, not to that one person: any
+		// participant may admit it.
+		input.ToUser = ""
+	}
+
 	if err := s.mayRequest(r.Context(), input, identity); err != nil {
 		s.writeDomainError(w, r, err)
 		return

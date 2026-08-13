@@ -98,6 +98,8 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
           ...(options.note === undefined ? {} : { note: options.note }),
           ...(options.layupId === undefined ? {} : { layupId: options.layupId }),
         }),
+      /** Knocks on the layup a person is in, without learning which it is. */
+      knock: (toUserId: string) => invoke('requests:knock', { toUserId }),
       accept: (requestId: string) => invoke('requests:accept', { requestId }),
       decline: (requestId: string) => invoke('requests:decline', { requestId }),
       cancel: (requestId: string) => invoke('requests:cancel', { requestId }),

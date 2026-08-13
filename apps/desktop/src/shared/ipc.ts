@@ -173,6 +173,7 @@ export const ipcChannels = {
   'layup:leave': channel(isVoid, layupStateResponse),
   'requests:list': channel(isVoid, requestsResponse),
   'requests:invite': channel(inviteRequest, joinRequestShape),
+  'requests:knock': channel(isObject({ toUserId: isString }), joinRequestShape),
   'requests:accept': channel(requestIdRequest, isVoid),
   'requests:decline': channel(requestIdRequest, isVoid),
   'requests:cancel': channel(requestIdRequest, isVoid),

@@ -36,6 +36,8 @@ export interface RequestsSupervisor {
   invite(toUserId: string, note?: string): Promise<JoinRequest>;
   /** Invites someone into a layup this desktop is already in. */
   inviteToLayup(toUserId: string, layupId: string): Promise<JoinRequest>;
+  /** Knocks on whatever layup a person is in. The layup is never named to us. */
+  knock(toUserId: string): Promise<JoinRequest>;
   send(input: CreateRequestInput): Promise<JoinRequest>;
   accept(requestId: string): Promise<void>;
   decline(requestId: string): Promise<void>;
@@ -124,6 +126,10 @@ export function createRequestsSupervisor(options: RequestsSupervisorOptions): Re
 
     inviteToLayup(toUserId, layupId) {
       return this.send({ type: 'INVITE_USER_TO_LAYUP', toUserId, layupId });
+    },
+
+    knock(toUserId) {
+      return this.send({ type: 'KNOCK_TO_JOIN', toUserId });
     },
 
     async accept(requestId) {

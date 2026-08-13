@@ -117,6 +117,7 @@ function buildHandlers(): Handlers {
       input.layupId
         ? requests.inviteToLayup(input.toUserId, input.layupId)
         : requests.invite(input.toUserId, input.note),
+    'requests:knock': (input) => requests.knock(input.toUserId),
     'requests:accept': (input) => requests.accept(input.requestId).then(() => undefined),
     'requests:decline': (input) => requests.decline(input.requestId).then(() => undefined),
     'requests:cancel': (input) => requests.cancel(input.requestId).then(() => undefined),

@@ -52,13 +52,26 @@ export function App() {
         selfUserId={identity?.userId}
         onAction={(person, action) => {
           // A click is a social request, never a media start (SPEC.md §4).
-          if (action.kind !== 'start') return;
-          // Already in a layup? Invite them here rather than starting another.
           const currentLayupId = layup?.layup?.id;
-          void window.layup.requests.invite(
-            person.userId,
-            currentLayupId ? { layupId: currentLayupId } : {},
-          );
+          switch (action.kind) {
+            case 'start':
+              // Already in a layup? Invite them here rather than starting another.
+              void window.layup.requests.invite(
+                person.userId,
+                currentLayupId ? { layupId: currentLayupId } : {},
+              );
+              return;
+            case 'knock':
+              // We never learn which private layup they are in.
+              void window.layup.requests.knock(person.userId);
+              return;
+            case 'join':
+              // An open layup is joinable directly.
+              if (person.layupId) void window.layup.layup.join(person.layupId);
+              return;
+            default:
+              return;
+          }
         }}
       />
       <LayupPanel />

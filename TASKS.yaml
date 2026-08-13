@@ -679,7 +679,7 @@ tasks:
   plan: PLAN-1
   phase: C
   title: Knock on private layup
-  status: todo
+  status: done
   goal: Clicking a person in a private layup creates a knock against that layup without exposing private details to requester.
   user_visible_behaviour: Clicking a person in a private layup creates a knock against that layup without exposing private
     details to requester.
