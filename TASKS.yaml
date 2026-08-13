@@ -1249,7 +1249,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Baseline media/network benchmark
-  status: todo
+  status: blocked
   goal: Record first real-machine LAN, ordinary-NAT and forced-TURN benchmark results using the benchmark schema.
   user_visible_behaviour: Record first real-machine LAN, ordinary-NAT and forced-TURN benchmark results using the benchmark
     schema.

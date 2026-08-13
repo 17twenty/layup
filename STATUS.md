@@ -8,7 +8,7 @@ PLAN-1 gate: IN PROGRESS
 
 - next task: P1-0312
 - completed: 39 of 68 (phases A, B and C complete; D in progress)
-- blocked: 0
+- blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
@@ -49,6 +49,38 @@ PLAN-1 gate: IN PROGRESS
 | Click -> accept -> one shared layup | `make test-e2e` | `test/e2e/invite-flow.test.mjs` |
 | Two clients see each other without polling | `make test-smoke` | `src/core/presence.smoke.test.ts` |
 | Latency harness and schema | `make bench` | `benchmarks/results/**.json` |
+
+## Blocked
+
+```text
+BLOCKED: P1-0312
+Reason:
+  Acceptance requires first real-machine benchmark results on three paths (LAN,
+  ordinary NAT, forced TURN). This build host is a single machine with no second
+  endpoint and no deployed coturn, so the numbers cannot be produced here without
+  fabricating them.
+Evidence:
+  - the harness and schema exist and run: `make bench` writes
+    benchmarks/results/<scenario>/<timestamp>.json with percentiles, budgets and
+    environment metadata
+  - the media path is proven working, single-machine: `make test-webrtc` reports
+    a real decoded 320x240 screen share, route "direct", RTT 1ms
+  - the forced-relay switch is proven to change behaviour, single-machine:
+    relay-only gathers zero host candidates and does not connect without TURN
+  - the procedure for the three paths is written down in test/network/README.md
+Smallest human decision needed:
+  Who runs the two-machine benchmark pass, and on which pair of machines?
+Options:
+  a) A human runs `make bench` plus the test/network/README.md procedure on two
+     real machines (LAN, then ordinary NAT, then compose+coturn with
+     LAYUP_FORCE_RELAY=true) and commits the three result files. P1-0312 then
+     closes on real evidence.
+  b) Narrow P1-0312's acceptance to single-machine baselines now and re-open the
+     real-machine numbers as part of the P1-0604 soak, which needs two machines
+     anyway.
+  c) Defer both to the PLAN-1 gate and accept that Phase D closes without
+     network evidence - not recommended: SPEC §16 budgets would go unverified.
+```
 
 ## Known issues / decisions needed
 
