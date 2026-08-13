@@ -15,7 +15,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:boundary": "electron test/boundary/main.cjs",
-    "test:smoke": "vitest run --config vitest.smoke.config.ts"
+    "test:smoke": "vitest run --config vitest.smoke.config.ts",
+    "build:webrtc": "vite build --config vite.webrtc.config.ts",
+    "test:webrtc": "npm run build:webrtc && electron test/webrtc/main.cjs"
   },
   "dependencies": {
     "@layup/protocol": "*",

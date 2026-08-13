@@ -992,7 +992,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Direct 1:1 WebRTC peer connection
-  status: todo
+  status: done
   goal: Establish a direct peer connection between two active layup memberships before adding media.
   user_visible_behaviour: Establish a direct peer connection between two active layup memberships before adding media.
   depends_on:

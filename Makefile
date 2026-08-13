@@ -78,6 +78,10 @@ test-bench: ## Unit-test the benchmark harness itself
 test-e2e: ## End-to-end tests against a real control service (wire contract only)
 	node --test test/e2e/*.test.mjs
 
+.PHONY: test-webrtc
+test-webrtc: ## Prove real WebRTC connectivity in an Electron window
+	npm run test:webrtc --workspace apps/desktop
+
 .PHONY: fmt-check
 fmt-check: ## Fail if any Go file needs gofmt
 	@unformatted="$$(gofmt -l $(GO_MODULES))"; \

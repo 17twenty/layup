@@ -8,3 +8,6 @@ coverage/
 .env.*
 !.env.example
 *.local
+
+# built desktop bundles
+apps/desktop/dist/

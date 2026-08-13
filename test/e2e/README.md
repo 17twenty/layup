@@ -6,6 +6,7 @@ These prove behaviour across a real boundary rather than against a mock.
 |---|---|---|
 | Desktop ↔ control smoke | `make test-smoke` | The desktop's control client reaches a freshly built Go control service, negotiates the protocol version, and reports a useful disconnected state once the service stops. |
 | Creator devolution | `make test-e2e` | The invariant of SPEC §2.2 over the real wire: the creator leaves, authority disappears, nobody inherits it, the layup continues, the same user rejoins ordinarily, and no endpoint exists to claim authority back. |
+| Real WebRTC | `make test-webrtc` | Two peer connections built by the production module negotiate in a real Chromium window and carry a real video track; reports the chosen ICE route. |
 | Electron security boundary | `make test-boundary` | A real window with the production preload gives the renderer no Node/OS privilege. |
 
 Both harnesses build what they test, so they fail if the components drift apart.

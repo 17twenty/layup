@@ -155,3 +155,5 @@ jobs:
       - name: Prove renderer has no Node/OS privilege
         # A real window, the real preload, in a virtual display.
         run: xvfb-run -a npm run test:boundary --workspace apps/desktop
+      - name: Prove real WebRTC connectivity
+        run: xvfb-run -a npm run test:webrtc --workspace apps/desktop

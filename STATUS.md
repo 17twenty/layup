@@ -6,37 +6,37 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0304
-- completed: 31
+- next task: P1-0305
+- completed: 32
 - blocked: 0
 - repository implementation: bootstrapped (npm workspaces + go.work)
 
 ## Last run
 
-- task: P1-0303 WebRTC signalling protocol
+- task: P1-0304 direct 1:1 WebRTC peer connection
 - result: done
-- tests: `make test-go` (4 signalling cases over real WebSockets), fmt/vet green
+- tests: `npm test` (137 passed incl. 10 peer cases), `make test-webrtc` -> WEBRTC OK (real Chromium, real track)
 - evidence:
-  - signalling rides the existing realtime envelope: `signal.offer`, `signal.answer`,
-    `signal.candidate`, `signal.bye`, addressed by *membership* so a rejoin never inherits a
-    half-finished negotiation
-  - the server relays and nothing else: it never inspects, rewrites, stores or logs SDP or
-    candidates (the debug line carries route metadata only) and is never in the media path
-  - the sender is stamped server-side: a forged `fromMembershipId`/`fromUserId` is overwritten
-    (`TestSenderCannotSpoofIdentityOrReachOutsideTheLayup`)
-  - both ends must be active participants of the named layup - an outsider gets
-    "you are not in that layup", an unknown membership is rejected, and a peer cannot signal
-    itself
-  - malformed messages (no layup, no recipient, offer without sdp) get an error envelope and
-    the connection survives
+  - `apps/desktop/src/core/peer-connection.ts` - perfect negotiation (polite/impolite derived
+    from the two membership ids, so both sides agree with no extra round trip), trickle ICE,
+    automatic renegotiation, explicit `signal.bye` teardown, and a state object that explains a
+    failure instead of hanging
+  - 10 unit tests drive the logic against a fake RTCPeerConnection: offer/answer, candidate
+    relay, glare resolution both ways, forced-relay configuration, single goodbye, teardown on
+    a remote goodbye
+  - real proof (`make test-webrtc`): two connections built by the *production* module negotiate
+    inside a real Electron/Chromium window and a real canvas-captured video track flows across:
+    `{connected: true, gotTrack: true, receivedTrackKind: "video", route: "succeeded:host",
+    bytesSent: 1756, offers: 1, answers: 1, candidates: 2}`
+  - wired into CI (`xvfb-run npm run test:webrtc`) beside the boundary proof
 
 ## Recent runs
 
-- P1-0209 done - invite while already in a layup
 - P1-0210 done - menu/tray pending attention
 - P1-0301 done - enumerate and preview capture sources
 - P1-0302 done - capture permission onboarding
 - P1-0303 done - WebRTC signalling protocol
+- P1-0304 done - direct 1:1 WebRTC peer connection
 
 ## Known issues / decisions needed
 
