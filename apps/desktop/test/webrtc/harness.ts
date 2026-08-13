@@ -197,6 +197,10 @@ async function runScreenShare(): Promise<Record<string, unknown>> {
     });
   sessions.a = make('a', 'b');
   sessions.b = make('b', 'a');
+  // The control plane tells every client who is presenting; without it an
+  // incoming video track is a camera, not the shared desktop (ADR-0007).
+  sessions.a.setPresenter('mem_a');
+  sessions.b.setPresenter('mem_a');
 
   // Stand-in for desktop capture: a canvas that visibly changes every frame.
   const canvas = document.createElement('canvas');

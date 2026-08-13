@@ -1184,7 +1184,7 @@ tasks:
   plan: PLAN-1
   phase: D
   title: Minimal camera and microphone tracks
-  status: todo
+  status: done
   goal: Add camera/audio capture and peer publication after membership is accepted.
   user_visible_behaviour: Add camera/audio capture and peer publication after membership is accepted.
   depends_on:

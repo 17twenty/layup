@@ -26,8 +26,10 @@ export interface RemoteMedia {
   membershipId: string;
   userId?: string;
   displayName?: string;
-  /** The shared desktop, when that peer is presenting. */
+  /** The shared desktop, when that peer is the layup's active presenter. */
   screen?: MediaStream;
+  /** Camera and microphone from that peer. */
+  camera?: MediaStream;
   connection: PeerState;
 }
 
@@ -59,6 +61,14 @@ export interface Session {
   handleSignal(type: string, message: SignalMessage): Promise<void>;
   /** Publishes the local screen to every peer. Replaces any previous share. */
   publishScreen(stream: MediaStream): void;
+  /** Publishes camera and microphone to every peer. */
+  publishCamera(stream: MediaStream): void;
+  /**
+   * Who the control plane says is presenting. Incoming video is classified as
+   * the shared desktop only for that membership, so the domain decides what a
+   * screen is - not a guess about track order (ADR-0007).
+   */
+  setPresenter(membershipId: string | undefined): void;
   /** Stops publishing the local screen. The layup itself is unaffected. */
   unpublishScreen(): void;
   /** What each peer is sending us. */
@@ -79,7 +89,10 @@ export function createSession(options: SessionOptions): Session {
   // One sender per peer, so re-sharing replaces the track instead of adding a
   // second one - exactly one shared desktop exists per layup (ADR-0007).
   const screenSenders = new Map<string, RTCRtpSender>();
+  const cameraSenders = new Map<string, RTCRtpSender[]>();
   let localScreen: MediaStream | undefined;
+  let localCamera: MediaStream | undefined;
+  let presenterMembershipId: string | undefined;
 
   const publish = () => options.onChange?.(remotes());
   const remotes = () => [...peers.values()].map((entry) => entry.media);
@@ -103,14 +116,22 @@ export function createSession(options: SessionOptions): Session {
       ...(options.forceRelay ? { forceRelay: true } : {}),
       log,
       onTrack: (event) => {
-        // The shared desktop arrives as a video track on its own stream.
         const [stream] = event.streams;
-        if (stream) media.screen = stream;
-        event.track.addEventListener('ended', () => {
-          if (media.screen === stream) {
-            media.screen = undefined;
-            publish();
+        if (stream) {
+          // The domain decides what counts as the shared desktop.
+          if (event.track.kind === 'video' && presenterMembershipId === membershipId) {
+            media.screen = stream;
+          } else {
+            media.camera = stream;
           }
+        }
+        event.track.addEventListener('ended', () => {
+          if (media.screen === stream) media.screen = undefined;
+          // The camera stream carries two tracks; it is only gone once both have ended.
+          if (stream && media.camera === stream && stream.getTracks().every((t) => t.readyState === 'ended')) {
+            media.camera = undefined;
+          }
+          publish();
         });
         log.info('remote track received', { membershipId, kind: event.track.kind });
         publish();
@@ -126,6 +147,7 @@ export function createSession(options: SessionOptions): Session {
 
     // Whoever is already publishing keeps publishing to a peer that arrives later.
     if (localScreen) attachScreen(entry, localScreen);
+    if (localCamera) attachCamera(entry, localCamera);
     if (connectOptions.initiate) void peer.negotiate();
 
     publish();
@@ -144,10 +166,34 @@ export function createSession(options: SessionOptions): Session {
     screenSenders.set(entry.membershipId, entry.peer.addTrack(track, stream));
   }
 
+  function attachCamera(entry: SessionPeer, stream: MediaStream) {
+    const existing = cameraSenders.get(entry.membershipId);
+    if (existing) {
+      // Replace in place: swapping devices must not renegotiate.
+      stream.getTracks().forEach((track, index) => void existing[index]?.replaceTrack(track));
+      return;
+    }
+    cameraSenders.set(
+      entry.membershipId,
+      stream.getTracks().map((track) => entry.peer.addTrack(track, stream)),
+    );
+  }
+
   return {
     connect,
     remotes,
     localScreen: () => localScreen,
+
+    setPresenter(membershipId) {
+      presenterMembershipId = membershipId;
+    },
+
+    publishCamera(stream) {
+      localCamera = stream;
+      for (const entry of peers.values()) attachCamera(entry, stream);
+      log.info('publishing camera and microphone', { peers: peers.size });
+      publish();
+    },
 
     async handleSignal(type, message) {
       const from = message.fromMembershipId;

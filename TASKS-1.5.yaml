@@ -1,0 +1,181 @@
+plan: PLAN-1.5
+status: locked
+unlock_condition: PLAN-1 GATE READY
+rule: Execute exactly one eligible task per Ralph invocation. Do not merge this file into TASKS.yaml until humans explicitly unlock PLAN-1.5.
+
+tasks:
+  - id: P15-0101
+    title: Harden server-local User identity
+    status: todo
+    depends_on: []
+    goal: Ensure User IDs are opaque, immutable, server-generated and explicitly server-local.
+    acceptance:
+      - User ID validation/generation is covered by tests.
+      - IDs contain no email or personal data.
+      - No code treats User ID as globally resolvable.
+      - Documentation states identical IDs on different servers are unrelated.
+    non_goals:
+      - Federation.
+      - Account linking.
+
+  - id: P15-0102
+    title: User profile representation
+    status: todo
+    depends_on: [P15-0101]
+    goal: Add a server-local profile DTO/view with display name, optional handle, immutable User ID and relationship state.
+    acceptance:
+      - Profile lookup works by User ID for authorised same-server users.
+      - User ID has a copy affordance in desktop UI.
+      - Profile does not expose private presence merely because it was opened.
+
+  - id: P15-0103
+    title: PeopleConnection domain
+    status: todo
+    depends_on: [P15-0101]
+    goal: Implement one mutual People relationship object per unordered user pair.
+    acceptance:
+      - States PENDING/ACCEPTED/DECLINED/CANCELLED/REMOVED exist.
+      - Only one active/pending relationship exists per unordered pair.
+      - Accepted relationship is mutual rather than two follow records.
+      - Removal ends the relationship for both users.
+
+  - id: P15-0104
+    title: People request lifecycle API
+    status: todo
+    depends_on: [P15-0103]
+    goal: Implement request, accept, decline, cancel and remove operations in the Go control plane.
+    acceptance:
+      - Requester can cancel pending request.
+      - Recipient can accept or decline.
+      - Duplicate pending request resolves to the existing request.
+      - Users cannot create a People relationship with themselves.
+      - Relationship events are emitted over realtime control connection.
+
+  - id: P15-0105
+    title: Same-server directory search
+    status: todo
+    depends_on: [P15-0101, P15-0102]
+    goal: Search the existing server directory by display name, handle and exact User ID without populating People automatically.
+    acceptance:
+      - Exact User ID lookup works.
+      - Name/handle search returns same-server users only.
+      - Directory result exposes Add to People rather than normal People presence/actions.
+      - No remote-server lookup exists.
+
+  - id: P15-0106
+    title: Scope presence to accepted People
+    status: todo
+    depends_on: [P15-0103, P15-0104]
+    goal: Replace ordinary organisation-wide personal presence fan-out with accepted-People-scoped presence delivery.
+    acceptance:
+      - Non-connected same-server user does not receive normal personal presence.
+      - Accepted People receive permitted presence in realtime.
+      - Acceptance starts delivery without application restart.
+      - Removal stops delivery promptly.
+      - Open-layup discovery continues independently according to layup visibility.
+
+  - id: P15-0107
+    title: Connection-backed People home
+    status: todo
+    depends_on: [P15-0104, P15-0106]
+    goal: Populate the People grid from accepted PeopleConnection relationships rather than the organisation directory.
+    acceptance:
+      - New user may have an empty People grid.
+      - Empty state exposes Add someone and Invite someone.
+      - Accepted connection appears for both users.
+      - Directory-only users do not appear as People.
+      - Existing PLAN-1 People-to-layup affordances work for accepted People.
+
+  - id: P15-0108
+    title: Profile Add to People UI
+    status: todo
+    depends_on: [P15-0102, P15-0104]
+    goal: Expose Add to People, pending, accept/decline and remove states through profile/request UI.
+    acceptance:
+      - Add to People sends exactly one request.
+      - Pending state prevents notification spam.
+      - Accepted state exposes Remove from People.
+      - Incoming request is visible without creating a chat inbox.
+
+  - id: P15-0109
+    title: Server invitation domain and opaque tokens
+    status: todo
+    depends_on: [P15-0101]
+    goal: Add revocable, expiring server-local invitation tokens associated with the inviter.
+    acceptance:
+      - Raw invite token is not stored in recoverable plaintext server-side where avoidable.
+      - Invite can expire and be revoked.
+      - Invite carries server-side inviter context.
+      - Consuming invitation does not automatically create a People relationship.
+      - No cross-server identity lookup occurs.
+
+  - id: P15-0110
+    title: Server invite deep-link flow
+    status: todo
+    depends_on: [P15-0102, P15-0109]
+    goal: Implement /i/<token> flow using the available development identity mechanism and return the joined user to inviter profile context.
+    acceptance:
+      - Existing server member opening invite reaches inviter context without duplicate identity.
+      - New development user can consume invite and obtains a new server-local User identity.
+      - Post-join screen identifies inviter and offers Add to People.
+      - People relationship remains opt-in.
+
+  - id: P15-0111
+    title: Add participant to People from active layup
+    status: todo
+    depends_on: [P15-0104, P15-0108]
+    goal: Allow a participant card in a shared layup to open the same profile/Add to People flow.
+    acceptance:
+      - Non-connected participant exposes Add to People.
+      - Connected participant shows existing relationship state.
+      - Sharing a layup never auto-connects participants.
+
+  - id: P15-0112
+    title: People privacy regression suite
+    status: todo
+    depends_on: [P15-0105, P15-0106, P15-0107, P15-0111]
+    goal: Prove directory discovery, People presence, private activity and open-layup discovery remain separate concepts.
+    acceptance:
+      - Same-server stranger can be found when directory policy allows but receives no normal presence.
+      - Private layup details remain redacted.
+      - Open organisation-visible layup remains discoverable according to its room policy.
+      - Discovering somebody in an open layup does not grant persistent presence visibility.
+
+  - id: P15-0113
+    title: Canonical Add-by-ID to Layup E2E
+    status: todo
+    depends_on: [P15-0105, P15-0106, P15-0107, P15-0108]
+    goal: Prove empty People -> exact ID lookup -> mutual acceptance -> realtime presence -> click person -> layup invitation.
+    acceptance:
+      - Alice initially cannot see Bob's normal presence.
+      - Alice resolves Bob by exact User ID and requests People connection.
+      - Bob accepts.
+      - Both People grids update without restart.
+      - Presence begins flowing both ways.
+      - Alice clicks Bob and existing PLAN-1 layup invitation flow succeeds.
+
+  - id: P15-0114
+    title: Canonical external server-invite E2E
+    status: todo
+    depends_on: [P15-0109, P15-0110, P15-0108]
+    goal: Prove an invite link admits a new server-local identity and lands in inviter context without automatic social connection.
+    acceptance:
+      - Nick creates an invite link.
+      - New development identity consumes it on Nick's server.
+      - New User ID is created local to that server.
+      - New user lands on Nick context/profile.
+      - Add to People remains explicit and functions normally.
+      - No federation or remote identity lookup is invoked.
+
+  - id: P15-0115
+    title: PLAN-1.5 integration evidence and gate
+    status: todo
+    depends_on: [P15-0112, P15-0113, P15-0114]
+    goal: Collect evidence for the corrected People model and stop before PLAN-2.
+    acceptance:
+      - All PLAN-1.5 tasks are complete.
+      - Relevant PLAN-1 People/presence tests are updated to new semantics.
+      - No organisation-wide personal presence leak remains.
+      - No cross-server lookup/relationship code exists.
+      - STATUS.md records PLAN-1.5 GATE READY.
+      - Ralph stops without modifying PLAN-2.

@@ -135,6 +135,8 @@ describe('layup media session', () => {
   it('renders a remote screen and clears it when the track ends', () => {
     const h = harness();
     h.session.connect('mem_remote');
+    // The control plane says this membership is the presenter.
+    h.session.setPresenter('mem_remote');
 
     const track = fakeTrack();
     const stream = fakeStream(track);
@@ -212,5 +214,41 @@ describe('layup media session', () => {
 
     expect(h.peers().every((pc) => pc.closed)).toBe(true);
     expect(h.session.remotes()).toHaveLength(0);
+  });
+});
+
+describe('camera and microphone on the session', () => {
+  it('publishes camera and microphone tracks to every peer', () => {
+    const h = harness();
+    h.session.connect('mem_a');
+    h.session.connect('mem_b');
+
+    const video = fakeTrack('video');
+    const audio = fakeTrack('audio');
+    const stream = {
+      getTracks: () => [video, audio],
+      getVideoTracks: () => [video],
+    } as unknown as MediaStream;
+    h.session.publishCamera(stream);
+
+    expect(h.peers()[0]?.senders).toHaveLength(2);
+    expect(h.peers()[1]?.senders).toHaveLength(2);
+  });
+
+  it('classifies incoming video by who the domain says is presenting', () => {
+    const h = harness();
+    h.session.connect('mem_remote');
+
+    // Nobody is presenting: an incoming video track is a camera.
+    const cameraStream = fakeStream(fakeTrack('video'));
+    h.peers()[0]!.deliverTrack(cameraStream, fakeTrack('video'));
+    expect(h.session.remotes()[0]?.camera).toBe(cameraStream);
+    expect(h.session.remotes()[0]?.screen).toBeUndefined();
+
+    // Once the control plane says they are presenting, it is the screen.
+    h.session.setPresenter('mem_remote');
+    const screenStream = fakeStream(fakeTrack('video'));
+    h.peers()[0]!.deliverTrack(screenStream, fakeTrack('video'));
+    expect(h.session.remotes()[0]?.screen).toBe(screenStream);
   });
 });

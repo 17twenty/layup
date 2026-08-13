@@ -6,42 +6,39 @@ PLAN-1 gate: IN PROGRESS
 
 ## Current state
 
-- next task: P1-0310
-- completed: 37 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0311
+- completed: 38 of 68 (phases A, B and C complete; D in progress)
 - blocked: 0
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0309 single active screen-share domain
+- task: P1-0310 minimal camera and microphone tracks
 - result: done
-- tests: `make test-go` (7 domain + 4 wire share cases), fmt/vet green
+- tests: `npm test` (171 passed incl. 9 AV/session cases), `make test-webrtc` -> WEBRTC OK, typecheck/lint green
 - evidence:
-  - `services/control/internal/domain/screenshare.go` owns the rule, not the media layer: who
-    may present is a domain question and holds even while a track is still negotiating
-  - zero-or-one enforced: taking over ends the previous share in the same operation, and after
-    three successive takeovers exactly one share is live
-    (`TestOnlyOneSharedDesktopExistsAtATime`)
-  - takeover rules follow SPEC §7.2: in a private/collaborative layup anyone may take the
-    screen with no approval dialog, and the previous presenter gets a `screen.takeover` notice;
-    in an advertised ORGANISATION layup only the creator membership or the current presenter
-    may hand it over, and with nobody presenting anyone may start
-  - stopping a share leaves the layup and its participants completely untouched
-    (`TestStoppingAShareKeepsTheLayupAlive`) - a layup with no screen is a valid layup
-  - only the presenter may stop their own share; there is no moderator who can stop someone
-    else's (`TestShareControlIsNotModeration`)
-  - a presenter who leaves the layup has their share ended automatically, so no phantom share
-    survives (`TestAPresenterLeavingEndsTheirShare`)
-  - `POST /api/layups/{id}/share` and `/share/stop`; the active share (with presenter name and
-    the presenter's drawing/pointer/keyboard defaults) now rides on layup state and Happening Now
+  - `apps/desktop/src/core/av.ts` opens camera and microphone *for a membership*: `start()`
+    refuses without one, so clicking a person can never open the camera - media follows
+    acceptance (`refuses to start without a membership`, SPEC.md §4)
+  - both devices are opened once and the join policy decides what is *enabled*, so unmuting
+    later never re-prompts for permission
+  - muting disables the track rather than stopping it, so coming back needs no renegotiation
+    (`mutes by disabling the track, not by stopping it`)
+  - device failures are explained in words a person can act on: permission refused, no device,
+    or already in use by another application
+  - the session publishes camera+microphone to every peer and replaces tracks in place when
+    devices change; incoming video is classified as the shared desktop **only** for the
+    membership the control plane says is presenting, so ADR-0007 decides what a screen is
+    rather than a guess about track order
+  - 7 AV tests + 2 new session tests; `make test-webrtc` still WEBRTC OK end to end
 
 ## Recent runs
 
-- P1-0306 done - coturn configuration and ephemeral credentials
 - cleanup - ADR conformance check, dead code removal, docs corrected
 - P1-0307 done - forced TURN test mode
 - P1-0308 done - publish and render shared desktop
 - P1-0309 done - single active screen-share domain
+- P1-0310 done - minimal camera and microphone tracks
 
 ## Evidence index
 
