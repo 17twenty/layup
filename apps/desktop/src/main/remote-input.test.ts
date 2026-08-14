@@ -171,16 +171,16 @@ describe('remote click and wheel path', () => {
     expect(calls).toEqual([]);
   });
 
-  it('does not inject a key from the pointer path', async () => {
-    // Keyboard has its own lease (P1-0511); this path injects pointer actions
-    // only, so an allowed key message still reaches nothing here.
+  it('sends a key as a key, never as a pointer action', async () => {
+    // The keyboard has its own grant and its own lease; what it must never do
+    // is move or press the pointer on its way through.
     guard.grant(GUEST, 'keyboard');
     const result = await router.handle(
       { type: TYPE_KEY_DOWN, v: INPUT_PROTOCOL_VERSION, membershipId: GUEST, code: 'KeyA', seq: 1 },
       fromGuest,
     );
-    expect(result.injected).toBe(false);
-    expect(calls).toEqual([]);
+    expect(result).toEqual({ injected: true });
+    expect(calls).toEqual([{ command: 'key', payload: { code: 'KeyA', down: true } }]);
   });
 
   it('stays usable when the helper is not running', async () => {
@@ -251,8 +251,7 @@ describe('remote click and wheel path', () => {
     // indistinguishable from vanishing, and the button must not stay down.
     clock += 2_000;
     expect(router.expireLeases()).toBe(1);
-    await Promise.resolve();
-    await Promise.resolve();
+    await router.settle();
 
     expect(calls).toEqual([{ command: 'pointer.button', payload: { button: 'left', down: false } }]);
     expect(router.dragging()).toBeUndefined();

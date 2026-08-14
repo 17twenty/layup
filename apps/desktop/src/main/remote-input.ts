@@ -17,6 +17,8 @@
  *     a stale click cannot land somewhere by accident.
  */
 import {
+  TYPE_KEY_DOWN,
+  TYPE_KEY_UP,
   TYPE_POINTER_CLICK,
   TYPE_POINTER_DOWN,
   TYPE_POINTER_UP,
@@ -69,48 +71,85 @@ export interface RemoteInputRouter {
    * The caller drives this from its own scheduler.
    */
   expireLeases(): number;
+  /** Waits for any release still in flight. */
+  settle(): Promise<void>;
   /** Lets go of everything a membership holds - it left, or was revoked. */
   releaseFor(membershipId: string, cause?: LeaseEndCause): Promise<void>;
   /** Who is mid-drag, if anybody. */
   dragging(): string | undefined;
+  /** Who holds the keyboard, if anybody. */
+  typing(): string | undefined;
   stats(): RemoteInputStats;
 }
 
 export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInputRouter {
   const stats: RemoteInputStats = { injected: 0, refused: 0, busy: 0, unmapped: 0, unavailable: 0 };
   // What each membership is holding down here, so a lease that ends for any
-  // reason can let go of it. A stuck button on somebody else's machine is the
-  // worst outcome this module has (SPEC.md §13.3).
+  // reason can let go of it. A stuck button or modifier on somebody else's
+  // machine is the worst outcome this module has (SPEC.md §13.3).
   const heldButtons = new Map<string, Set<string>>();
+  // Keys are held in press order, so they can be released in reverse: a
+  // modifier pressed first comes up last, and no intermediate release lands as
+  // a bare keystroke. Codes only - never what was typed (SPEC.md §13.4).
+  const heldKeys = new Map<string, string[]>();
 
   const leases = options.leases ?? createInputLeases();
+  // Releasing is asynchronous - it talks to the helper - but a lease ends
+  // synchronously. The work is chained so callers can wait for it to finish
+  // rather than hoping it has; nothing else guarantees a button is up before
+  // the next person takes the lease.
+  let releasing: Promise<unknown> = Promise.resolve();
   // Registered rather than passed in at construction, so a lease supplied by
   // the caller still releases what it was holding.
-  leases.onEnd((lease, cause) => void releaseHeld(lease, cause));
+  leases.onEnd((lease, cause) => {
+    releasing = releasing.then(() => releaseHeld(lease, cause));
+  });
 
   async function releaseHeld(lease: Lease, cause: LeaseEndCause) {
-    const held = heldButtons.get(lease.membershipId);
-    if (!held || held.size === 0) return;
-    heldButtons.delete(lease.membershipId);
+    const buttons = lease.scope === 'pointer' ? [...(heldButtons.get(lease.membershipId) ?? [])] : [];
+    const keys = lease.scope === 'keyboard' ? [...(heldKeys.get(lease.membershipId) ?? [])] : [];
+    if (buttons.length === 0 && keys.length === 0) return;
+
+    if (lease.scope === 'pointer') heldButtons.delete(lease.membershipId);
+    else heldKeys.delete(lease.membershipId);
 
     const helper = options.helper();
     if (!helper) return;
-    for (const button of held) {
-      try {
-        await helper.send('pointer.button', { button, down: false });
-      } catch (error) {
-        options.log.warn('could not release a held button', {
-          cause,
-          reason: error instanceof Error ? error.message : String(error),
-        });
-      }
+
+    // Reverse press order: the modifier that was held over another key is the
+    // last thing to come up.
+    for (const code of keys.reverse()) {
+      await sendQuietly(helper, 'key', { code, down: false }, cause);
     }
+    for (const button of buttons) {
+      await sendQuietly(helper, 'pointer.button', { button, down: false }, cause);
+    }
+
     options.log.info('released input held by a finished lease', {
       membershipId: lease.membershipId,
       scope: lease.scope,
       cause,
-      buttons: held.size,
+      buttons: buttons.length,
+      keys: keys.length,
     });
+  }
+
+  async function sendQuietly(
+    helper: HelperClient,
+    command: 'key' | 'pointer.button',
+    payload: Record<string, unknown>,
+    cause: LeaseEndCause,
+  ) {
+    try {
+      await helper.send(command, payload);
+    } catch (error) {
+      // Never log the payload: it may be a key code (SPEC.md §13.4).
+      options.log.warn('could not release held input', {
+        command,
+        cause,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async function inject(message: InputMessage, helper: HelperClient): Promise<boolean> {
@@ -140,6 +179,12 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
         return true;
       }
 
+      case TYPE_KEY_DOWN:
+      case TYPE_KEY_UP: {
+        await helper.send('key', { code: message.code, down: message.type === TYPE_KEY_DOWN });
+        return true;
+      }
+
       case TYPE_POINTER_WHEEL: {
         const point = toScreenPoint(message, options.displays());
         if (!point) return false;
@@ -151,8 +196,8 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
       }
 
       default:
-        // Keys are P1-0511's path; control and lease messages are decisions,
-        // not injections. Nothing else reaches the OS from here.
+        // Control and lease messages are decisions, not injections. Nothing
+        // else reaches the OS from here.
         return false;
     }
   }
@@ -185,6 +230,21 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
           return { injected: false, reason: 'busy' };
         }
         leases.touch('pointer', from.membershipId);
+      } else if (message.type === TYPE_KEY_DOWN) {
+        // Typing takes the keyboard, and every keystroke renews it. Two people
+        // typing into one editor is not collaboration, it is a mess.
+        if (!leases.acquire('keyboard', from.membershipId)) {
+          stats.busy += 1;
+          return { injected: false, reason: 'busy' };
+        }
+      } else if (message.type === TYPE_KEY_UP) {
+        // A key-up is never refused for a key this membership is holding: the
+        // alternative is a modifier stuck down on the presenter's machine.
+        if (!holdsKey(from.membershipId, message.code) && !leases.mayAct('keyboard', from.membershipId)) {
+          stats.busy += 1;
+          return { injected: false, reason: 'busy' };
+        }
+        leases.touch('keyboard', from.membershipId);
       }
 
       const helper = options.helper();
@@ -206,17 +266,23 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
 
     expireLeases: () => leases.expire(),
 
+    settle: async () => void (await releasing),
+
     async releaseFor(membershipId, cause = 'disconnect') {
-      // Release the lease first: its handler is what lets go of the buttons.
-      if (leases.releaseAll(membershipId, cause) === 0) {
-        await releaseHeld(
-          { scope: 'pointer', membershipId, acquiredAtMs: 0, touchedAtMs: 0 },
-          cause,
-        );
+      // Ending the leases is what lets go of the input. Anything held without a
+      // lease - a press that arrived before one was taken - is released too.
+      const ended = leases.releaseAll(membershipId, cause);
+      if (ended === 0) {
+        for (const scope of ['pointer', 'keyboard'] as const) {
+          await releaseHeld({ scope, membershipId, acquiredAtMs: 0, touchedAtMs: 0 }, cause);
+        }
       }
+      await releasing;
     },
 
     dragging: () => leases.holder('pointer')?.membershipId,
+
+    typing: () => leases.holder('keyboard')?.membershipId,
 
     stats: () => ({ ...stats }),
   };
@@ -234,7 +300,26 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
       // The drag is over: the lease goes back immediately rather than waiting
       // for the idle timeout.
       leases.release('pointer', membershipId);
+      return;
     }
+    if (message.type === TYPE_KEY_DOWN) {
+      const held = heldKeys.get(membershipId) ?? [];
+      if (!held.includes(message.code)) held.push(message.code);
+      heldKeys.set(membershipId, held);
+      return;
+    }
+    if (message.type === TYPE_KEY_UP) {
+      const held = (heldKeys.get(membershipId) ?? []).filter((code) => code !== message.code);
+      heldKeys.set(membershipId, held);
+      // Unlike a drag, the keyboard lease is not handed back on key-up: typing
+      // is a run of presses with gaps, and losing the keyboard between two
+      // keystrokes would let somebody else type into the middle of a word. It
+      // ends on inactivity, disconnect or revoke instead.
+    }
+  }
+
+  function holdsKey(membershipId: string, code: string): boolean {
+    return (heldKeys.get(membershipId) ?? []).includes(code);
   }
 }
 

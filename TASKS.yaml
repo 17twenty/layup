@@ -1873,7 +1873,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Keyboard focus lease
-  status: todo
+  status: done
   goal: Implement short keyboard/focus lease renewed by typing and released on inactivity/disconnect.
   user_visible_behaviour: Implement short keyboard/focus lease renewed by typing and released on inactivity/disconnect.
   depends_on:
