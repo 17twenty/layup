@@ -22,37 +22,40 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0501
-- completed: 47 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0502
+- completed: 48 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0408 presenter drawing safety toggle
+- task: P1-0501 native helper protocol and authentication
 - result: done
-- tests: `make test-go` (4 toggle cases), `make test-e2e` (8 scenarios incl. 2 new), fmt green
+- tests: `go test ./...` (5 protocol cases), `npm test` (6 helper-client cases against the real binary), fmt/vet green
 - evidence:
-  - the switch lives in the domain (`UpdateShareSettings`, `MayDraw`), so it is **enforced, not
-    hidden**: a viewer whose drawing is switched off is refused by the server even if their
-    client ignores the toggle or has not received it yet
-  - only the presenter may change the switches on their own screen (403 otherwise) - safety
-    rights over your own machine, not moderation rights (ADR-0005) - and the presenter may
-    always annotate their own screen
-  - the change is pushed to every participant as `screen.settings` and also rides on layup
-    state, so a late joiner learns it too
-  - re-enabling permits new strokes immediately
-  - changing settings with nobody sharing is a 409 rather than a silent no-op
-  - e2e over the real wire with no application code imported (`make test-e2e`, 2 new scenarios):
-    allowed -> disabled -> **403 for the viewer** -> re-enabled -> allowed
+  - `native/input-helper` is a separate Go module and process (ADR-0006): explicit protocol
+    version, an **allow-list of seven commands**, and an HMAC-SHA256 tag over version+id+command
+    using a per-run secret passed on the environment and immediately unset
+  - authentication is checked **before** the allow-list, so an unauthenticated caller cannot
+    probe which commands exist by comparing errors
+  - proven against the real helper binary (6 tests): a wrong secret is rejected even with socket
+    access, `shell.exec` is `unknown_command`, a valid tag for `pointer.move` **replayed onto
+    `key` is rejected** because the signature covers the command, and malformed input gets a
+    `malformed` reply without killing the process
+  - the socket is `0600` owner-only, a rejected request never echoes its payload (it may carry
+    keystrokes), and a disconnect always calls `ReleaseAll`
+  - the renderer cannot reach it: a test asserts `preload/api.ts` and `shared/ipc.ts` contain no
+    reference to the helper, secret or socket at all
+  - injection itself is deliberately absent - the helper answers `unsupported_platform` rather
+    than pretending to have acted (P1-0503 onwards)
 
 ## Recent runs
 
-- P1-0404 done - remote cursor overlay and interpolation
 - P1-0405 done - participant cursor identity
 - P1-0406 done - drawing protocol
 - P1-0407 done - drawing overlay
 - P1-0408 done - presenter drawing safety toggle
+- P1-0501 done - native helper protocol and authentication
 
 ## Evidence index
 

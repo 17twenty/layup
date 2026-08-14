@@ -1561,7 +1561,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Native helper protocol and authentication
-  status: todo
+  status: done
   goal: Define a minimal authenticated local IPC protocol between Electron main and native input helper.
   user_visible_behaviour: Define a minimal authenticated local IPC protocol between Electron main and native input helper.
   depends_on:

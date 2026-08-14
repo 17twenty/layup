@@ -3,4 +3,5 @@ go 1.26.4
 use (
 	./protocol/go
 	./services/control
+	./native/input-helper
 )

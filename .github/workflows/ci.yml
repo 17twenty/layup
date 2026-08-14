@@ -39,7 +39,7 @@ jobs:
           cache: false
       - name: gofmt
         run: |
-          unformatted="$(gofmt -l ./protocol/go ./services/control)"
+          unformatted="$(gofmt -l ./protocol/go ./services/control ./native/input-helper)"
           if [ -n "$unformatted" ]; then
             echo "gofmt needed for:"; echo "$unformatted"; exit 1
           fi
@@ -71,6 +71,13 @@ jobs:
           cache: false
       - name: Cross-build control service
         working-directory: services/control
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: go build ./...
+      - name: Cross-build input helper
+        working-directory: native/input-helper
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
