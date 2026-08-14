@@ -22,38 +22,36 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0402
-- completed: 40 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0403
+- completed: 41 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0401 WebRTC data-channel abstraction
+- task: P1-0402 normalised cursor protocol
 - result: done
-- tests: `npm test` (180 passed incl. 9 data-channel cases), typecheck/lint green
+- tests: `npm test` (188 passed incl. 8 cursor cases), typecheck/lint green
 - evidence:
-  - `apps/desktop/src/core/data-channels.ts` opens the three channels of ADR-0008 / SPEC §11
-    on every peer: `cursor-fast` (unordered, `maxRetransmits: 0`), `annotation-fast`
-    (unordered, 2 retransmits) and `input-reliable` (ordered, reliable)
-  - the rule the ADR exists to protect is asserted directly: cursor motion is never on a
-    reliable queue, and input never has a retransmit limit
-    (`never puts cursor motion on a reliable queue`)
-  - channels are negotiated with fixed ids, so both sides have them the moment the connection
-    opens - no `ondatachannel` race and no extra negotiation round trip
-  - messages are JSON-framed and routed per channel; junk is dropped without breaking the
-    channel, a throwing subscriber cannot take the others down, and sends before a channel is
-    open are counted rather than silently lost
-  - the session owns a channel set per peer and closes them with the connection; no input,
-    cursor or drawing behaviour is implemented yet, as the task requires (8 + 1 tests)
+  - `protocol/ts/src/cursor.ts` - `cursor.move` carries `{membershipId, displayId, x, y, seq}`
+    with x/y normalised 0..1 of the *shared surface*, so a 4K presenter and a laptop viewer
+    agree about where the pointer is (`toPixels` maps back per receiver)
+  - the display id keeps a multi-display presenter unambiguous
+  - two different rules, deliberately: our own input is **clamped** (a pointer a pixel past the
+    edge is a real position), while a peer's message is **validated and rejected** - x=1.5,
+    negative or fractional seq, and unknown fields all throw
+  - NaN clamps to the origin (no direction to clamp towards); an infinity clamps to its edge
+  - `createSequenceGate` drops an update that arrived late on the unordered channel - latest
+    wins, per sender - and recognises a sender restart rather than freezing it out forever
+  - no cursor code touches the Go control plane; this is data-plane only (ADR-0008)
 
 ## Recent runs
 
-- P1-0308 done - publish and render shared desktop
 - P1-0309 done - single active screen-share domain
 - P1-0310 done - minimal camera and microphone tracks
 - P1-0311 done - join AV default policy
 - P1-0401 done - WebRTC data-channel abstraction
+- P1-0402 done - normalised cursor protocol
 
 ## Evidence index
 

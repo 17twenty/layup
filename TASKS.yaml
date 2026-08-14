@@ -1318,7 +1318,7 @@ tasks:
   plan: PLAN-1
   phase: E
   title: Normalised cursor protocol
-  status: todo
+  status: done
   goal: Define cursor presence/move messages using display ID, normalised coordinates and sequence numbers.
   user_visible_behaviour: Define cursor presence/move messages using display ID, normalised coordinates and sequence numbers.
   depends_on:
