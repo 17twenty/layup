@@ -43,6 +43,13 @@ export interface RemoteInputOptions {
    * Injectable so the timeout can be tested with a fake clock.
    */
   leases?: InputLeases;
+  /**
+   * How long the presenter's own input keeps remote control out after they
+   * touch their mouse or keyboard. Long enough to finish a sentence or a drag;
+   * short enough that control resumes without anybody asking for it back.
+   */
+  localPriorityMs?: number;
+  now?: () => number;
 }
 
 export interface RemoteInputStats {
@@ -51,6 +58,8 @@ export interface RemoteInputStats {
   refused: number;
   /** Actions refused because somebody else was mid-drag. */
   busy: number;
+  /** Actions refused because the presenter was using their own machine. */
+  preempted: number;
   /** Actions that could not be aimed at a known display. */
   unmapped: number;
   /** Actions with nowhere to go because the helper is not running. */
@@ -65,7 +74,10 @@ export interface RemoteInputRouter {
   handle(
     raw: unknown,
     from: { membershipId: string; channel: string },
-  ): Promise<{ injected: boolean; reason?: RefusalReason | 'no-helper' | 'unknown-display' | 'busy' }>;
+  ): Promise<{
+    injected: boolean;
+    reason?: RefusalReason | 'no-helper' | 'unknown-display' | 'busy' | 'local-input';
+  }>;
   /**
    * Ends any lease that has gone quiet, releasing whatever it was holding.
    * The caller drives this from its own scheduler.
@@ -79,11 +91,41 @@ export interface RemoteInputRouter {
   dragging(): string | undefined;
   /** Who holds the keyboard, if anybody. */
   typing(): string | undefined;
+  /**
+   * The presenter just used their own mouse or keyboard.
+   *
+   * The rule (SPEC.md §13.3): local input wins, immediately and without asking.
+   * Every remote lease ends, everything held is released, and remote actions
+   * are refused for a short window afterwards - long enough that the
+   * presenter's own drag or sentence is not fought over halfway through.
+   */
+  localInput(): void;
+  /** Whether local input currently has priority. */
+  localHasPriority(): boolean;
+  /**
+   * The helper went away and came back. Whatever it was holding died with the
+   * old process, so this side must forget it rather than trying to release
+   * buttons the new process never pressed.
+   */
+  helperRestarted(): void;
+  /** Where this router last put the OS pointer, for local-input detection. */
+  lastInjectedPoint(): { x: number; y: number } | undefined;
   stats(): RemoteInputStats;
 }
 
 export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInputRouter {
-  const stats: RemoteInputStats = { injected: 0, refused: 0, busy: 0, unmapped: 0, unavailable: 0 };
+  const stats: RemoteInputStats = {
+    injected: 0,
+    refused: 0,
+    busy: 0,
+    preempted: 0,
+    unmapped: 0,
+    unavailable: 0,
+  };
+  const localPriorityMs = options.localPriorityMs ?? 1_500;
+  const now = options.now ?? (() => Date.now());
+  let localUntilMs = Number.NEGATIVE_INFINITY;
+  let lastPoint: { x: number; y: number } | undefined;
   // What each membership is holding down here, so a lease that ends for any
   // reason can let go of it. A stuck button or modifier on somebody else's
   // machine is the worst outcome this module has (SPEC.md §13.3).
@@ -152,6 +194,12 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
     }
   }
 
+  /** Moves the pointer and remembers where, so local movement is detectable. */
+  async function moveTo(helper: HelperClient, point: { x: number; y: number }) {
+    await helper.send('pointer.move', point);
+    lastPoint = point;
+  }
+
   async function inject(message: InputMessage, helper: HelperClient): Promise<boolean> {
     switch (message.type) {
       case TYPE_POINTER_DOWN:
@@ -161,7 +209,7 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
         if (!point) return false;
         // Position first, then press: a button posted at the old position
         // clicks whatever used to be under the pointer.
-        await helper.send('pointer.move', { x: point.x, y: point.y });
+        await moveTo(helper, point);
         if (message.type === TYPE_POINTER_CLICK) {
           const clicks = message.clickCount ?? 1;
           // A double-click is two presses at one place, not one event with a
@@ -190,7 +238,7 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
         if (!point) return false;
         // The wheel applies to whatever is under the pointer, so it is aimed
         // the same way a click is.
-        await helper.send('pointer.move', { x: point.x, y: point.y });
+        await moveTo(helper, point);
         await helper.send('pointer.wheel', { deltaX: message.deltaX, deltaY: message.deltaY });
         return true;
       }
@@ -217,6 +265,14 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
       }
 
       const message = decision.message;
+
+      // The presenter's own hands win. Nothing remote acts while they are
+      // using their machine, whatever grants or leases say.
+      if (now() < localUntilMs && isDestructive(message.type)) {
+        stats.preempted += 1;
+        return { injected: false, reason: 'local-input' };
+      }
+
       // A drag belongs to whoever started it. Anybody else's destructive
       // pointer action waits until the lease ends rather than fighting it.
       if (message.type === TYPE_POINTER_DOWN) {
@@ -267,6 +323,32 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
     expireLeases: () => leases.expire(),
 
     settle: async () => void (await releasing),
+
+    localInput() {
+      localUntilMs = now() + localPriorityMs;
+      // End every remote lease, releasing whatever it holds. The presenter
+      // should never have to wrestle their own pointer back.
+      for (const membershipId of leaseHolders()) {
+        leases.releaseAll(membershipId, 'local-input');
+      }
+    },
+
+    localHasPriority: () => now() < localUntilMs,
+
+    helperRestarted() {
+      // Nothing survived the old process, so releasing would post presses the
+      // new one never saw. Forget instead, and end the leases so the next
+      // action starts cleanly.
+      heldButtons.clear();
+      heldKeys.clear();
+      for (const membershipId of leaseHolders()) {
+        leases.releaseAll(membershipId, 'disconnect');
+      }
+      lastPoint = undefined;
+      options.log.info('remote input state cleared after helper restart');
+    },
+
+    lastInjectedPoint: () => lastPoint,
 
     async releaseFor(membershipId, cause = 'disconnect') {
       // Ending the leases is what lets go of the input. Anything held without a
@@ -321,6 +403,20 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
   function holdsKey(membershipId: string, code: string): boolean {
     return (heldKeys.get(membershipId) ?? []).includes(code);
   }
+
+  /** Everybody currently holding a lease, in no particular order. */
+  function leaseHolders(): string[] {
+    const holders = new Set<string>();
+    for (const scope of ['pointer', 'keyboard'] as const) {
+      const holder = leases.holder(scope);
+      if (holder) holders.add(holder.membershipId);
+    }
+    return [...holders];
+  }
+}
+
+function isDestructive(type: string): boolean {
+  return isPointerAction(type) || type === TYPE_POINTER_DOWN || type === TYPE_KEY_DOWN || type === TYPE_KEY_UP;
 }
 
 function isPointerAction(type: string): boolean {

@@ -41,7 +41,7 @@ export interface InputLeasesOptions {
   onReleased?: LeaseEndListener;
 }
 
-export type LeaseEndCause = 'released' | 'timeout' | 'disconnect' | 'revoked';
+export type LeaseEndCause = 'released' | 'timeout' | 'disconnect' | 'revoked' | 'local-input';
 
 export type LeaseEndListener = (lease: Lease, cause: LeaseEndCause) => void;
 
@@ -135,8 +135,12 @@ export function createInputLeases(options: InputLeasesOptions = {}): InputLeases
 
     releaseAll(membershipId, cause = 'disconnect') {
       let ended = 0;
-      for (const [scope, lease] of [...leases.entries()]) {
-        if (lease.membershipId !== membershipId) continue;
+      // Keyboard first, deliberately: whoever is listening releases keys before
+      // buttons, so a modifier held over a drag comes up before the drag ends
+      // rather than after it.
+      for (const scope of ['keyboard', 'pointer'] as const) {
+        const lease = leases.get(scope);
+        if (!lease || lease.membershipId !== membershipId) continue;
         if (end(scope, cause)) ended += 1;
       }
       return ended;

@@ -22,33 +22,39 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0512
-- completed: 58 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0513
+- completed: 59 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0511 keyboard focus lease
+- task: P1-0512 local-input priority and stuck-input cleanup
 - result: done
-- tests: `npm test` 317 passed (284 desktop + 33 protocol), `make check` green
+- tests: `npm test` 324 passed (291 desktop + 33 protocol), `make check` green
 - evidence:
-  - typing takes the keyboard and every keystroke renews it. Two people typing into one
-    editor is not collaboration, it is a mess, so a competing participant is refused as `busy`
-    and the first typist keeps it
-  - the lease is **not** handed back on key-up, unlike a drag: typing is a run of presses with
-    gaps, and losing the keyboard between two keystrokes would let somebody else type into the
-    middle of a word. It ends on inactivity, disconnect or revoke instead
-  - held keys are released in **reverse press order**, so a modifier held over another key
-    comes up last and no intermediate release lands as a bare keystroke
-  - a revoke mid-word lets go of Shift immediately rather than waiting for the sender to be
-    polite about it; the sender's own key-up afterwards is still accepted
-  - releasing is asynchronous because it talks to the helper, so the work is chained and
-    `settle()` lets a caller wait for it - nothing else guarantees a key is up before the next
-    person takes the lease
-  - the pointer and the keyboard lease independently: somebody typing does not stop somebody
-    else clicking
-  - key codes are held in memory only and never logged, including in the failure path
+  - **the rule, written down**: local input wins, immediately and without asking. The
+    presenter touching their machine ends every remote lease, releases everything held, and
+    refuses remote actions for a short window afterwards - long enough that their own drag or
+    sentence is not fought over halfway through, short enough that control resumes without a
+    negotiation
+  - the detector is deliberately narrow, and honest about it: it watches for the OS pointer
+    being somewhere this application did not put it. **It does not watch the keyboard.**
+    Reading global key events to detect typing would mean watching everything the presenter
+    types, which is exactly what this product must never do (SPEC.md §13.4) - typing is covered
+    by the explicit emergency revoke in P1-0513, which is a deliberate action rather than an
+    inference drawn from keystrokes
+  - it fires once per real movement, not repeatedly while the pointer sits still, or control
+    could never resume; a pixel of drift from display scaling is not a person; and polling only
+    runs while somebody actually holds control, so an idle layup costs nothing
+  - a disconnect releases **every** tracked key and button for that membership: keys first, in
+    reverse press order, then buttons - a modifier held over a drag comes up before the drag
+    ends rather than after it
+  - helper crash/restart: the held state is **forgotten, not replayed**. The old process
+    released everything when it died; posting releases into the new one would be a lie about
+    what it is holding, and could interfere with the presenter's own input. The Go helper
+    releases on every disconnect by construction (`defer injector.ReleaseAll()`), which is as
+    far as this platform lets the path be proven without a second machine
 
 ## Recent runs
 
@@ -66,6 +72,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0509 done - remote click and wheel path
 - P1-0510 done - pointer drag lease
 - P1-0511 done - keyboard focus lease
+- P1-0512 done - local-input priority and stuck-input cleanup
 
 ## Evidence index
 
@@ -83,6 +90,7 @@ because it is rewritten in PLAN-1.5.
 | One key vocabulary across platforms | `make test-go` | `TestBothPlatformsSpeakTheSameKeyVocabulary` |
 | Remote input needs a live grant | `npm test` | `src/core/input-guard.test.ts` |
 | A synthetic cursor never moves the OS pointer | `npm test` | `src/main/remote-input.test.ts` |
+| Local input preempts remote control | `npm test` | `src/main/local-input-priority.test.ts` |
 
 ## Blocked
 

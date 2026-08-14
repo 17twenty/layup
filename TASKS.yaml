@@ -1908,7 +1908,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Local-input priority and stuck-input cleanup
-  status: todo
+  status: done
   goal: Detect/handle local presenter input as priority and guarantee cleanup of held remote key/button state on abnormal
     end.
   user_visible_behaviour: Detect/handle local presenter input as priority and guarantee cleanup of held remote key/button
