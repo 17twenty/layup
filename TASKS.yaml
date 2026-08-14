@@ -1680,7 +1680,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Windows pointer injection
-  status: todo
+  status: done
   goal: Implement Windows pointer move/click/right-click/wheel primitives and document integrity-boundary limitations.
   user_visible_behaviour: Implement Windows pointer move/click/right-click/wheel primitives and document integrity-boundary
     limitations.

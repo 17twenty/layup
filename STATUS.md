@@ -22,41 +22,37 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0505
-- completed: 51 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0506
+- completed: 52 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0504 macOS keyboard injection
+- task: P1-0505 Windows pointer injection
 - result: done
-- tests: `npm test` (242 passed: 214 desktop + 28 protocol), `make test-go` green,
-  typecheck/lint/fmt green
+- tests: `make test-go` green (new coordinate suite), `GOOS=windows go build ./...` and
+  `go vet` clean, `npm test` 242 passed, typecheck/lint/fmt green
 - evidence:
-  - keys are mapped by **physical position**, not by character: the desktop sends
-    `KeyboardEvent.code` and macOS virtual key codes name the same positions, so a guest on a
-    non-US layout reaches the key their own layout describes. Mapping characters would break
-    every non-US layout and every shortcut
-  - the map covers letters, digits, punctuation, navigation, F1-F12, the keypad and every
-    modifier; a code that is not in it is **refused, not guessed** - a wrong key code types
-    the wrong thing into somebody else's machine
-  - modifiers are re-applied to every event as CoreGraphics **flags**, because Cmd+C is a flag
-    on the 'c' event: posted as three plain key events it can arrive as a bare 'c', which in an
-    editor replaces the selection
-  - every key-down has a deterministic cleanup path: held keys are tracked in press order and
-    `ReleaseAll` releases them in **reverse** order (so an intermediate release is never seen
-    as a bare keystroke), before releasing held mouse buttons. The helper already calls it on
-    every disconnect
-  - Caps Lock is deliberately not tracked as held: it latches, and "releasing" it on
-    disconnect would toggle it on
-  - raw typed content is never persisted or logged: a key response carries no payload, and the
-    one path that logs anything about a request - a rejection - logs the command name only. A
-    test sends a rejected `key` request carrying `KeyQ` and asserts the helper's stderr
-    contains `key` but never `KeyQ` or `payload`
-  - the real-injection proof stays opt-in and types nothing: it holds `ShiftLeft` and checks
-    `CGEventSourceFlagsState`, then proves `ReleaseAll` clears it - a presenter left with Shift
-    stuck down has an unusable machine
+  - Windows pointer move, left/right/middle click and both wheel axes go through `SendInput`
+  - the Win32 API is called through `syscall` rather than cgo, so the helper still
+    cross-compiles for Windows from this macOS build host - verified with
+    `GOOS=windows go build ./...` and `GOOS=windows go vet ./...`
+  - `INPUT`'s size is asserted at compile time: a struct that is the wrong size makes every
+    injection fail silently, and that is not something to discover on somebody else's machine
+  - the integrity boundary is documented at the top of `inject_windows.go` and surfaced in
+    capabilities: Windows ignores injected input aimed at an elevated window, and blocks it
+    outright on the secure desktop (UAC prompts, lock screen, Ctrl+Alt+Del). It cannot be
+    worked around, and working around it would mean shipping something that behaves like
+    malware - so `ERROR_ACCESS_DENIED` becomes a sentence a person can act on rather than a
+    guest clicking into a void
+  - the one part of the Windows path that is pure arithmetic - absolute coordinate
+    normalisation - is separated into `coords.go` and tested on this host: exact corners
+    (65535 must be the *last* pixel, or an edge click lands on the wrong monitor), a negative
+    virtual-desktop origin (a monitor placed to the left of the primary one), clamping instead
+    of dropping when geometry changes mid-session, and a zero-sized screen during display
+    reconfiguration
+  - no renderer injection path exists: the existing isolation guard still passes
 
 ## Recent runs
 
@@ -67,6 +63,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0502 done - native helper lifecycle
 - P1-0503 done - macOS pointer injection
 - P1-0504 done - macOS keyboard injection
+- P1-0505 done - Windows pointer injection
 
 ## Evidence index
 
@@ -128,4 +125,10 @@ Options:
   ordinary NAT, forced TURN between two real machines) and the one-hour pairing soak in
   P1-0604. The harnesses will be built and run single-machine; the real-machine numbers must
   be collected before the PLAN-1 gate.
+- The Windows helper is only cross-*compiled* here (`GOOS=windows go build ./...`), because no
+  Windows machine is available and the Makefile is outside P1-0505's `allowed_paths`. Wiring
+  that cross-build into `make ci` needs a task whose paths include the Makefile.
+- **Owed by humans, not producible here:** a real Windows run of the pointer and keyboard
+  paths, including one click aimed at an elevated window to confirm the integrity-boundary
+  message is the one a person actually sees.
 - PLAN-2 is not written until the human gate.
