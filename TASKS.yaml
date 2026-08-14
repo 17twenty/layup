@@ -1976,7 +1976,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Editor remote-control integration test
-  status: todo
+  status: done
   goal: Prove a remote participant can use a normal editor via click, select/drag, type, scroll and shortcuts while presenter
     can revoke.
   user_visible_behaviour: Prove a remote participant can use a normal editor via click, select/drag, type, scroll and shortcuts

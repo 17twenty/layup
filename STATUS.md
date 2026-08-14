@@ -22,37 +22,37 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0514
-- completed: 60 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0601
+- completed: 61 of 68 (phase F complete) (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0513 emergency revoke
+- task: P1-0514 editor remote-control integration test
 - result: done
-- tests: `npm test` 336 passed (303 desktop + 33 protocol), `make check` green
+- tests: `make test-e2e` 8 passed (including the new `remote-editor.test.mjs`), `make check` green
 - evidence:
-  - one action ends everything, with **nothing to confirm**: a global shortcut
-    (`CommandOrControl+Alt+Shift+Backslash` - three modifiers, unreachable by accident) and an
-    always-present button do the same thing
-  - the order is deliberate: grants are withdrawn **locally first**, then held input is
-    released, then the peers are told. A message that arrives late must not be what stands
-    between a person and their own machine - the very next remote message is already refused
-  - held pointer buttons and keys are released, keys first, and remote control is kept out for
-    a moment afterwards so a message already in flight cannot land as the presenter takes over
-  - remote peers observe the revoked state: an untargeted `control.revoke` reaches every
-    participant, and a test drives the guest's own sender through it - it drops its scopes and
-    sends its own releases rather than leaving them dangling
-  - the shortcut is registered with the OS rather than watched for in this process: nothing
-    here reads what the presenter types (SPEC.md §13.4)
-  - when the OS refuses the accelerator - another application already owns it - the desktop
-    **says so**. Somebody who thinks they have a panic key that does nothing is worse off than
-    somebody who knows they do not; the on-screen button still works
-  - the indicator is a persistent banner with the stop button in it, named holders and named
-    shortcut, `role="alert"` and `aria-live="assertive"` - not a subtle badge in a settings
-    panel. It disappears entirely when nobody has control, because an indicator that is always
-    on stops being an indicator
+  - one scenario end to end: grant, click into an editor, type, select by dragging, scroll, use
+    Cmd+A, then emergency-revoke and prove the editor stops changing
+  - **everything this project owns is real in that test** - the guest's sender, the JSON on the
+    wire, the presenter's guard, the pointer and keyboard leases and the injection router are
+    the actual modules, imported rather than reimplemented. A test that reimplements what it is
+    testing proves only that the test agrees with itself
+  - `scripts/node-ts-hook.mjs` is what makes that possible from a plain `node --test` file: it
+    resolves `@layup/protocol` to the built binding and retries bundler-style relative imports
+    as `.ts`. Two gaps, nothing else
+  - the editor is a **model**, and the test says so: driving a real editor needs OS injection,
+    which needs an Accessibility grant no unattended runner has
+  - the second half closes as much of that gap as this machine allows: the same command stream
+    goes to the **real helper binary** over a real socket with real HMAC authentication. Where
+    the platform permits injection every command is injected; where it does not, the helper
+    refuses with `not_permitted` and an actionable explanation, which the test prints. A
+    malformed command is refused either way
+  - a drag turns out to be a press and a release with coordinates, not a stream of moves: there
+    is no `pointer.move` message, because cursor movement is an overlay that must never move
+    the OS pointer. The platform layer posts the reposition as a drag event while a button is
+    held (macOS `kCGEventLeftMouseDragged`)
 
 ## Recent runs
 
@@ -72,6 +72,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0511 done - keyboard focus lease
 - P1-0512 done - local-input priority and stuck-input cleanup
 - P1-0513 done - emergency revoke
+- P1-0514 done - editor remote-control integration test
 
 ## Evidence index
 
@@ -91,6 +92,7 @@ because it is rewritten in PLAN-1.5.
 | A synthetic cursor never moves the OS pointer | `npm test` | `src/main/remote-input.test.ts` |
 | Local input preempts remote control | `npm test` | `src/main/local-input-priority.test.ts` |
 | One action stops all remote control | `npm test` | `src/main/emergency-revoke.test.ts` |
+| A remote participant can drive an editor | `make test-e2e` | `test/e2e/remote-editor.test.mjs` |
 
 ## Blocked
 
@@ -143,5 +145,8 @@ Options:
   that cross-build into `make ci` needs a task whose paths include the Makefile.
 - **Owed by humans, not producible here:** a real Windows run of the pointer and keyboard
   paths, including one click aimed at an elevated window to confirm the integrity-boundary
-  message is the one a person actually sees.
+  message is the one a person actually sees; and one macOS pass with the Accessibility grant
+  driving a *real* editor, which `test/e2e/remote-editor.test.mjs` models but cannot perform
+  unattended (`LAYUP_ALLOW_REAL_INPUT=1 go test ./internal/inject` is the opt-in half that a
+  human with the grant can run today).
 - PLAN-2 is not written until the human gate.
