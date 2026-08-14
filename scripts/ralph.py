@@ -57,13 +57,23 @@ def load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text()) or {}
 
 
-def status_text() -> str:
-    return STATUS.read_text() if STATUS.exists() else ""
+def gate_declared(marker: str) -> bool:
+    """True only when STATUS.md *declares* a gate, on a line of its own.
+
+    Substring matching is not enough: STATUS.md describes the plan sequence in
+    prose, and mentioning a gate must never be mistaken for reaching one.
+    """
+    if not STATUS.exists():
+        return False
+    for line in STATUS.read_text().splitlines():
+        if line.strip().strip("`*# ") == marker:
+            return True
+    return False
 
 
 def plan15_unlocked() -> bool:
     """PLAN-1.5 becomes executable once PLAN-1 has surfaced at its gate."""
-    return PLAN1_GATE in status_text()
+    return gate_declared(PLAN1_GATE)
 
 
 def eligible(tasks: list[dict]) -> dict | None:
@@ -136,7 +146,6 @@ def cmd_next() -> int:
 def cmd_status() -> int:
     plan1 = load_yaml(PLAN1).get("tasks", [])
     plan15 = load_yaml(PLAN15).get("tasks", [])
-    text = status_text()
 
     for label, tasks in (("PLAN-1", plan1), ("PLAN-1.5", plan15)):
         c = counts(tasks)
@@ -148,8 +157,8 @@ def cmd_status() -> int:
             f"{c['todo']} todo, {c['in_progress']} in progress, {c['blocked']} blocked"
         )
 
-    print(f"gate: PLAN-1 {'READY' if PLAN1_GATE in text else 'not reached'}, "
-          f"PLAN-1.5 {'READY' if PLAN15_GATE in text else 'not reached'}")
+    print(f"gate: PLAN-1 {'READY' if gate_declared(PLAN1_GATE) else 'not reached'}, "
+          f"PLAN-1.5 {'READY' if gate_declared(PLAN15_GATE) else 'not reached'}")
     return 0
 
 
