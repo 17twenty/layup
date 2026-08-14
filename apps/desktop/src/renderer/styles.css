@@ -405,3 +405,36 @@ body {
   margin: 0;
   font-size: 16px;
 }
+
+/* Synthetic cursors */
+.screen__surface {
+  position: relative;
+  line-height: 0;
+}
+
+.cursors {
+  position: absolute;
+  inset: 0;
+  /* Decorative overlay: it must never steal a click from the surface below. */
+  pointer-events: none;
+}
+
+.cursors__cursor {
+  position: absolute;
+  transform: translate(-2px, -2px);
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  /* No transition: interpolation happens in the receiver, not in CSS, so the
+     drawn position is always the one the model believes. */
+}
+
+.cursors__label {
+  background: currentColor;
+  color: #0b0d11;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}

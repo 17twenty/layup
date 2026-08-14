@@ -1377,7 +1377,7 @@ tasks:
   plan: PLAN-1
   phase: E
   title: Remote cursor overlay and interpolation
-  status: todo
+  status: done
   goal: Render remote synthetic cursors locally, independently of video FPS, with interpolation/smoothing.
   user_visible_behaviour: Render remote synthetic cursors locally, independently of video FPS, with interpolation/smoothing.
   depends_on:

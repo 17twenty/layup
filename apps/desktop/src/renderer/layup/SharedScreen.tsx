@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { RemoteMedia } from '../../core/session';
 
 /**
@@ -12,9 +12,11 @@ export interface SharedScreenProps {
   remotes: RemoteMedia[];
   /** What this desktop is publishing, if anything. */
   localScreen?: MediaStream;
+  /** Cursor overlay, drawn over the video at its rendered size. */
+  overlay?: ReactNode;
 }
 
-export function SharedScreen({ remotes, localScreen }: SharedScreenProps) {
+export function SharedScreen({ remotes, localScreen, overlay }: SharedScreenProps) {
   const presenter = remotes.find((remote) => remote.screen);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -36,15 +38,20 @@ export function SharedScreen({ remotes, localScreen }: SharedScreenProps) {
 
   return (
     <section className="screen" aria-label="Shared screen">
-      <video
-        ref={videoRef}
-        className="screen__video"
-        autoPlay
-        muted
-        playsInline
-        data-testid="shared-screen"
-        aria-label={`${presenter.displayName ?? 'Someone'}'s screen`}
-      />
+      <div className="screen__surface">
+        <video
+          ref={videoRef}
+          className="screen__video"
+          autoPlay
+          muted
+          playsInline
+          data-testid="shared-screen"
+          aria-label={`${presenter.displayName ?? 'Someone'}'s screen`}
+        />
+        {/* Positioned over the video, so normalised cursors land correctly at
+            whatever size it is being displayed. */}
+        {overlay}
+      </div>
       <p className="screen__caption">
         {presenter.displayName ?? 'Someone'} is sharing
         {presenter.connection.connected ? '' : ' · reconnecting…'}
