@@ -1466,7 +1466,7 @@ tasks:
   plan: PLAN-1
   phase: E
   title: Drawing overlay
-  status: todo
+  status: done
   goal: Render collaborative vector drawing above shared screen using the drawing protocol.
   user_visible_behaviour: Render collaborative vector drawing above shared screen using the drawing protocol.
   depends_on:

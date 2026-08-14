@@ -438,3 +438,14 @@ body {
   line-height: 16px;
   white-space: nowrap;
 }
+
+/* Annotations */
+.drawing {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Vectors over the video: the encoded pixels are never touched, and the
+     overlay never intercepts a click. */
+  pointer-events: none;
+}

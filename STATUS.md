@@ -22,38 +22,36 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0407
-- completed: 45 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0408
+- completed: 46 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0406 drawing protocol
+- task: P1-0407 drawing overlay
 - result: done
-- tests: `npm test` (222 passed incl. 8 drawing cases), typecheck/lint green
+- tests: `npm test` (229 passed incl. 7 overlay cases), typecheck/lint green
 - evidence:
-  - `protocol/ts/src/drawing.ts` - `stroke.begin` / `stroke.points` / `stroke.end` /
-    `stroke.clear`, with normalised coordinates and width so a stroke looks the same on any
-    receiver, and strokes as vectors on an overlay rather than pixels in the encoded video
-  - ordering within a stroke is reconstructed from a per-message `index`, so a **deliberately
-    reversed** arrival order still yields the right line (the channel is unordered by design)
-  - a lost message leaves a detectable `hasGap` rather than a straight line through the missing
-    section - a wrong line is worse than a visibly incomplete one
-  - bounded everywhere: 64 points per message, 4096 per stroke, a cap on concurrent strokes,
-    and a runaway sender cannot grow a stroke past the limit
-  - malformed input is rejected, not coerced: unknown type, width 5, x 1.5, negative totals and
-    unknown fields all throw
-  - points for a stroke never begun, or attributed to a different membership, are ignored
-  - drawing lives in `protocol/ts` and the data plane only; nothing routes through Go (ADR-0008)
+  - `DrawingOverlay` renders strokes as SVG paths in a normalised `0 0 1 1` viewBox, so they
+    track the shared screen at any rendered size **with no resize handling at all**
+  - annotations never alter encoded pixels: they are vectors on an overlay above the video, so
+    the presenter's encoder never sees them and stopping annotation leaves the share untouched
+  - a stroke is coloured by its author, matching that participant's cursor colour
+  - a single-point stroke still renders as a visible dot rather than nothing
+  - a stroke with a lost message is marked `data-gap="true"` rather than quietly drawing
+    through the missing section
+  - clearing is a protocol action the overlay reflects: after `stroke.clear` the overlay is
+    empty (driven through the real assembler, not a stub)
+  - the overlay is `aria-hidden` and `pointer-events: none`, so it cannot steal a click
 
 ## Recent runs
 
-- P1-0402 done - normalised cursor protocol
 - P1-0403 done - cursor sender coalescing
 - P1-0404 done - remote cursor overlay and interpolation
 - P1-0405 done - participant cursor identity
 - P1-0406 done - drawing protocol
+- P1-0407 done - drawing overlay
 
 ## Evidence index
 
