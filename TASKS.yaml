@@ -1840,7 +1840,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Pointer drag lease
-  status: todo
+  status: done
   goal: Implement exclusive short pointer lease across mouse-down/move/up so overlapping destructive drags do not fight.
   user_visible_behaviour: Implement exclusive short pointer lease across mouse-down/move/up so overlapping destructive drags
     do not fight.

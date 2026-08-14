@@ -22,38 +22,32 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0510
-- completed: 56 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0511
+- completed: 57 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0509 remote click and wheel path
+- task: P1-0510 pointer drag lease
 - result: done
-- tests: `npm test` 295 passed (262 desktop + 33 protocol), `make check` green
+- tests: `npm test` 310 passed (277 desktop + 33 protocol), `make check` green
 - evidence:
-  - `pointer-mapping.ts` turns a normalised position into a presenter pixel, and is kept
-    separate because it is where a wrong assumption puts a click somewhere nobody asked for:
-    a quarter across a 1920 display is 480; the far corner is the *last* pixel of that display,
-    not the first pixel of the next one along; a display placed to the left of the primary one
-    has a negative origin and is honoured as such
-  - an unknown display produces **no click at all** rather than a guess
-  - `main/remote-input.ts` is the only place a permitted action becomes an OS event, and it
-    lives in the main process because the helper client does - the renderer may offer a
-    message, never a command
-  - the pointer is positioned *before* the button is pressed: a button posted at the old
-    position clicks whatever used to be under the pointer
-  - a double-click is sent as two presses in one place, which is what applications actually
-    listen for; the wheel is aimed the same way a click is, because it applies to whatever is
-    under the pointer
-  - a revoked participant's action is dropped **before anything is aimed**: not even a pointer
-    move reaches the OS
-  - **a synthetic cursor never moves the OS pointer**: cursor movement arrives on `cursor-fast`
-    and is refused as `wrong-channel`; offered on the input channel it is not a valid input
-    message at all
-  - refusals are logged as a fixed reason word and never quote the message - a refused key
-    would otherwise put typed content in the log
+  - a mouse-down takes an exclusive short lease on the pointer. Two people dragging at once
+    do not make two drags; they make one object thrown across the screen, so everybody else's
+    destructive pointer action is refused as `busy` while a drag is live
+  - mouse-up hands the pointer straight back, without waiting for the timeout
+  - a drag that goes quiet expires. A peer that stops sending without disconnecting looks
+    exactly like one that vanished, so a lease is never held forever - and the clock is
+    injected, so the timeout is tested rather than waited for
+  - **no stuck button**: whenever a lease ends - release, timeout, disconnect or revoke - the
+    router releases every button that membership was holding on the OS. A test drives all three
+    endings and asserts the `pointer.button down:false` actually goes to the helper
+  - lease endings are a subscription rather than a constructor argument: a listener attached
+    only at construction is a stuck button waiting to happen, because a caller-supplied lease
+    would silently lose the cleanup
+  - a slow drag across a big screen stays alive: every action from the holder renews it
+  - pointer and keyboard lease separately, so somebody dragging does not also lock the keyboard
 
 ## Recent runs
 
@@ -69,6 +63,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0507 done - reliable remote-input protocol
 - P1-0508 done - presenter remote-control grants
 - P1-0509 done - remote click and wheel path
+- P1-0510 done - pointer drag lease
 
 ## Evidence index
 

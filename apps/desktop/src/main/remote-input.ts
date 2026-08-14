@@ -24,6 +24,7 @@ import {
   type InputMessage,
 } from '@layup/protocol';
 import { toScreenPoint, type DisplayBounds } from '../core/pointer-mapping';
+import { createInputLeases, type InputLeases, type Lease, type LeaseEndCause } from '../core/input-lease';
 import type { InputGuard, RefusalReason } from '../core/input-guard';
 import type { HelperClient } from './helper-client';
 import type { Logger } from './logging';
@@ -35,12 +36,19 @@ export interface RemoteInputOptions {
   /** The presenter's displays, in the OS's coordinate space. */
   displays: () => DisplayBounds[];
   log: Logger;
+  /**
+   * Exclusive short leases, so two people cannot drag the same thing at once.
+   * Injectable so the timeout can be tested with a fake clock.
+   */
+  leases?: InputLeases;
 }
 
 export interface RemoteInputStats {
   injected: number;
   /** Actions the guard refused. */
   refused: number;
+  /** Actions refused because somebody else was mid-drag. */
+  busy: number;
   /** Actions that could not be aimed at a known display. */
   unmapped: number;
   /** Actions with nowhere to go because the helper is not running. */
@@ -55,12 +63,55 @@ export interface RemoteInputRouter {
   handle(
     raw: unknown,
     from: { membershipId: string; channel: string },
-  ): Promise<{ injected: boolean; reason?: RefusalReason | 'no-helper' | 'unknown-display' }>;
+  ): Promise<{ injected: boolean; reason?: RefusalReason | 'no-helper' | 'unknown-display' | 'busy' }>;
+  /**
+   * Ends any lease that has gone quiet, releasing whatever it was holding.
+   * The caller drives this from its own scheduler.
+   */
+  expireLeases(): number;
+  /** Lets go of everything a membership holds - it left, or was revoked. */
+  releaseFor(membershipId: string, cause?: LeaseEndCause): Promise<void>;
+  /** Who is mid-drag, if anybody. */
+  dragging(): string | undefined;
   stats(): RemoteInputStats;
 }
 
 export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInputRouter {
-  const stats: RemoteInputStats = { injected: 0, refused: 0, unmapped: 0, unavailable: 0 };
+  const stats: RemoteInputStats = { injected: 0, refused: 0, busy: 0, unmapped: 0, unavailable: 0 };
+  // What each membership is holding down here, so a lease that ends for any
+  // reason can let go of it. A stuck button on somebody else's machine is the
+  // worst outcome this module has (SPEC.md §13.3).
+  const heldButtons = new Map<string, Set<string>>();
+
+  const leases = options.leases ?? createInputLeases();
+  // Registered rather than passed in at construction, so a lease supplied by
+  // the caller still releases what it was holding.
+  leases.onEnd((lease, cause) => void releaseHeld(lease, cause));
+
+  async function releaseHeld(lease: Lease, cause: LeaseEndCause) {
+    const held = heldButtons.get(lease.membershipId);
+    if (!held || held.size === 0) return;
+    heldButtons.delete(lease.membershipId);
+
+    const helper = options.helper();
+    if (!helper) return;
+    for (const button of held) {
+      try {
+        await helper.send('pointer.button', { button, down: false });
+      } catch (error) {
+        options.log.warn('could not release a held button', {
+          cause,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    options.log.info('released input held by a finished lease', {
+      membershipId: lease.membershipId,
+      scope: lease.scope,
+      cause,
+      buttons: held.size,
+    });
+  }
 
   async function inject(message: InputMessage, helper: HelperClient): Promise<boolean> {
     switch (message.type) {
@@ -120,6 +171,22 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
         return { injected: false, reason: decision.reason };
       }
 
+      const message = decision.message;
+      // A drag belongs to whoever started it. Anybody else's destructive
+      // pointer action waits until the lease ends rather than fighting it.
+      if (message.type === TYPE_POINTER_DOWN) {
+        if (!leases.acquire('pointer', from.membershipId)) {
+          stats.busy += 1;
+          return { injected: false, reason: 'busy' };
+        }
+      } else if (isPointerAction(message.type)) {
+        if (!leases.mayAct('pointer', from.membershipId)) {
+          stats.busy += 1;
+          return { injected: false, reason: 'busy' };
+        }
+        leases.touch('pointer', from.membershipId);
+      }
+
       const helper = options.helper();
       if (!helper) {
         stats.unavailable += 1;
@@ -127,6 +194,7 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
       }
 
       const injected = await inject(decision.message, helper);
+      if (injected) trackHeld(message, from.membershipId);
       if (!injected) {
         // Either an unknown display or a message type that does not inject.
         stats.unmapped += 1;
@@ -136,6 +204,40 @@ export function createRemoteInputRouter(options: RemoteInputOptions): RemoteInpu
       return { injected: true };
     },
 
+    expireLeases: () => leases.expire(),
+
+    async releaseFor(membershipId, cause = 'disconnect') {
+      // Release the lease first: its handler is what lets go of the buttons.
+      if (leases.releaseAll(membershipId, cause) === 0) {
+        await releaseHeld(
+          { scope: 'pointer', membershipId, acquiredAtMs: 0, touchedAtMs: 0 },
+          cause,
+        );
+      }
+    },
+
+    dragging: () => leases.holder('pointer')?.membershipId,
+
     stats: () => ({ ...stats }),
   };
+
+  /** Remembers a press and forgets a release, so cleanup knows what is down. */
+  function trackHeld(message: InputMessage, membershipId: string) {
+    if (message.type === TYPE_POINTER_DOWN) {
+      const held = heldButtons.get(membershipId) ?? new Set<string>();
+      held.add(message.button);
+      heldButtons.set(membershipId, held);
+      return;
+    }
+    if (message.type === TYPE_POINTER_UP) {
+      heldButtons.get(membershipId)?.delete(message.button);
+      // The drag is over: the lease goes back immediately rather than waiting
+      // for the idle timeout.
+      leases.release('pointer', membershipId);
+    }
+  }
+}
+
+function isPointerAction(type: string): boolean {
+  return type === TYPE_POINTER_UP || type === TYPE_POINTER_CLICK || type === TYPE_POINTER_WHEEL;
 }

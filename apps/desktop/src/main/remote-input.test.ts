@@ -4,15 +4,19 @@ import {
   TYPE_CURSOR_MOVE,
   TYPE_KEY_DOWN,
   TYPE_POINTER_CLICK,
+  TYPE_POINTER_DOWN,
+  TYPE_POINTER_UP,
   TYPE_POINTER_WHEEL,
 } from '@layup/protocol';
 import { CHANNEL_CURSOR, CHANNEL_INPUT } from '../core/data-channels';
 import { createInputGuard, type InputGuard } from '../core/input-guard';
+import { createInputLeases } from '../core/input-lease';
 import { createLogger } from './logging';
 import { createRemoteInputRouter, type RemoteInputRouter } from './remote-input';
 import type { HelperClient, HelperResponse } from './helper-client';
 
 const GUEST = 'm-guest';
+const OTHER = 'm-other';
 const PRESENTER = 'm-presenter';
 const DISPLAY = 'd-1';
 const displays = [{ displayId: DISPLAY, x: 0, y: 0, width: 1920, height: 1080 }];
@@ -22,6 +26,8 @@ let guard: InputGuard;
 let router: RemoteInputRouter;
 let helperRunning = true;
 let seq = 0;
+let clock = 0;
+let leases: ReturnType<typeof createInputLeases>;
 
 const helper: HelperClient = {
   connect: async () => {},
@@ -35,6 +41,15 @@ const helper: HelperClient = {
 };
 
 const fromGuest = { membershipId: GUEST, channel: CHANNEL_INPUT };
+const fromOther = { membershipId: OTHER, channel: CHANNEL_INPUT };
+
+function down(overrides: Record<string, unknown> = {}) {
+  return click({ type: TYPE_POINTER_DOWN, ...overrides });
+}
+
+function up(overrides: Record<string, unknown> = {}) {
+  return click({ type: TYPE_POINTER_UP, ...overrides });
+}
 
 function click(overrides: Record<string, unknown> = {}) {
   seq += 1;
@@ -55,17 +70,20 @@ beforeEach(() => {
   calls = [];
   helperRunning = true;
   seq = 0;
+  clock = 1_000;
   guard = createInputGuard({
     localMembershipId: PRESENTER,
     isPresenting: () => true,
     sharedDisplayId: () => DISPLAY,
     presenterMembershipId: () => PRESENTER,
   });
+  leases = createInputLeases({ idleTimeoutMs: 2_000, now: () => clock });
   router = createRemoteInputRouter({
     guard,
     helper: () => (helperRunning ? helper : undefined),
     displays: () => displays,
     log: createLogger({ level: 'error', write: () => {} }),
+    leases,
   });
 });
 
@@ -190,6 +208,77 @@ describe('remote click and wheel path', () => {
       reason: 'unknown-display',
     });
     expect(calls).toEqual([]);
+  });
+
+  it('gives a drag to whoever started it', async () => {
+    guard.grant(GUEST, 'pointer');
+    guard.grant(OTHER, 'pointer');
+
+    expect(await router.handle(down(), fromGuest)).toEqual({ injected: true });
+    expect(router.dragging()).toBe(GUEST);
+
+    // Somebody else's destructive action waits rather than fighting the drag.
+    calls = [];
+    expect(await router.handle(down({ membershipId: OTHER }), fromOther)).toEqual({
+      injected: false,
+      reason: 'busy',
+    });
+    expect(await router.handle(click({ membershipId: OTHER }), fromOther)).toEqual({
+      injected: false,
+      reason: 'busy',
+    });
+    expect(calls).toEqual([]);
+    expect(router.stats()).toMatchObject({ busy: 2 });
+  });
+
+  it('hands the pointer back on mouse-up', async () => {
+    guard.grant(GUEST, 'pointer');
+    guard.grant(OTHER, 'pointer');
+
+    await router.handle(down(), fromGuest);
+    await router.handle(up(), fromGuest);
+    expect(router.dragging()).toBeUndefined();
+
+    expect(await router.handle(down({ membershipId: OTHER }), fromOther)).toEqual({ injected: true });
+  });
+
+  it('does not leave a button down when a drag times out', async () => {
+    guard.grant(GUEST, 'pointer');
+    await router.handle(down(), fromGuest);
+    calls = [];
+
+    // The peer stopped sending without disconnecting: from here that is
+    // indistinguishable from vanishing, and the button must not stay down.
+    clock += 2_000;
+    expect(router.expireLeases()).toBe(1);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls).toEqual([{ command: 'pointer.button', payload: { button: 'left', down: false } }]);
+    expect(router.dragging()).toBeUndefined();
+  });
+
+  it('lets go of everything when a participant disconnects', async () => {
+    guard.grant(GUEST, 'pointer');
+    await router.handle(down({ button: 'right' }), fromGuest);
+    calls = [];
+
+    await router.releaseFor(GUEST);
+
+    expect(calls).toEqual([{ command: 'pointer.button', payload: { button: 'right', down: false } }]);
+    expect(router.dragging()).toBeUndefined();
+  });
+
+  it('keeps a slow drag alive while it is still moving', async () => {
+    guard.grant(GUEST, 'pointer');
+    await router.handle(down(), fromGuest);
+
+    for (let step = 0; step < 5; step += 1) {
+      clock += 1_500;
+      expect(await router.handle(click(), fromGuest)).toEqual({ injected: true });
+      expect(router.expireLeases()).toBe(0);
+    }
+    expect(router.dragging()).toBe(GUEST);
   });
 
   it('reports refusals without ever logging what was sent', async () => {
