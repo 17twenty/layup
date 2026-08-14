@@ -514,3 +514,33 @@ body {
 .control__stop {
   justify-self: start;
 }
+
+/* Remote-control banner: mandatory, and mandatory to notice (SPEC.md §13.3) */
+.remote-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #7a1f2e;
+  color: #fff;
+  font-weight: 600;
+}
+
+.remote-banner__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffd7de;
+}
+
+.remote-banner__text {
+  margin: 0;
+  flex: 1;
+}
+
+.remote-banner__shortcut {
+  font-weight: 400;
+  opacity: 0.85;
+  font-size: 12px;
+}

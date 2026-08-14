@@ -1941,7 +1941,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Emergency revoke
-  status: todo
+  status: done
   goal: Add unmistakable remote-control indicator and local emergency revoke that immediately disables all remote input grants/leases.
   user_visible_behaviour: Add unmistakable remote-control indicator and local emergency revoke that immediately disables all
     remote input grants/leases.

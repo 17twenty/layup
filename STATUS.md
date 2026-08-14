@@ -22,39 +22,37 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0513
-- completed: 59 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0514
+- completed: 60 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0512 local-input priority and stuck-input cleanup
+- task: P1-0513 emergency revoke
 - result: done
-- tests: `npm test` 324 passed (291 desktop + 33 protocol), `make check` green
+- tests: `npm test` 336 passed (303 desktop + 33 protocol), `make check` green
 - evidence:
-  - **the rule, written down**: local input wins, immediately and without asking. The
-    presenter touching their machine ends every remote lease, releases everything held, and
-    refuses remote actions for a short window afterwards - long enough that their own drag or
-    sentence is not fought over halfway through, short enough that control resumes without a
-    negotiation
-  - the detector is deliberately narrow, and honest about it: it watches for the OS pointer
-    being somewhere this application did not put it. **It does not watch the keyboard.**
-    Reading global key events to detect typing would mean watching everything the presenter
-    types, which is exactly what this product must never do (SPEC.md §13.4) - typing is covered
-    by the explicit emergency revoke in P1-0513, which is a deliberate action rather than an
-    inference drawn from keystrokes
-  - it fires once per real movement, not repeatedly while the pointer sits still, or control
-    could never resume; a pixel of drift from display scaling is not a person; and polling only
-    runs while somebody actually holds control, so an idle layup costs nothing
-  - a disconnect releases **every** tracked key and button for that membership: keys first, in
-    reverse press order, then buttons - a modifier held over a drag comes up before the drag
-    ends rather than after it
-  - helper crash/restart: the held state is **forgotten, not replayed**. The old process
-    released everything when it died; posting releases into the new one would be a lie about
-    what it is holding, and could interfere with the presenter's own input. The Go helper
-    releases on every disconnect by construction (`defer injector.ReleaseAll()`), which is as
-    far as this platform lets the path be proven without a second machine
+  - one action ends everything, with **nothing to confirm**: a global shortcut
+    (`CommandOrControl+Alt+Shift+Backslash` - three modifiers, unreachable by accident) and an
+    always-present button do the same thing
+  - the order is deliberate: grants are withdrawn **locally first**, then held input is
+    released, then the peers are told. A message that arrives late must not be what stands
+    between a person and their own machine - the very next remote message is already refused
+  - held pointer buttons and keys are released, keys first, and remote control is kept out for
+    a moment afterwards so a message already in flight cannot land as the presenter takes over
+  - remote peers observe the revoked state: an untargeted `control.revoke` reaches every
+    participant, and a test drives the guest's own sender through it - it drops its scopes and
+    sends its own releases rather than leaving them dangling
+  - the shortcut is registered with the OS rather than watched for in this process: nothing
+    here reads what the presenter types (SPEC.md §13.4)
+  - when the OS refuses the accelerator - another application already owns it - the desktop
+    **says so**. Somebody who thinks they have a panic key that does nothing is worse off than
+    somebody who knows they do not; the on-screen button still works
+  - the indicator is a persistent banner with the stop button in it, named holders and named
+    shortcut, `role="alert"` and `aria-live="assertive"` - not a subtle badge in a settings
+    panel. It disappears entirely when nobody has control, because an indicator that is always
+    on stops being an indicator
 
 ## Recent runs
 
@@ -73,6 +71,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0510 done - pointer drag lease
 - P1-0511 done - keyboard focus lease
 - P1-0512 done - local-input priority and stuck-input cleanup
+- P1-0513 done - emergency revoke
 
 ## Evidence index
 
@@ -91,6 +90,7 @@ because it is rewritten in PLAN-1.5.
 | Remote input needs a live grant | `npm test` | `src/core/input-guard.test.ts` |
 | A synthetic cursor never moves the OS pointer | `npm test` | `src/main/remote-input.test.ts` |
 | Local input preempts remote control | `npm test` | `src/main/local-input-priority.test.ts` |
+| One action stops all remote control | `npm test` | `src/main/emergency-revoke.test.ts` |
 
 ## Blocked
 
