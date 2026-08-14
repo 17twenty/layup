@@ -22,39 +22,29 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0602
-- completed: 62 of 68 (phase F complete) (phases A, B and C complete; D in progress)
+- next task: none eligible - the rest of PLAN-1 waits on the human decision in Blocked
+- completed: 63 of 68 (phases A-C, F complete; D and G blocked on two machines) (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0601 private versus open screen takeover
+- task: P1-0602 no-screen layup continuity
 - result: done
-- tests: `make test-go` green (new domain and HTTP suites), `make test-e2e` 11 passed
-  (new `screen-takeover.test.mjs`), `npm test` 343 passed, `make check` green
+- tests: `npm test` 347 passed, `make test-e2e` 11 passed, `make check` green
 - evidence:
-  - two rules that look similar and are not. In a collaborative layup you **take** the screen -
-    no approval dialog, because asking a colleague for permission to show them something is not
-    how people work - and the previous presenter is told. In an advertised, organisation-open
-    session you **ask**, because an audience member cannot take the screen out from under a
-    talk mid-sentence
-  - `RequestScreenShare` exists **only** where taking is refused: asking with nobody presenting,
-    or in a layup where you could just take it, is a conflict rather than a polite no-op. The
-    alternative teaches people to ask for things they already have
-  - asking changes nothing. A test asserts the share is untouched afterwards and that the asker
-    still cannot start one; the presenter hands over by stopping, and then anyone may share
-  - the presenter hears about it: `screen.share_request` is pushed to them with who is asking
-  - the desktop half is `share-store.ts`: one share or none, plus the **notice**. A takeover
-    produces a plain sentence ("Karl is sharing their screen now.") on the machine that lost the
-    screen, because a takeover that needs no approval only works if the person who lost it finds
-    out at once. Notices fade on their own - one that has to be dismissed is a dialog wearing a
-    disguise
-  - **no multi-screen state is possible**: the e2e asserts both participants see the same single
-    share after a takeover, and the domain suite counts live shares after three people take it
-    in turn
-  - the same e2e file also covers P1-0602's continuity ground (stop, and presenter-leaves, both
-    leave the layup and its memberships standing); P1-0602 adds the desktop-side half
+  - the point of these tests is what *does not* happen. Stopping a share empties the screen
+    sender rather than removing it: the peer connection, the camera and the microphone are all
+    untouched, and the transceiver stays in place so re-sharing needs no renegotiation
+  - the presenter walking out clears their screen and their connection and **nothing else** -
+    everybody else's connection stays up. The layup did not end; it lost a screen
+  - the next person simply shares: nothing has to be rebuilt for that to work
+  - "nobody is sharing" is a **state, not an error**, in the store as well as the session:
+    stopping leaves `{ share: undefined }` with no notice and no failure
+  - the control-plane half is proven over the real wire in `test/e2e/screen-takeover.test.mjs`
+    ("the layup outlives the screen"): after a stop, and after the presenter leaves entirely,
+    the layup is still active with its memberships intact and no phantom share, and a remaining
+    participant can start sharing
 
 ## Recent runs
 
@@ -76,6 +66,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0513 done - emergency revoke
 - P1-0514 done - editor remote-control integration test
 - P1-0601 done - private versus open screen takeover
+- P1-0602 done - no-screen layup continuity
 
 ## Evidence index
 
@@ -97,6 +88,7 @@ because it is rewritten in PLAN-1.5.
 | One action stops all remote control | `npm test` | `src/main/emergency-revoke.test.ts` |
 | A remote participant can drive an editor | `make test-e2e` | `test/e2e/remote-editor.test.mjs` |
 | One shared desktop, taken or asked for | `make test-e2e` | `test/e2e/screen-takeover.test.mjs` |
+| A layup outlives its screen | `npm test` | `src/core/session-continuity.test.ts` |
 
 ## Blocked
 

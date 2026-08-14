@@ -2050,7 +2050,7 @@ tasks:
   plan: PLAN-1
   phase: G
   title: No-screen layup continuity
-  status: todo
+  status: done
   goal: Prove stopping share or presenter leaving returns to AV-only layup rather than ending the session.
   user_visible_behaviour: Prove stopping share or presenter leaving returns to AV-only layup rather than ending the session.
   depends_on:
