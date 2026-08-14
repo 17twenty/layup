@@ -35,6 +35,7 @@ app.whenReady().then(async () => {
       detail: 'boundary harness does not run a control service',
       checkedAtMs: 0,
     }),
+    'control:remote': () => ({ helperRunning: false, pointer: false, keyboard: false }),
     'identity:current': () => ({ devUser: 'nick', resolved: false, detail: 'no control service' }),
     'realtime:status': () => ({ status: 'idle', attempt: 0 }),
     'people:list': () => ({ people: [] }),

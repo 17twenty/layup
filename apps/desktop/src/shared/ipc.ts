@@ -221,12 +221,28 @@ export const iceConfigResponse = isObject({
 });
 export type IceConfigResponse = ReturnType<typeof iceConfigResponse>;
 
+/**
+ * Remote-control capability, as reported by the native helper.
+ *
+ * This is deliberately a *description*: what is possible and why not, never a
+ * handle, socket or command surface (ADR-0006, SPEC.md §13.2).
+ */
+export const remoteControlResponse = isObject({
+  helperRunning: isBoolean,
+  pointer: isBoolean,
+  keyboard: isBoolean,
+  platform: optional(isString),
+  detail: optional(isString),
+});
+export type RemoteControlResponse = ReturnType<typeof remoteControlResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'capture:sources': channel(isVoid, captureSourcesResponse),
   'capture:permission': channel(isVoid, capturePermissionResponse),
   'capture:openSettings': channel(isVoid, isBoolean),
   'control:status': channel(isVoid, controlStatusResponse),
+  'control:remote': channel(isVoid, remoteControlResponse),
   'identity:current': channel(isVoid, identityResponse),
   'realtime:status': channel(isVoid, realtimeStateResponse),
   'people:list': channel(isVoid, peopleResponse),

@@ -1592,7 +1592,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Native helper lifecycle
-  status: todo
+  status: done
   goal: Start/stop/reconnect the helper from Electron main and surface capability/permission state.
   user_visible_behaviour: Start/stop/reconnect the helper from Electron main and surface capability/permission state.
   depends_on:

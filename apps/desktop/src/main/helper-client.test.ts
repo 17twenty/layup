@@ -116,12 +116,26 @@ describe('native helper protocol', () => {
     client.close();
   }, 30_000);
 
-  it('is unreachable from the renderer', () => {
-    // The guarantee that matters: no preload/IPC path exposes the helper.
+  it('is unreachable from the renderer', async () => {
+    // The guarantee that matters is capability, not vocabulary: the renderer
+    // surface may *describe* remote control, but must expose no way to drive
+    // the helper - no command, no socket, no secret, no client.
     const preload = readFileSync('src/preload/api.ts', 'utf8');
     const ipc = readFileSync('src/shared/ipc.ts', 'utf8');
+
     for (const source of [preload, ipc]) {
-      expect(source).not.toMatch(/helper|LAYUP_HELPER_SECRET|input-helper/i);
+      expect(source).not.toMatch(/LAYUP_HELPER_SECRET|LAYUP_HELPER_SOCKET|helper\.sock/);
+      expect(source).not.toMatch(/createHelperClient|helper-client|signHelperRequest/);
+      // No helper command may be nameable from the renderer.
+      for (const command of ['helper.hello', 'helper.capabilities', 'input.release_all', 'pointer.button']) {
+        expect(source).not.toContain(command);
+      }
+    }
+
+    // And no IPC channel is a helper passthrough.
+    const { ipcChannels } = await import('../shared/ipc');
+    for (const channel of Object.keys(ipcChannels)) {
+      expect(channel.startsWith('helper')).toBe(false);
     }
   });
 });

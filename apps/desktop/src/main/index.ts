@@ -14,6 +14,7 @@ import { createAttentionController } from './attention';
 import { createCaptureService } from './capture';
 import { createPermissionService } from './permissions';
 import { createIceSupervisor } from './ice';
+import { createHelperSupervisor } from './helper-supervisor';
 import { secureWebPreferences } from './window';
 
 /**
@@ -145,6 +146,18 @@ const ice = createIceSupervisor({
   forceRelay: /^(1|true|yes)$/i.test(process.env.LAYUP_FORCE_RELAY ?? ''),
 });
 
+/**
+ * The privileged input helper. It lives in the main process only: no preload
+ * channel forwards to it, and the renderer only ever learns *whether* remote
+ * control is possible (ADR-0006).
+ */
+const helper = createHelperSupervisor({
+  binaryPath:
+    process.env.LAYUP_HELPER_BINARY ||
+    path.join(process.resourcesPath ?? __dirname, 'layup-input-helper'),
+  log: log.with({ component: 'input-helper' }),
+});
+
 function buildHandlers(): Handlers {
   return {
     'app:info': () => ({
@@ -156,6 +169,16 @@ function buildHandlers(): Handlers {
     'capture:permission': () => permissions.capture(),
     'capture:openSettings': () => permissions.openCaptureSettings(),
     'control:status': () => control.status(),
+    'control:remote': () => {
+      const state = helper.state();
+      return {
+        helperRunning: state.running,
+        pointer: state.capabilities?.pointerMove ?? false,
+        keyboard: state.capabilities?.keyboard ?? false,
+        ...(state.capabilities?.platform ? { platform: state.capabilities.platform } : {}),
+        ...(state.detail ? { detail: state.detail } : {}),
+      };
+    },
     'identity:current': () => control.identity(),
     'realtime:status': () => realtime.state(),
     'people:list': () => ({ people: people.people() }),
@@ -239,7 +262,11 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', () => realtime.stop());
+app.on('before-quit', () => {
+  realtime.stop();
+  // The helper exits with the desktop; nothing privileged outlives us.
+  helper.stop();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

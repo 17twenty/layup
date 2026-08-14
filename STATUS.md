@@ -22,40 +22,40 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0502
-- completed: 48 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0503
+- completed: 49 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0501 native helper protocol and authentication
+- task: P1-0502 native helper lifecycle
 - result: done
-- tests: `go test ./...` (5 protocol cases), `npm test` (6 helper-client cases against the real binary), fmt/vet green
+- tests: `npm test` (225 passed incl. 6 lifecycle cases), boundary OK, typecheck/lint/fmt green
 - evidence:
-  - `native/input-helper` is a separate Go module and process (ADR-0006): explicit protocol
-    version, an **allow-list of seven commands**, and an HMAC-SHA256 tag over version+id+command
-    using a per-run secret passed on the environment and immediately unset
-  - authentication is checked **before** the allow-list, so an unauthenticated caller cannot
-    probe which commands exist by comparing errors
-  - proven against the real helper binary (6 tests): a wrong secret is rejected even with socket
-    access, `shell.exec` is `unknown_command`, a valid tag for `pointer.move` **replayed onto
-    `key` is rejected** because the signature covers the command, and malformed input gets a
-    `malformed` reply without killing the process
-  - the socket is `0600` owner-only, a rejected request never echoes its payload (it may carry
-    keystrokes), and a disconnect always calls `ReleaseAll`
-  - the renderer cannot reach it: a test asserts `preload/api.ts` and `shared/ipc.ts` contain no
-    reference to the helper, secret or socket at all
-  - injection itself is deliberately absent - the helper answers `unsupported_platform` rather
-    than pretending to have acted (P1-0503 onwards)
+  - `helper-supervisor.ts` owns the helper's lifetime: started with a **fresh secret and socket
+    per run**, so a secret captured from a dead process is worthless
+    (`gives the helper a fresh secret and socket, never a fixed one`)
+  - a crash is detected and restarted with new credentials; a crash *loop* stops after a bounded
+    number of attempts and says "the input helper keeps crashing; remote control is unavailable"
+    rather than restarting forever
+  - the helper exits with the desktop (`before-quit`), and a deliberate stop is not treated as a
+    crash, so nothing respawns
+  - the desktop stays usable when the helper cannot be reached at all - remote control is simply
+    unavailable
+  - capability state reaches the renderer as a *description* (`control:remote` -> helperRunning,
+    pointer, keyboard, platform, detail), never a handle, socket, secret or command
+  - the isolation guard now checks capability rather than vocabulary: no helper command name,
+    socket, secret or client reference in the preload/IPC surface, and no `helper*` IPC channel
+  - 6 lifecycle tests with an injected spawn; log lines carry capability flags only
 
 ## Recent runs
 
-- P1-0405 done - participant cursor identity
 - P1-0406 done - drawing protocol
 - P1-0407 done - drawing overlay
 - P1-0408 done - presenter drawing safety toggle
 - P1-0501 done - native helper protocol and authentication
+- P1-0502 done - native helper lifecycle
 
 ## Evidence index
 

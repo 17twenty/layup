@@ -70,6 +70,8 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
     control: {
       /** Current connection state of the Go control plane. */
       status: () => invoke('control:status', undefined),
+      /** Whether remote control is possible on this machine, and why not. */
+      remote: () => invoke('control:remote', undefined),
     },
     identity: {
       /** Who this desktop is running as (PLAN-1 development identity). */
