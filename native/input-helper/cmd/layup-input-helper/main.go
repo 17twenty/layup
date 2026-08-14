@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/layup-app/layup/native/input-helper/internal/commands"
 	"github.com/layup-app/layup/native/input-helper/internal/inject"
 	"github.com/layup-app/layup/protocol"
 )
@@ -132,48 +133,7 @@ func serve(conn net.Conn, secret string, injector inject.Injector, log *slog.Log
 			continue
 		}
 
-		_ = encoder.Encode(handle(request, injector))
-	}
-}
-
-func handle(request protocol.HelperRequest, injector inject.Injector) protocol.HelperResponse {
-	response := protocol.HelperResponse{
-		Version: protocol.HelperProtocolVersion,
-		ID:      request.ID,
-		OK:      true,
-	}
-
-	switch request.Command {
-	case protocol.HelperCommandHello:
-		return response
-
-	case protocol.HelperCommandCapabilities:
-		payload, err := json.Marshal(injector.Capabilities())
-		if err != nil {
-			return failed(request, protocol.HelperErrMalformed, err)
-		}
-		response.Payload = payload
-		return response
-
-	case protocol.HelperCommandReleaseAll:
-		injector.ReleaseAll()
-		return response
-
-	default:
-		// Injection commands arrive with P1-0503 onwards. Until then the
-		// helper answers honestly rather than pretending to have acted.
-		return failed(request, protocol.HelperErrUnsupported,
-			fmt.Errorf("%s is not implemented on %s yet", request.Command, runtime.GOOS))
-	}
-}
-
-func failed(request protocol.HelperRequest, code string, err error) protocol.HelperResponse {
-	return protocol.HelperResponse{
-		Version: protocol.HelperProtocolVersion,
-		ID:      request.ID,
-		OK:      false,
-		Code:    code,
-		Error:   err.Error(),
+		_ = encoder.Encode(commands.Handle(request, injector))
 	}
 }
 

@@ -22,32 +22,43 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0503
-- completed: 49 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0504
+- completed: 50 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0502 native helper lifecycle
+- task: P1-0503 macOS pointer injection
 - result: done
-- tests: `npm test` (225 passed incl. 6 lifecycle cases), boundary OK, typecheck/lint/fmt green
+- tests: `npm test` (241 passed: 213 desktop + 28 protocol), `make test-go` green (new
+  `internal/commands` and `internal/inject` suites), typecheck/lint/fmt green
 - evidence:
-  - `helper-supervisor.ts` owns the helper's lifetime: started with a **fresh secret and socket
-    per run**, so a secret captured from a dead process is worthless
-    (`gives the helper a fresh secret and socket, never a fixed one`)
-  - a crash is detected and restarted with new credentials; a crash *loop* stops after a bounded
-    number of attempts and says "the input helper keeps crashing; remote control is unavailable"
-    rather than restarting forever
-  - the helper exits with the desktop (`before-quit`), and a deliberate stop is not treated as a
-    crash, so nothing respawns
-  - the desktop stays usable when the helper cannot be reached at all - remote control is simply
-    unavailable
-  - capability state reaches the renderer as a *description* (`control:remote` -> helperRunning,
-    pointer, keyboard, platform, detail), never a handle, socket, secret or command
-  - the isolation guard now checks capability rather than vocabulary: no helper command name,
-    socket, secret or client reference in the preload/IPC surface, and no `helper*` IPC channel
-  - 6 lifecycle tests with an injected spawn; log lines carry capability flags only
+  - macOS injection is real CoreGraphics event posting (`inject_darwin.go`, cgo): move,
+    left/right/middle press and release, and line-wise wheel
+  - a move while a button is held posts a **drag** event, not a move - otherwise the target
+    application drops the drag halfway
+  - Accessibility is checked explicitly with `AXIsProcessTrusted`, because without it
+    `CGEventPost` silently does nothing: the worst possible failure, where the guest clicks
+    and the presenter's machine ignores it with no explanation
+  - a missing permission produces an actionable state rather than a silent no-op:
+    "macOS Accessibility permission is missing: open Privacy & Security -> Accessibility,
+    tick Layup, then restart it." It reaches the renderer as a description over
+    `control:remote`, never as a handle
+  - `TestWithoutPermissionNothingIsPosted` runs on this machine (which has no Accessibility
+    grant) and proves move and click return errors instead of pretending
+  - routing and payload validation moved to `internal/commands`, testable without a socket,
+    without a platform and without moving anybody's real mouse: unknown button, non-finite
+    coordinates, unknown JSON fields, absent payload and a runaway wheel delta are all
+    rejected *before* the OS is touched
+  - a `CGO_ENABLED=0` build still produces a working helper (`inject_darwin_nocgo.go`) that
+    honestly reports it cannot inject, instead of failing to build or lying
+  - the real-injection proof exists but is **opt-in**: `LAYUP_ALLOW_REAL_INPUT=1` moves the
+    pointer, posts a middle-click (which macOS applications ignore), verifies the window
+    server actually saw it via `CGEventSourceButtonState`, and puts the pointer back. A test
+    suite that silently drives somebody's mouse is worse than an untested code path
+  - keyboard injection is not claimed: `Capabilities().keyboard` is false and `Key` refuses
+    until P1-0504
 
 ## Recent runs
 
@@ -56,6 +67,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0408 done - presenter drawing safety toggle
 - P1-0501 done - native helper protocol and authentication
 - P1-0502 done - native helper lifecycle
+- P1-0503 done - macOS pointer injection
 
 ## Evidence index
 
@@ -67,6 +79,8 @@ because it is rewritten in PLAN-1.5.
 | Click -> accept -> one shared layup | `make test-e2e` | `test/e2e/invite-flow.test.mjs` |
 | Two clients see each other without polling | `make test-smoke` | `src/core/presence.smoke.test.ts` |
 | Latency harness and schema | `make bench` | `benchmarks/results/**.json` |
+| Helper injects real macOS input | `LAYUP_ALLOW_REAL_INPUT=1 go test ./internal/inject` (opt-in) | `inject_darwin_test.go` |
+| Bad input payloads never reach the OS | `make test-go` | `internal/commands/commands_test.go` |
 
 ## Blocked
 

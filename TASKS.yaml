@@ -1621,7 +1621,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: macOS pointer injection
-  status: todo
+  status: done
   goal: Implement macOS pointer move/click/right-click/wheel primitives in helper with required Accessibility permission handling.
   user_visible_behaviour: Implement macOS pointer move/click/right-click/wheel primitives in helper with required Accessibility
     permission handling.
