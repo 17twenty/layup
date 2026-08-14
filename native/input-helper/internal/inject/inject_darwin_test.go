@@ -101,6 +101,30 @@ func TestKeyMapCoversTypingAndShortcuts(t *testing.T) {
 	}
 }
 
+func TestBothPlatformsSpeakTheSameKeyVocabulary(t *testing.T) {
+	// One protocol, two platforms: a guest on macOS controlling Windows sends
+	// the same KeyboardEvent.code either way, so a key either platform cannot
+	// map is a key that silently stops working across the pair.
+	for code := range darwinKeyCodes {
+		if _, _, known := windowsScanCode(code); !known {
+			// Keys with no PC equivalent are the exception, not a gap.
+			if code == "NumpadEqual" {
+				continue
+			}
+			t.Errorf("%s is mapped on macOS but not on Windows", code)
+		}
+	}
+	for code := range windowsScanCodes {
+		if _, known := darwinKeyCodes[code]; !known {
+			// Keys with no Mac equivalent.
+			if code == "NumLock" || code == "ScrollLock" {
+				continue
+			}
+			t.Errorf("%s is mapped on Windows but not on macOS", code)
+		}
+	}
+}
+
 func TestModifiersAreCarriedAsFlagsNotJustKeystrokes(t *testing.T) {
 	// Cmd+C is a *flag* on the 'c' event. Posting three plain key events would
 	// arrive as a bare 'c' - which, in an editor, replaces the selection.

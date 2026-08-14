@@ -1710,7 +1710,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Windows keyboard injection
-  status: todo
+  status: done
   goal: Implement Windows keyboard/modifier primitives with key-up cleanup.
   user_visible_behaviour: Implement Windows keyboard/modifier primitives with key-up cleanup.
   depends_on:

@@ -1,6 +1,6 @@
 //go:build windows
 
-// Windows pointer injection via SendInput (ADR-0006).
+// Windows pointer and keyboard injection via SendInput (ADR-0006).
 //
 // # Integrity boundary
 //
@@ -41,7 +41,8 @@ var (
 
 // Win32 constants.
 const (
-	inputMouse = 0
+	inputMouse    = 0
+	inputKeyboard = 1
 
 	eventMouseMove       = 0x0001
 	eventLeftDown        = 0x0002
@@ -54,6 +55,10 @@ const (
 	eventHorizontalWheel = 0x1000
 	eventAbsolute        = 0x8000
 	eventVirtualDesk     = 0x4000
+
+	keyEventExtended = 0x0001
+	keyEventKeyUp    = 0x0002
+	keyEventScanCode = 0x0008
 
 	// One notch of a wheel, in the units SendInput expects.
 	wheelDelta = 120
@@ -76,21 +81,45 @@ type mouseInput struct {
 	extraInfo uintptr
 }
 
-// input mirrors Win32's INPUT union, sized for its largest member (the mouse
-// variant). Go's alignment rules give exactly the 40 bytes SendInput expects on
-// amd64; a mismatched size makes every call fail, so the size is asserted at
-// compile time below.
+// keyboardInput mirrors Win32's KEYBDINPUT.
+type keyboardInput struct {
+	virtualKey uint16
+	scanCode   uint16
+	flags      uint32
+	time       uint32
+	extraInfo  uintptr
+}
+
+// input mirrors Win32's INPUT: a type tag and a union sized by its largest
+// member, the mouse variant.
+//
+// SendInput is given sizeof(INPUT) and rejects anything else, so the sizes are
+// asserted at compile time. A struct that is the wrong size makes every
+// injection fail, and that is not something to discover on somebody else's
+// machine.
 type input struct {
 	inputType uint32
 	_         uint32 // union alignment on 64-bit
-	mouse     mouseInput
+	union     [32]byte
 }
 
-var _ [40]byte = [unsafe.Sizeof(input{})]byte{}
+var (
+	_ [40]byte = [unsafe.Sizeof(input{})]byte{}
+	_ [32]byte = [unsafe.Sizeof(mouseInput{})]byte{}
+	_ [24]byte = [unsafe.Sizeof(keyboardInput{})]byte{}
+)
+
+func (i *input) mouse() *mouseInput { return (*mouseInput)(unsafe.Pointer(&i.union)) }
+
+func (i *input) keyboard() *keyboardInput { return (*keyboardInput)(unsafe.Pointer(&i.union)) }
 
 type windowsInjector struct {
 	mu   sync.Mutex
 	held map[Button]bool
+	// heldKeys is what the guest is holding down, in press order, so a dropped
+	// connection can always let go (SPEC.md §13.3). Key codes live in memory
+	// only - never logged, never persisted (SPEC.md §13.4).
+	heldKeys []string
 }
 
 // New returns the Windows injector.
@@ -104,8 +133,7 @@ func (w *windowsInjector) Capabilities() protocol.HelperCapabilities {
 		PointerMove:   true,
 		PointerButton: true,
 		PointerWheel:  true,
-		// Keyboard injection arrives in P1-0506.
-		Keyboard: false,
+		Keyboard:      true,
 		Detail: "Windows ignores injected input aimed at an elevated window, and at the " +
 			"secure desktop (UAC prompts, the lock screen) it is blocked outright. Remote " +
 			"control pauses while one of those is focused.",
@@ -115,7 +143,7 @@ func (w *windowsInjector) Capabilities() protocol.HelperCapabilities {
 func (w *windowsInjector) MoveTo(x, y float64) error {
 	dx, dy := absoluteCoordinates(x, y, virtualScreen())
 	event := mouseEvent(eventMouseMove|eventAbsolute|eventVirtualDesk, 0)
-	event.mouse.dx, event.mouse.dy = dx, dy
+	event.mouse().dx, event.mouse().dy = dx, dy
 	return w.send(event)
 }
 
@@ -155,8 +183,57 @@ func (w *windowsInjector) Wheel(deltaX, deltaY int) error {
 	return nil
 }
 
-func (w *windowsInjector) Key(string, bool) error {
-	return fmt.Errorf("keyboard injection is not implemented yet (P1-0506)")
+func (w *windowsInjector) Key(code string, down bool) error {
+	scan, extended, known := windowsScanCode(code)
+	if !known {
+		// Refuse rather than guess: a wrong scan code types the wrong thing
+		// into somebody else's machine.
+		return fmt.Errorf("unknown key %q", code)
+	}
+
+	// Injecting by scan code rather than virtual key leaves the character to
+	// the presenter's own layout, which is what somebody watching their own
+	// screen expects. Unlike macOS, no modifier flag has to be re-applied: a
+	// posted Shift-down changes the real keyboard state, so the key that
+	// follows is shifted by Windows itself.
+	event := input{inputType: inputKeyboard}
+	keyboard := event.keyboard()
+	keyboard.scanCode = scan
+	keyboard.flags = keyEventScanCode
+	if extended {
+		keyboard.flags |= keyEventExtended
+	}
+	if !down {
+		keyboard.flags |= keyEventKeyUp
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if err := w.send(event); err != nil {
+		return err
+	}
+	w.trackKey(code, down)
+	return nil
+}
+
+// trackKey records what is held. Latching keys are not tracked: "releasing"
+// Caps Lock on disconnect would switch it on.
+func (w *windowsInjector) trackKey(code string, down bool) {
+	if windowsLatchingKeys[code] {
+		return
+	}
+	for index, held := range w.heldKeys {
+		if held == code {
+			if !down {
+				w.heldKeys = append(w.heldKeys[:index], w.heldKeys[index+1:]...)
+			}
+			return
+		}
+	}
+	if down {
+		w.heldKeys = append(w.heldKeys, code)
+	}
 }
 
 func (w *windowsInjector) ReleaseAll() int {
@@ -165,9 +242,20 @@ func (w *windowsInjector) ReleaseAll() int {
 	for button := range w.held {
 		buttons = append(buttons, button)
 	}
+	// Reverse press order, so a modifier held over another key is released
+	// last and no intermediate release lands as a bare keystroke.
+	keys := make([]string, 0, len(w.heldKeys))
+	for index := len(w.heldKeys) - 1; index >= 0; index-- {
+		keys = append(keys, w.heldKeys[index])
+	}
 	w.mu.Unlock()
 
 	released := 0
+	for _, code := range keys {
+		if err := w.Key(code, false); err == nil {
+			released++
+		}
+	}
 	for _, button := range buttons {
 		if err := w.Button(button, false); err == nil {
 			released++
@@ -178,8 +266,8 @@ func (w *windowsInjector) ReleaseAll() int {
 
 func mouseEvent(flags, data uint32) input {
 	event := input{inputType: inputMouse}
-	event.mouse.flags = flags
-	event.mouse.mouseData = data
+	event.mouse().flags = flags
+	event.mouse().mouseData = data
 	return event
 }
 

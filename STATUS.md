@@ -22,37 +22,39 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0506
-- completed: 52 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0507
+- completed: 53 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0505 Windows pointer injection
+- task: P1-0506 Windows keyboard injection
 - result: done
-- tests: `make test-go` green (new coordinate suite), `GOOS=windows go build ./...` and
-  `go vet` clean, `npm test` 242 passed, typecheck/lint/fmt green
+- tests: `make test-go` green (new scan-code suite), `GOOS=windows go build ./...` and
+  `go vet` clean, fmt/lint green
 - evidence:
-  - Windows pointer move, left/right/middle click and both wheel axes go through `SendInput`
-  - the Win32 API is called through `syscall` rather than cgo, so the helper still
-    cross-compiles for Windows from this macOS build host - verified with
-    `GOOS=windows go build ./...` and `GOOS=windows go vet ./...`
-  - `INPUT`'s size is asserted at compile time: a struct that is the wrong size makes every
-    injection fail silently, and that is not something to discover on somebody else's machine
-  - the integrity boundary is documented at the top of `inject_windows.go` and surfaced in
-    capabilities: Windows ignores injected input aimed at an elevated window, and blocks it
-    outright on the secure desktop (UAC prompts, lock screen, Ctrl+Alt+Del). It cannot be
-    worked around, and working around it would mean shipping something that behaves like
-    malware - so `ERROR_ACCESS_DENIED` becomes a sentence a person can act on rather than a
-    guest clicking into a void
-  - the one part of the Windows path that is pure arithmetic - absolute coordinate
-    normalisation - is separated into `coords.go` and tested on this host: exact corners
-    (65535 must be the *last* pixel, or an edge click lands on the wrong monitor), a negative
-    virtual-desktop origin (a monitor placed to the left of the primary one), clamping instead
-    of dropping when geometry changes mid-session, and a zero-sized screen during display
-    reconfiguration
-  - no renderer injection path exists: the existing isolation guard still passes
+  - Windows keys are injected by **scan code** (`KEYEVENTF_SCANCODE`), not virtual key, so the
+    presenter's own layout decides which character appears - a guest on a US keyboard and a
+    presenter on a German one both get the key they can see
+  - extended keys carry `KEYEVENTF_EXTENDEDKEY`. ArrowUp and Numpad8 are both scan code
+    `0x48`, so without the flag an arrow key types an 8; the same trap on Enter/NumpadEnter,
+    Slash/NumpadDivide, the right-hand modifiers, Home/Numpad7 and Delete/NumpadDecimal is
+    covered by a test
+  - the scan-code table deliberately lives in `scancodes.go`, not `*_windows.go`: a
+    `_windows.go` file only compiles on Windows, which would leave the part most likely to
+    contain a typo unchecked from this build host
+  - both platforms are held to **one key vocabulary**: a test fails if a `KeyboardEvent.code`
+    is mapped on macOS but not Windows, or the reverse, apart from keys that genuinely have no
+    equivalent (NumpadEqual on PC, NumLock/ScrollLock on Mac). Otherwise a key silently stops
+    working when the pair is mixed
+  - key-up cleanup matches macOS: held keys tracked in press order, released in reverse on
+    disconnect, and latching keys (Caps/Num/Scroll Lock) never tracked - "releasing" Caps Lock
+    would switch it on
+  - `INPUT` is now a proper tagged union with both variants, and the sizes of all three
+    structs are asserted at compile time
+  - unlike macOS, no modifier flag is re-applied per event: a posted Shift-down changes the
+    real keyboard state, so Windows shifts the key that follows
 
 ## Recent runs
 
@@ -64,6 +66,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0503 done - macOS pointer injection
 - P1-0504 done - macOS keyboard injection
 - P1-0505 done - Windows pointer injection
+- P1-0506 done - Windows keyboard injection
 
 ## Evidence index
 
@@ -78,6 +81,7 @@ because it is rewritten in PLAN-1.5.
 | Helper injects real macOS input | `LAYUP_ALLOW_REAL_INPUT=1 go test ./internal/inject` (opt-in) | `inject_darwin_test.go` |
 | Bad input payloads never reach the OS | `make test-go` | `internal/commands/commands_test.go` |
 | Typed content is never logged | `npm test` | `never writes typed content to its log` |
+| One key vocabulary across platforms | `make test-go` | `TestBothPlatformsSpeakTheSameKeyVocabulary` |
 
 ## Blocked
 
