@@ -1406,7 +1406,7 @@ tasks:
   plan: PLAN-1
   phase: E
   title: Participant cursor identity
-  status: todo
+  status: done
   goal: Associate cursor overlay with membership identity/name and stable per-session visual differentiation.
   user_visible_behaviour: Associate cursor overlay with membership identity/name and stable per-session visual differentiation.
   depends_on:
