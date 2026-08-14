@@ -244,6 +244,41 @@ export class ControlRequestError extends Error {
   }
 }
 
+/** The active shared desktop, as the control plane describes it. */
+export interface ScreenShare {
+  id: string;
+  presenterMembershipId: string;
+  presenterName?: string;
+  sourceId?: string;
+  allowDrawing: boolean;
+  allowPointer: boolean;
+  allowKeyboard: boolean;
+}
+
+export interface ShareRequestAck {
+  layupId: string;
+  shareId: string;
+  askedByMembershipId: string;
+  askedByName?: string;
+}
+
+const screenShareShape = isObject({
+  id: isString,
+  presenterMembershipId: isString,
+  presenterName: optional(isString),
+  sourceId: optional(isString),
+  allowDrawing: isBoolean,
+  allowPointer: isBoolean,
+  allowKeyboard: isBoolean,
+});
+
+const shareRequestShape = isObject({
+  layupId: isString,
+  shareId: isString,
+  askedByMembershipId: isString,
+  askedByName: optional(isString),
+});
+
 export interface ControlClient {
   readonly baseUrl: string;
   /** Health check plus protocol compatibility, never throwing for the caller. */
@@ -282,6 +317,17 @@ export interface ControlClient {
   declineRequest(requestId: string): Promise<JoinRequest>;
   /** Cancels a request you sent. */
   cancelRequest(requestId: string): Promise<JoinRequest>;
+  /** Starts sharing a screen, taking over from whoever was presenting. */
+  startShare(layupId: string, sourceId: string): Promise<ScreenShare>;
+  /** Stops your own share. The layup carries on without one. */
+  stopShare(layupId: string): Promise<void>;
+  /**
+   * Asks the presenter of an advertised session for the screen.
+   *
+   * This exists only where taking it is refused. Everywhere else you simply
+   * share, and the previous presenter is told (SPEC.md §7.2).
+   */
+  requestShare(layupId: string): Promise<ShareRequestAck>;
 }
 
 export function createControlClient(options: ControlClientOptions): ControlClient {
@@ -445,6 +491,25 @@ export function createControlClient(options: ControlClientOptions): ControlClien
     async turnCredentials(): Promise<IceConfiguration> {
       const envelope = await this.apiGet<{ payload?: unknown }>('/api/turn');
       return iceConfigurationShape(envelope.payload, 'turn.credentials');
+    },
+
+    async startShare(layupId: string, sourceId: string): Promise<ScreenShare> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/layups/${encodeURIComponent(layupId)}/share`,
+        { sourceId },
+      );
+      return screenShareShape(envelope.payload, 'screen.started');
+    },
+
+    async stopShare(layupId: string): Promise<void> {
+      await this.apiPost(`/api/layups/${encodeURIComponent(layupId)}/share/stop`);
+    },
+
+    async requestShare(layupId: string): Promise<ShareRequestAck> {
+      const envelope = await this.apiPost<{ payload?: unknown }>(
+        `/api/layups/${encodeURIComponent(layupId)}/share/request`,
+      );
+      return shareRequestShape(envelope.payload, 'screen.share_request');
     },
 
     async createLink(layupId: string): Promise<InvitationLink> {

@@ -12,6 +12,12 @@ import (
 // approval, and the previous presenter is simply told (SPEC.md §7.2).
 const TypeScreenTakeover = "screen.takeover"
 
+// TypeScreenShareRequest asks the presenter of an advertised session for the
+// screen. It is the only place in screen sharing where anybody asks for
+// anything: everywhere else you simply take it and the previous presenter is
+// told (SPEC.md §7.2).
+const TypeScreenShareRequest = "screen.share_request"
+
 // ScreenShareDTO is the wire shape of the active shared desktop.
 type ScreenShareDTO struct {
 	ID                    string `json:"id"`
@@ -96,6 +102,51 @@ func (s *Server) handleStopShare(w http.ResponseWriter, r *http.Request) {
 	s.afterLayupChange(r.Context(), after, identity.User)
 	// The layup carries on as a valid audio/video space (SPEC.md §7.1).
 	s.writeEnvelope(w, r, "screen.stopped", s.layupDTO(after))
+}
+
+func (s *Server) handleRequestShare(w http.ResponseWriter, r *http.Request) {
+	identity, layupID, view, ok := s.shareContext(w, r)
+	if !ok {
+		return
+	}
+	membershipID := membershipOf(view, identity.User.ID)
+	if membershipID == "" {
+		s.writeAPIError(w, r, http.StatusConflict, "conflict", "you are not in this layup")
+		return
+	}
+
+	request, err := s.layups.RequestScreenShare(r.Context(), layupID, membershipID)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+
+	// The presenter is asked, not overruled: nothing changes until they act.
+	askedByName := ""
+	var presenterUser domain.UserID
+	for _, participant := range view.Participants {
+		if participant.MembershipID == request.PresenterMembershipID {
+			presenterUser = participant.UserID
+		}
+		if participant.MembershipID == membershipID {
+			if user, err := s.directory.UserByID(participant.UserID); err == nil {
+				askedByName = user.DisplayName
+			}
+		}
+	}
+
+	payload := map[string]string{
+		"layupId":             string(layupID),
+		"shareId":             string(request.Current.ID),
+		"askedByMembershipId": string(membershipID),
+		"askedByName":         askedByName,
+	}
+	if presenterUser != "" {
+		if env, err := protocol.NewEnvelope(TypeScreenShareRequest, payload); err == nil {
+			s.hub.SendToUser(presenterUser, env)
+		}
+	}
+	s.writeEnvelope(w, r, TypeScreenShareRequest, payload)
 }
 
 // shareContext resolves and authorises the common part of both handlers.

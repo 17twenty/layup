@@ -38,6 +38,9 @@ function harness(states: ControlConnectionState[]) {
     listRequests: unusedHere,
     acceptRequest: unusedHere,
     declineRequest: unusedHere,
+    startShare: unusedHere,
+    stopShare: unusedHere,
+    requestShare: unusedHere,
     cancelRequest: unusedHere,
     me: async () => ({
       user: { id: 'usr_devkarlx', displayName: 'Karl' },

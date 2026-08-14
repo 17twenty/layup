@@ -2015,7 +2015,7 @@ tasks:
   plan: PLAN-1
   phase: G
   title: Private versus open screen takeover
-  status: todo
+  status: done
   goal: 'Implement single-screen takeover semantics: collaborative/private participant can take over with notice; advertised/open
     participant requests to share.'
   user_visible_behaviour: 'Implement single-screen takeover semantics: collaborative/private participant can take over with

@@ -22,37 +22,39 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0601
-- completed: 61 of 68 (phase F complete) (phases A, B and C complete; D in progress)
+- next task: P1-0602
+- completed: 62 of 68 (phase F complete) (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0514 editor remote-control integration test
+- task: P1-0601 private versus open screen takeover
 - result: done
-- tests: `make test-e2e` 8 passed (including the new `remote-editor.test.mjs`), `make check` green
+- tests: `make test-go` green (new domain and HTTP suites), `make test-e2e` 11 passed
+  (new `screen-takeover.test.mjs`), `npm test` 343 passed, `make check` green
 - evidence:
-  - one scenario end to end: grant, click into an editor, type, select by dragging, scroll, use
-    Cmd+A, then emergency-revoke and prove the editor stops changing
-  - **everything this project owns is real in that test** - the guest's sender, the JSON on the
-    wire, the presenter's guard, the pointer and keyboard leases and the injection router are
-    the actual modules, imported rather than reimplemented. A test that reimplements what it is
-    testing proves only that the test agrees with itself
-  - `scripts/node-ts-hook.mjs` is what makes that possible from a plain `node --test` file: it
-    resolves `@layup/protocol` to the built binding and retries bundler-style relative imports
-    as `.ts`. Two gaps, nothing else
-  - the editor is a **model**, and the test says so: driving a real editor needs OS injection,
-    which needs an Accessibility grant no unattended runner has
-  - the second half closes as much of that gap as this machine allows: the same command stream
-    goes to the **real helper binary** over a real socket with real HMAC authentication. Where
-    the platform permits injection every command is injected; where it does not, the helper
-    refuses with `not_permitted` and an actionable explanation, which the test prints. A
-    malformed command is refused either way
-  - a drag turns out to be a press and a release with coordinates, not a stream of moves: there
-    is no `pointer.move` message, because cursor movement is an overlay that must never move
-    the OS pointer. The platform layer posts the reposition as a drag event while a button is
-    held (macOS `kCGEventLeftMouseDragged`)
+  - two rules that look similar and are not. In a collaborative layup you **take** the screen -
+    no approval dialog, because asking a colleague for permission to show them something is not
+    how people work - and the previous presenter is told. In an advertised, organisation-open
+    session you **ask**, because an audience member cannot take the screen out from under a
+    talk mid-sentence
+  - `RequestScreenShare` exists **only** where taking is refused: asking with nobody presenting,
+    or in a layup where you could just take it, is a conflict rather than a polite no-op. The
+    alternative teaches people to ask for things they already have
+  - asking changes nothing. A test asserts the share is untouched afterwards and that the asker
+    still cannot start one; the presenter hands over by stopping, and then anyone may share
+  - the presenter hears about it: `screen.share_request` is pushed to them with who is asking
+  - the desktop half is `share-store.ts`: one share or none, plus the **notice**. A takeover
+    produces a plain sentence ("Karl is sharing their screen now.") on the machine that lost the
+    screen, because a takeover that needs no approval only works if the person who lost it finds
+    out at once. Notices fade on their own - one that has to be dismissed is a dialog wearing a
+    disguise
+  - **no multi-screen state is possible**: the e2e asserts both participants see the same single
+    share after a takeover, and the domain suite counts live shares after three people take it
+    in turn
+  - the same e2e file also covers P1-0602's continuity ground (stop, and presenter-leaves, both
+    leave the layup and its memberships standing); P1-0602 adds the desktop-side half
 
 ## Recent runs
 
@@ -73,6 +75,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0512 done - local-input priority and stuck-input cleanup
 - P1-0513 done - emergency revoke
 - P1-0514 done - editor remote-control integration test
+- P1-0601 done - private versus open screen takeover
 
 ## Evidence index
 
@@ -93,6 +96,7 @@ because it is rewritten in PLAN-1.5.
 | Local input preempts remote control | `npm test` | `src/main/local-input-priority.test.ts` |
 | One action stops all remote control | `npm test` | `src/main/emergency-revoke.test.ts` |
 | A remote participant can drive an editor | `make test-e2e` | `test/e2e/remote-editor.test.mjs` |
+| One shared desktop, taken or asked for | `make test-e2e` | `test/e2e/screen-takeover.test.mjs` |
 
 ## Blocked
 

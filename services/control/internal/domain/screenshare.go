@@ -138,6 +138,62 @@ func (s *LayupService) StartScreenShare(ctx context.Context, in StartShareInput)
 	return TakeoverResult{Share: share, Replaced: replaced}, nil
 }
 
+// ShareRequest is one participant asking the presenter for the screen.
+//
+// It exists only for the case the takeover rule refuses: an advertised session
+// where somebody who is neither the creator nor the presenter wants to share
+// (SPEC.md §7.2). Everywhere else, asking would be permission theatre - in a
+// private layup you simply take the screen and the previous presenter is told.
+type ShareRequest struct {
+	Current ScreenShare
+	// PresenterMembershipID is who has to decide.
+	PresenterMembershipID MembershipID
+}
+
+// RequestScreenShare records that a participant would like to present.
+//
+// It changes nothing: the presenter is asked, not overruled. The caller
+// notifies them. If the asker could simply start sharing, this refuses rather
+// than teaching people to ask for something they already have.
+func (s *LayupService) RequestScreenShare(ctx context.Context, layupID LayupID, actor MembershipID) (ShareRequest, error) {
+	layup, err := s.repo.GetLayup(layupID)
+	if err != nil {
+		return ShareRequest{}, err
+	}
+	if !layup.Active() {
+		return ShareRequest{}, fmt.Errorf("%w: layup %q has ended", ErrConflict, layupID)
+	}
+
+	membership, err := s.repo.GetMembership(actor)
+	if err != nil {
+		return ShareRequest{}, err
+	}
+	if membership.LayupID != layupID || !membership.Active() {
+		return ShareRequest{}, fmt.Errorf("%w: you are not in that layup", ErrForbidden)
+	}
+
+	current, err := s.ActiveScreenShare(ctx, layupID)
+	if err != nil {
+		return ShareRequest{}, err
+	}
+	if current == nil {
+		return ShareRequest{}, fmt.Errorf("%w: nobody is presenting, so you can just share", ErrConflict)
+	}
+	if current.PresenterMembershipID == actor {
+		return ShareRequest{}, fmt.Errorf("%w: you are already presenting", ErrConflict)
+	}
+	if err := s.mayTakeOver(layup, *current, actor); err == nil {
+		return ShareRequest{}, fmt.Errorf("%w: you can take the screen without asking", ErrConflict)
+	}
+
+	s.log.InfoContext(ctx, "participant asked to share",
+		"layupId", string(layupID),
+		"askedBy", string(actor),
+		"presenterMembershipId", string(current.PresenterMembershipID),
+	)
+	return ShareRequest{Current: *current, PresenterMembershipID: current.PresenterMembershipID}, nil
+}
+
 // mayTakeOver applies the visibility-dependent takeover rule.
 func (s *LayupService) mayTakeOver(layup Layup, current ScreenShare, actor MembershipID) error {
 	if !layup.Visibility.Open() {
