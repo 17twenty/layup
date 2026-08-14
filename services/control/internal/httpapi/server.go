@@ -143,6 +143,8 @@ func (s *Server) routes() {
 	authed.HandleFunc("POST /api/layups/{id}/leave", s.handleLeaveLayup)
 	authed.HandleFunc("POST /api/layups/{id}/share", s.handleStartShare)
 	authed.HandleFunc("POST /api/layups/{id}/share/stop", s.handleStopShare)
+	authed.HandleFunc("POST /api/layups/{id}/share/settings", s.handleShareSettings)
+	authed.HandleFunc("GET /api/layups/{id}/share/drawing", s.handleDrawingCheck)
 	authed.HandleFunc("POST /api/layups/{id}/link", s.handleCreateLink)
 	authed.HandleFunc("POST /api/links/{token}/join", s.handleJoinByLink)
 	authed.HandleFunc("GET /api/turn", s.handleTurnCredentials)

@@ -1494,7 +1494,7 @@ tasks:
   plan: PLAN-1
   phase: E
   title: Presenter drawing safety toggle
-  status: todo
+  status: done
   goal: Add presenter-owned allow-drawing state and enforce it at receive/application boundary.
   user_visible_behaviour: Add presenter-owned allow-drawing state and enforce it at receive/application boundary.
   depends_on:

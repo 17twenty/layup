@@ -239,3 +239,78 @@ func (s *LayupService) EndSharesForMembership(ctx context.Context, membershipID 
 	}
 	return nil
 }
+
+// ShareSettings are the presenter's safety switches for their own machine.
+// They are rights over your own screen, not moderation rights (ADR-0005).
+type ShareSettings struct {
+	AllowDrawing  *bool
+	AllowPointer  *bool
+	AllowKeyboard *bool
+}
+
+// UpdateShareSettings changes the active share's permissions.
+//
+// Only the presenter may change them, and the change applies immediately: it is
+// enforced here, so a participant whose drawing is switched off is *rejected*
+// rather than merely hidden in someone's UI (SPEC.md §7.3).
+func (s *LayupService) UpdateShareSettings(
+	ctx context.Context,
+	layupID LayupID,
+	actor MembershipID,
+	settings ShareSettings,
+) (ScreenShare, error) {
+	current, err := s.ActiveScreenShare(ctx, layupID)
+	if err != nil {
+		return ScreenShare{}, err
+	}
+	if current == nil {
+		return ScreenShare{}, fmt.Errorf("%w: nobody is sharing", ErrConflict)
+	}
+	if current.PresenterMembershipID != actor {
+		return ScreenShare{}, fmt.Errorf("%w: only the presenter controls their own screen", ErrForbidden)
+	}
+
+	if settings.AllowDrawing != nil {
+		current.AllowDrawing = *settings.AllowDrawing
+	}
+	if settings.AllowPointer != nil {
+		current.AllowPointer = *settings.AllowPointer
+	}
+	if settings.AllowKeyboard != nil {
+		current.AllowKeyboard = *settings.AllowKeyboard
+	}
+	if err := s.repo.SaveScreenShare(*current); err != nil {
+		return ScreenShare{}, err
+	}
+
+	s.log.InfoContext(ctx, "presenter changed share permissions",
+		"layupId", string(layupID),
+		"shareId", string(current.ID),
+		"allowDrawing", current.AllowDrawing,
+		"allowPointer", current.AllowPointer,
+		"allowKeyboard", current.AllowKeyboard,
+	)
+	return *current, nil
+}
+
+// MayDraw reports whether a membership is currently allowed to draw on the
+// active share. A non-participant, or anyone at all while drawing is off, is
+// not - including the presenter's own peers who may not have noticed yet.
+func (s *LayupService) MayDraw(ctx context.Context, layupID LayupID, actor MembershipID) (bool, error) {
+	current, err := s.ActiveScreenShare(ctx, layupID)
+	if err != nil || current == nil {
+		return false, err
+	}
+	// The presenter may always annotate their own screen.
+	if current.PresenterMembershipID == actor {
+		return true, nil
+	}
+	if !current.AllowDrawing {
+		return false, nil
+	}
+	membership, err := s.repo.GetMembership(actor)
+	if err != nil {
+		return false, nil
+	}
+	return membership.LayupID == layupID && membership.Active(), nil
+}

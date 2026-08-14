@@ -22,36 +22,37 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0408
-- completed: 46 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0501
+- completed: 47 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0407 drawing overlay
+- task: P1-0408 presenter drawing safety toggle
 - result: done
-- tests: `npm test` (229 passed incl. 7 overlay cases), typecheck/lint green
+- tests: `make test-go` (4 toggle cases), `make test-e2e` (8 scenarios incl. 2 new), fmt green
 - evidence:
-  - `DrawingOverlay` renders strokes as SVG paths in a normalised `0 0 1 1` viewBox, so they
-    track the shared screen at any rendered size **with no resize handling at all**
-  - annotations never alter encoded pixels: they are vectors on an overlay above the video, so
-    the presenter's encoder never sees them and stopping annotation leaves the share untouched
-  - a stroke is coloured by its author, matching that participant's cursor colour
-  - a single-point stroke still renders as a visible dot rather than nothing
-  - a stroke with a lost message is marked `data-gap="true"` rather than quietly drawing
-    through the missing section
-  - clearing is a protocol action the overlay reflects: after `stroke.clear` the overlay is
-    empty (driven through the real assembler, not a stub)
-  - the overlay is `aria-hidden` and `pointer-events: none`, so it cannot steal a click
+  - the switch lives in the domain (`UpdateShareSettings`, `MayDraw`), so it is **enforced, not
+    hidden**: a viewer whose drawing is switched off is refused by the server even if their
+    client ignores the toggle or has not received it yet
+  - only the presenter may change the switches on their own screen (403 otherwise) - safety
+    rights over your own machine, not moderation rights (ADR-0005) - and the presenter may
+    always annotate their own screen
+  - the change is pushed to every participant as `screen.settings` and also rides on layup
+    state, so a late joiner learns it too
+  - re-enabling permits new strokes immediately
+  - changing settings with nobody sharing is a 409 rather than a silent no-op
+  - e2e over the real wire with no application code imported (`make test-e2e`, 2 new scenarios):
+    allowed -> disabled -> **403 for the viewer** -> re-enabled -> allowed
 
 ## Recent runs
 
-- P1-0403 done - cursor sender coalescing
 - P1-0404 done - remote cursor overlay and interpolation
 - P1-0405 done - participant cursor identity
 - P1-0406 done - drawing protocol
 - P1-0407 done - drawing overlay
+- P1-0408 done - presenter drawing safety toggle
 
 ## Evidence index
 
