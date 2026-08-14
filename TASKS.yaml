@@ -1805,7 +1805,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Remote click and wheel path
-  status: todo
+  status: done
   goal: Map synthetic cursor coordinates to presenter screen and inject permitted click/right-click/double-click/wheel actions.
   user_visible_behaviour: Map synthetic cursor coordinates to presenter screen and inject permitted click/right-click/double-click/wheel
     actions.

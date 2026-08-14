@@ -22,35 +22,38 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0509
-- completed: 55 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0510
+- completed: 56 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0508 presenter remote-control grants
+- task: P1-0509 remote click and wheel path
 - result: done
-- tests: `npm test` 281 passed (248 desktop + 33 protocol), `make check` green
+- tests: `npm test` 295 passed (262 desktop + 33 protocol), `make check` green
 - evidence:
-  - `remote-control.ts` holds the presenter's two levels of decision: a switch per scope
-    ("Mouse + keyboard [ON/OFF]") and a grant per participant. Both are off to begin with -
-    remote control is never the default state of somebody's machine
-  - switching a scope off withdraws every grant in it **locally first**, then announces the
-    revoke, then releases anything held. A participant who never receives the message is
-    still stopped, because the guard is what decides
-  - one participant can be revoked without touching the others, and `revokeAll()` clears
-    everybody in one step - the shape the emergency stop will use in P1-0513
-  - the guard gained an `allowsScope` check, so a scope that is switched off refuses actions
-    even if a grant somehow survived the bookkeeping (`scope-off`)
-  - **no creator or moderator authority anywhere**: the only question asked is "is this my
-    screen?" A test asserts the panel's rendered text contains no creator, moderator or admin
-    concept at all (ADR-0005)
-  - `RemoteControlPanel.tsx` states plainly who can control the machine, names them, and keeps
-    "Stop all control" on screen the whole time anybody holds it - revoking never means finding
-    the right participant first. A scope that is off disables its grant buttons and says why
-  - the control service already owned the authoritative `allowPointer`/`allowKeyboard` switches
-    from P1-0408; this is the presenter-side half that acts on them
+  - `pointer-mapping.ts` turns a normalised position into a presenter pixel, and is kept
+    separate because it is where a wrong assumption puts a click somewhere nobody asked for:
+    a quarter across a 1920 display is 480; the far corner is the *last* pixel of that display,
+    not the first pixel of the next one along; a display placed to the left of the primary one
+    has a negative origin and is honoured as such
+  - an unknown display produces **no click at all** rather than a guess
+  - `main/remote-input.ts` is the only place a permitted action becomes an OS event, and it
+    lives in the main process because the helper client does - the renderer may offer a
+    message, never a command
+  - the pointer is positioned *before* the button is pressed: a button posted at the old
+    position clicks whatever used to be under the pointer
+  - a double-click is sent as two presses in one place, which is what applications actually
+    listen for; the wheel is aimed the same way a click is, because it applies to whatever is
+    under the pointer
+  - a revoked participant's action is dropped **before anything is aimed**: not even a pointer
+    move reaches the OS
+  - **a synthetic cursor never moves the OS pointer**: cursor movement arrives on `cursor-fast`
+    and is refused as `wrong-channel`; offered on the input channel it is not a valid input
+    message at all
+  - refusals are logged as a fixed reason word and never quote the message - a refused key
+    would otherwise put typed content in the log
 
 ## Recent runs
 
@@ -65,6 +68,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0506 done - Windows keyboard injection
 - P1-0507 done - reliable remote-input protocol
 - P1-0508 done - presenter remote-control grants
+- P1-0509 done - remote click and wheel path
 
 ## Evidence index
 
@@ -81,6 +85,7 @@ because it is rewritten in PLAN-1.5.
 | Typed content is never logged | `npm test` | `never writes typed content to its log` |
 | One key vocabulary across platforms | `make test-go` | `TestBothPlatformsSpeakTheSameKeyVocabulary` |
 | Remote input needs a live grant | `npm test` | `src/core/input-guard.test.ts` |
+| A synthetic cursor never moves the OS pointer | `npm test` | `src/main/remote-input.test.ts` |
 
 ## Blocked
 
