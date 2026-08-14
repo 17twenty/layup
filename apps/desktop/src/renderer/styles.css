@@ -449,3 +449,68 @@ body {
      overlay never intercepts a click. */
   pointer-events: none;
 }
+
+/* Remote control: the presenter's switches for their own machine */
+.control {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #232833;
+  border-radius: 8px;
+}
+
+.control__switches {
+  display: flex;
+  gap: 16px;
+}
+
+.control__switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The indicator is deliberately loud while anybody holds control: somebody
+   else acting on your machine must never be a subtle detail (SPEC.md §13.3). */
+.control__indicator {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #4a2530;
+  color: #ffd7de;
+  font-weight: 600;
+}
+
+.control__indicator--idle {
+  background: transparent;
+  color: #8b93a3;
+  font-weight: 400;
+  padding-left: 0;
+}
+
+.control__people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.control__person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control__name {
+  flex: 1;
+}
+
+.control__scopes {
+  color: #8b93a3;
+  font-size: 12px;
+}
+
+.control__stop {
+  justify-self: start;
+}

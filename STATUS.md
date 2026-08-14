@@ -22,43 +22,35 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0508
-- completed: 54 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0509
+- completed: 55 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0507 reliable remote-input protocol
+- task: P1-0508 presenter remote-control grants
 - result: done
-- tests: `npm test` 267 passed (234 desktop + 33 protocol), `make check` green
+- tests: `npm test` 281 passed (248 desktop + 33 protocol), `make check` green
 - evidence:
-  - `protocol/ts/src/input.ts` adds the ten `input-reliable` messages from SPEC §11:
-    pointer down/up/click/wheel, key down/up, control grant/revoke, lease acquire/release
-  - every message carries a protocol version, and a version this build does not implement is
-    **refused, not partially understood** - guessing at an unfamiliar field would mean
-    guessing at what to do to somebody else's machine
-  - coordinates are normalised to the shared surface, as cursors are: the sender does not
-    know the presenter's display geometry and must not guess
-  - a key message carries a `KeyboardEvent.code` and nothing else. Typed *content* is not a
-    protocol concept: `isPlausibleKeyCode` refuses anything that is not a key name, so a
-    password cannot travel as a "key"
-  - `input-guard.ts` is the authority, and it trusts nothing in the message: the claimed
-    membership must match the peer the message arrived on; the sender must hold a current
-    grant for that scope; only the presenter's machine injects, and only while sharing; the
-    grant is bound to the shared display, so stopping or switching the share ends control
-    immediately; sequence numbers move forwards only, so a captured action cannot be replayed
-  - **cursor-fast stays separate**: a click that arrives on the cursor channel is refused
-    outright (`wrong-channel`), because that channel is designed to throw packets away
-  - a participant cannot grant themselves control, and a presenter cannot grant control of
-    their machine to themselves
-  - refusal reasons are a fixed vocabulary and never quote the payload - a refusal that echoed
-    the key would put typed content into whatever logs it
-  - `input-sender.ts` sends each action exactly once, in order, never coalesced; clamps
-    coordinates and wheel deltas so an action is bounded rather than dropped by the far side;
-    and on revoke releases everything it was holding, in reverse press order, even though the
-    grant has gone - otherwise the presenter is left holding Cmd
-  - the two halves meet in a test: everything the sender produces is accepted by the guard
+  - `remote-control.ts` holds the presenter's two levels of decision: a switch per scope
+    ("Mouse + keyboard [ON/OFF]") and a grant per participant. Both are off to begin with -
+    remote control is never the default state of somebody's machine
+  - switching a scope off withdraws every grant in it **locally first**, then announces the
+    revoke, then releases anything held. A participant who never receives the message is
+    still stopped, because the guard is what decides
+  - one participant can be revoked without touching the others, and `revokeAll()` clears
+    everybody in one step - the shape the emergency stop will use in P1-0513
+  - the guard gained an `allowsScope` check, so a scope that is switched off refuses actions
+    even if a grant somehow survived the bookkeeping (`scope-off`)
+  - **no creator or moderator authority anywhere**: the only question asked is "is this my
+    screen?" A test asserts the panel's rendered text contains no creator, moderator or admin
+    concept at all (ADR-0005)
+  - `RemoteControlPanel.tsx` states plainly who can control the machine, names them, and keeps
+    "Stop all control" on screen the whole time anybody holds it - revoking never means finding
+    the right participant first. A scope that is off disables its grant buttons and says why
+  - the control service already owned the authoritative `allowPointer`/`allowKeyboard` switches
+    from P1-0408; this is the presenter-side half that acts on them
 
 ## Recent runs
 
@@ -72,6 +64,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0505 done - Windows pointer injection
 - P1-0506 done - Windows keyboard injection
 - P1-0507 done - reliable remote-input protocol
+- P1-0508 done - presenter remote-control grants
 
 ## Evidence index
 

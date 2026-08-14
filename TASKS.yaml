@@ -1771,7 +1771,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Presenter remote-control grants
-  status: todo
+  status: done
   goal: Add presenter allow-control toggle plus per-membership pointer/keyboard grants and immediate revoke.
   user_visible_behaviour: Add presenter allow-control toggle plus per-membership pointer/keyboard grants and immediate revoke.
   depends_on:

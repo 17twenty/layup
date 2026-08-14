@@ -49,6 +49,7 @@ export type RefusalReason =
   | 'not-presenting'
   | 'not-presenter'
   | 'no-grant'
+  | 'scope-off'
   | 'wrong-display'
   | 'replayed';
 
@@ -65,6 +66,14 @@ export interface InputGuardOptions {
   sharedDisplayId: () => string | undefined;
   /** Who is presenting, for judging who may issue a grant. */
   presenterMembershipId?: () => string | undefined;
+  /**
+   * Whether a scope is switched on for this share at all (SPEC.md §7.3).
+   *
+   * Grants are withdrawn when a switch goes off, so this is belt and braces -
+   * but the switch is the presenter's answer about their own machine, and it
+   * should not depend on a bookkeeping step having run correctly.
+   */
+  allowsScope?: (scope: ControlScope) => boolean;
   now?: () => number;
   newGrantId?: () => string;
 }
@@ -105,6 +114,7 @@ export function createInputGuard(options: InputGuardOptions): InputGuard {
       // A presenter cannot grant control of a desktop they are not sharing, and
       // nobody can grant themselves control of their own machine.
       if (!options.isPresenting()) return undefined;
+      if (options.allowsScope && !options.allowsScope(scope)) return undefined;
       const displayId = options.sharedDisplayId();
       if (!displayId) return undefined;
       if (membershipId === options.localMembershipId) return undefined;
@@ -138,6 +148,7 @@ export function createInputGuard(options: InputGuardOptions): InputGuard {
     grants: () => [...grants.values()],
 
     allows(membershipId, scope) {
+      if (options.allowsScope && !options.allowsScope(scope)) return false;
       const record = grants.get(key(membershipId, scope));
       if (!record) return false;
       // A grant is bound to the share it was issued for: stopping the share, or
@@ -177,6 +188,8 @@ export function createInputGuard(options: InputGuardOptions): InputGuard {
 
       const scope = isLeaseMessage(message) ? message.scope : scopeOf(message);
       if (!scope) return refuse('malformed');
+
+      if (options.allowsScope && !options.allowsScope(scope)) return refuse('scope-off');
 
       const record = grants.get(key(message.membershipId, scope));
       if (!record) return refuse('no-grant');
