@@ -47,11 +47,27 @@ static CGPoint layupCursorPosition(void) {
     return point;
 }
 
+// PostKey posts a key event with an explicit modifier flag set, so a shortcut
+// arrives as a shortcut rather than as a bare character.
+static void layupPostKey(int keycode, int down, unsigned long long flags) {
+    CGEventRef event = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)keycode, down ? true : false);
+    if (event == NULL) return;
+    CGEventSetFlags(event, (CGEventFlags)flags);
+    CGEventPost(kCGHIDEventTap, event);
+    CFRelease(event);
+}
+
 // ButtonState asks the window server whether a button is currently down. It is
 // how the opt-in real-injection test proves a posted click actually landed.
 static int layupButtonState(int button) {
     return CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState,
                                     (CGMouseButton)button) ? 1 : 0;
+}
+
+// FlagsState is the same proof for modifiers: it reports the modifier state the
+// window server believes is in effect, without typing anything anywhere.
+static unsigned long long layupFlagsState(void) {
+    return (unsigned long long)CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState);
 }
 */
 import "C"
@@ -83,6 +99,11 @@ type darwinInjector struct {
 	// held is what this helper is currently holding down, so a disconnect can
 	// always let go (SPEC.md §13.3).
 	held map[Button]bool
+	// heldKeys is the same guarantee for the keyboard, in press order: a
+	// dropped connection with Cmd held down would otherwise leave the
+	// presenter's machine unusable. Key codes are held in memory only, never
+	// logged or persisted (SPEC.md §13.4).
+	heldKeys []string
 }
 
 // New returns the macOS injector.
@@ -99,8 +120,7 @@ func (d *darwinInjector) Capabilities() protocol.HelperCapabilities {
 		PointerMove:   trusted,
 		PointerButton: trusted,
 		PointerWheel:  trusted,
-		// Keyboard injection arrives in P1-0504.
-		Keyboard: false,
+		Keyboard:      trusted,
 	}
 	if !trusted {
 		capabilities.Detail = "macOS Accessibility permission is missing: open Privacy & Security → " +
@@ -173,25 +193,88 @@ func (d *darwinInjector) Wheel(deltaX, deltaY int) error {
 	return nil
 }
 
-func (d *darwinInjector) Key(string, bool) error {
-	return fmt.Errorf("keyboard injection is not implemented yet (P1-0504)")
+func (d *darwinInjector) Key(code string, down bool) error {
+	if err := d.requireTrusted(); err != nil {
+		return err
+	}
+	keyCode, known := darwinKeyCodes[code]
+	if !known {
+		// Refuse rather than guess: a wrong key code types the wrong thing into
+		// somebody else's machine.
+		return fmt.Errorf("unknown key %q", code)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	// Track first, so the event carries the modifier being pressed - macOS
+	// treats Shift-down itself as a shift-flagged event.
+	d.trackKey(code, down)
+	C.layupPostKey(C.int(keyCode), C.int(boolToInt(down)), C.ulonglong(d.flags()))
+	return nil
+}
+
+// trackKey records what is held. Caps Lock is deliberately not tracked as held:
+// it is a latching key, and "releasing" it on disconnect would toggle it.
+func (d *darwinInjector) trackKey(code string, down bool) {
+	if code == "CapsLock" {
+		return
+	}
+	for index, held := range d.heldKeys {
+		if held == code {
+			if !down {
+				d.heldKeys = append(d.heldKeys[:index], d.heldKeys[index+1:]...)
+			}
+			return
+		}
+	}
+	if down {
+		d.heldKeys = append(d.heldKeys, code)
+	}
+}
+
+// flags is the modifier state implied by what is currently held.
+func (d *darwinInjector) flags() uint64 {
+	var flags uint64
+	for _, code := range d.heldKeys {
+		flags |= darwinModifierFlags[code]
+	}
+	return flags
 }
 
 func (d *darwinInjector) ReleaseAll() int {
 	d.mu.Lock()
-	held := make([]Button, 0, len(d.held))
+	buttons := make([]Button, 0, len(d.held))
 	for button := range d.held {
-		held = append(held, button)
+		buttons = append(buttons, button)
+	}
+	// Reverse press order: a modifier pressed first is released last, so an
+	// intermediate release is never seen as a bare keystroke.
+	keys := make([]string, 0, len(d.heldKeys))
+	for index := len(d.heldKeys) - 1; index >= 0; index-- {
+		keys = append(keys, d.heldKeys[index])
 	}
 	d.mu.Unlock()
 
 	released := 0
-	for _, button := range held {
+	for _, code := range keys {
+		if err := d.Key(code, false); err == nil {
+			released++
+		}
+	}
+	for _, button := range buttons {
 		if err := d.Button(button, false); err == nil {
 			released++
 		}
 	}
 	return released
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 // cursorPosition and buttonDown observe the window server rather than our own
@@ -201,6 +284,8 @@ func cursorPosition() (x, y float64) {
 	point := C.layupCursorPosition()
 	return float64(point.x), float64(point.y)
 }
+
+func modifierFlags() uint64 { return uint64(C.layupFlagsState()) }
 
 func buttonDown(button Button) bool {
 	_, _, code, err := buttonEvents(button)

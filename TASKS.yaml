@@ -1651,7 +1651,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: macOS keyboard injection
-  status: todo
+  status: done
   goal: Implement macOS keyboard/modifier primitives with key-up cleanup.
   user_visible_behaviour: Implement macOS keyboard/modifier primitives with key-up cleanup.
   depends_on:

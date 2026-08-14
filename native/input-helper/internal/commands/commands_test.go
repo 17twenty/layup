@@ -175,11 +175,37 @@ func TestReleaseAllIsAlwaysAvailable(t *testing.T) {
 	}
 }
 
-func TestKeyboardIsNotClaimedYet(t *testing.T) {
-	// P1-0504 implements it; until then the helper refuses honestly.
-	r := &recorder{err: fmt.Errorf("keyboard injection is not implemented yet (P1-0504)")}
-	response := Handle(request(protocol.HelperCommandKey, Key{Code: "KeyA", Down: true}), r)
+func TestKeysReachTheInjectorAndAreNeverEchoed(t *testing.T) {
+	r := &recorder{}
+
+	for _, key := range []Key{
+		{Code: "MetaLeft", Down: true},
+		{Code: "KeyC", Down: true},
+		{Code: "KeyC", Down: false},
+		{Code: "MetaLeft", Down: false},
+	} {
+		response := Handle(request(protocol.HelperCommandKey, key), r)
+		if !response.OK {
+			t.Fatalf("%+v should have been injected: %+v", key, response)
+		}
+		// A response that echoed the key would put typed content into the
+		// desktop's logs by the back door (SPEC.md §13.4).
+		if len(response.Payload) != 0 {
+			t.Fatalf("a key response must carry no payload, got %s", response.Payload)
+		}
+	}
+
+	if len(r.keys) != 4 || r.keys[1].Code != "KeyC" {
+		t.Fatalf("unexpected keys: %+v", r.keys)
+	}
+}
+
+func TestAnUnknownKeyIsRefusedNotGuessed(t *testing.T) {
+	// The injector is the authority on which codes exist; the response reports
+	// its refusal rather than pressing something approximate.
+	r := &recorder{err: fmt.Errorf(`unknown key "Again"`)}
+	response := Handle(request(protocol.HelperCommandKey, Key{Code: "Again", Down: true}), r)
 	if response.OK {
-		t.Fatal("keyboard injection must not claim success before it exists")
+		t.Fatal("an unknown key must not report success")
 	}
 }

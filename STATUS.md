@@ -22,43 +22,41 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0504
-- completed: 50 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0505
+- completed: 51 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0503 macOS pointer injection
+- task: P1-0504 macOS keyboard injection
 - result: done
-- tests: `npm test` (241 passed: 213 desktop + 28 protocol), `make test-go` green (new
-  `internal/commands` and `internal/inject` suites), typecheck/lint/fmt green
+- tests: `npm test` (242 passed: 214 desktop + 28 protocol), `make test-go` green,
+  typecheck/lint/fmt green
 - evidence:
-  - macOS injection is real CoreGraphics event posting (`inject_darwin.go`, cgo): move,
-    left/right/middle press and release, and line-wise wheel
-  - a move while a button is held posts a **drag** event, not a move - otherwise the target
-    application drops the drag halfway
-  - Accessibility is checked explicitly with `AXIsProcessTrusted`, because without it
-    `CGEventPost` silently does nothing: the worst possible failure, where the guest clicks
-    and the presenter's machine ignores it with no explanation
-  - a missing permission produces an actionable state rather than a silent no-op:
-    "macOS Accessibility permission is missing: open Privacy & Security -> Accessibility,
-    tick Layup, then restart it." It reaches the renderer as a description over
-    `control:remote`, never as a handle
-  - `TestWithoutPermissionNothingIsPosted` runs on this machine (which has no Accessibility
-    grant) and proves move and click return errors instead of pretending
-  - routing and payload validation moved to `internal/commands`, testable without a socket,
-    without a platform and without moving anybody's real mouse: unknown button, non-finite
-    coordinates, unknown JSON fields, absent payload and a runaway wheel delta are all
-    rejected *before* the OS is touched
-  - a `CGO_ENABLED=0` build still produces a working helper (`inject_darwin_nocgo.go`) that
-    honestly reports it cannot inject, instead of failing to build or lying
-  - the real-injection proof exists but is **opt-in**: `LAYUP_ALLOW_REAL_INPUT=1` moves the
-    pointer, posts a middle-click (which macOS applications ignore), verifies the window
-    server actually saw it via `CGEventSourceButtonState`, and puts the pointer back. A test
-    suite that silently drives somebody's mouse is worse than an untested code path
-  - keyboard injection is not claimed: `Capabilities().keyboard` is false and `Key` refuses
-    until P1-0504
+  - keys are mapped by **physical position**, not by character: the desktop sends
+    `KeyboardEvent.code` and macOS virtual key codes name the same positions, so a guest on a
+    non-US layout reaches the key their own layout describes. Mapping characters would break
+    every non-US layout and every shortcut
+  - the map covers letters, digits, punctuation, navigation, F1-F12, the keypad and every
+    modifier; a code that is not in it is **refused, not guessed** - a wrong key code types
+    the wrong thing into somebody else's machine
+  - modifiers are re-applied to every event as CoreGraphics **flags**, because Cmd+C is a flag
+    on the 'c' event: posted as three plain key events it can arrive as a bare 'c', which in an
+    editor replaces the selection
+  - every key-down has a deterministic cleanup path: held keys are tracked in press order and
+    `ReleaseAll` releases them in **reverse** order (so an intermediate release is never seen
+    as a bare keystroke), before releasing held mouse buttons. The helper already calls it on
+    every disconnect
+  - Caps Lock is deliberately not tracked as held: it latches, and "releasing" it on
+    disconnect would toggle it on
+  - raw typed content is never persisted or logged: a key response carries no payload, and the
+    one path that logs anything about a request - a rejection - logs the command name only. A
+    test sends a rejected `key` request carrying `KeyQ` and asserts the helper's stderr
+    contains `key` but never `KeyQ` or `payload`
+  - the real-injection proof stays opt-in and types nothing: it holds `ShiftLeft` and checks
+    `CGEventSourceFlagsState`, then proves `ReleaseAll` clears it - a presenter left with Shift
+    stuck down has an unusable machine
 
 ## Recent runs
 
@@ -68,6 +66,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0501 done - native helper protocol and authentication
 - P1-0502 done - native helper lifecycle
 - P1-0503 done - macOS pointer injection
+- P1-0504 done - macOS keyboard injection
 
 ## Evidence index
 
@@ -81,6 +80,7 @@ because it is rewritten in PLAN-1.5.
 | Latency harness and schema | `make bench` | `benchmarks/results/**.json` |
 | Helper injects real macOS input | `LAYUP_ALLOW_REAL_INPUT=1 go test ./internal/inject` (opt-in) | `inject_darwin_test.go` |
 | Bad input payloads never reach the OS | `make test-go` | `internal/commands/commands_test.go` |
+| Typed content is never logged | `npm test` | `never writes typed content to its log` |
 
 ## Blocked
 

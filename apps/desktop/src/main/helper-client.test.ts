@@ -12,6 +12,7 @@ const repoRoot = join(process.cwd(), '..', '..');
 const helperDir = join(repoRoot, 'native', 'input-helper');
 
 let helper: ChildProcess | undefined;
+let helperLog = '';
 let socketPath = '';
 const secret = newHelperSecret();
 const log = createLogger({ level: 'error', write: () => {} });
@@ -26,7 +27,12 @@ beforeAll(() => {
   });
   helper = spawn(binary, [], {
     env: { ...process.env, LAYUP_HELPER_SECRET: secret, LAYUP_HELPER_SOCKET: socketPath },
-    stdio: 'ignore',
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  // Everything the helper says about itself, so a test can prove what it never says.
+  helper.stderr?.setEncoding('utf8');
+  helper.stderr?.on('data', (chunk: string) => {
+    helperLog += chunk;
   });
 }, 120_000);
 
@@ -114,6 +120,35 @@ describe('native helper protocol', () => {
     const client = await connected();
     expect(await client.send('helper.hello')).toMatchObject({ ok: true });
     client.close();
+  }, 30_000);
+
+  it('never writes typed content to its log', async () => {
+    // A rejected request is the only path where the helper logs anything about
+    // a request at all, so it is where an echo would leak typed content.
+    // The keystroke below is never injected - it is refused first.
+    const { connect } = await import('node:net');
+    const raw = JSON.stringify({
+      v: 1,
+      id: 'leak-1',
+      command: 'key',
+      auth: signHelperRequest(newHelperSecret(), 'leak-1', 'key'),
+      payload: { code: 'KeyQ', down: true },
+    });
+    await new Promise<void>((resolve) => {
+      const socket = connect(socketPath, () => socket.write(`${raw}\n`));
+      socket.on('data', () => {
+        socket.destroy();
+        resolve();
+      });
+    });
+
+    // Give the log line time to arrive before asserting on its absence.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(helperLog).toContain('key');
+    // ...but never what was typed (SPEC.md §13.4).
+    expect(helperLog).not.toContain('KeyQ');
+    expect(helperLog).not.toContain('payload');
   }, 30_000);
 
   it('is unreachable from the renderer', async () => {
