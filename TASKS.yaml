@@ -1348,7 +1348,7 @@ tasks:
   plan: PLAN-1
   phase: E
   title: Cursor sender coalescing
-  status: todo
+  status: done
   goal: Send local collaborative cursor motion over cursor-fast with event coalescing/latest-wins semantics.
   user_visible_behaviour: Send local collaborative cursor motion over cursor-fast with event coalescing/latest-wins semantics.
   depends_on:

@@ -22,36 +22,37 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0403
-- completed: 41 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0404
+- completed: 42 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0402 normalised cursor protocol
+- task: P1-0403 cursor sender coalescing
 - result: done
-- tests: `npm test` (188 passed incl. 8 cursor cases), typecheck/lint green
+- tests: `npm test` (196 passed incl. 8 coalescing cases), typecheck/lint green
 - evidence:
-  - `protocol/ts/src/cursor.ts` - `cursor.move` carries `{membershipId, displayId, x, y, seq}`
-    with x/y normalised 0..1 of the *shared surface*, so a 4K presenter and a laptop viewer
-    agree about where the pointer is (`toPixels` maps back per receiver)
-  - the display id keeps a multi-display presenter unambiguous
-  - two different rules, deliberately: our own input is **clamped** (a pointer a pixel past the
-    edge is a real position), while a peer's message is **validated and rejected** - x=1.5,
-    negative or fractional seq, and unknown fields all throw
-  - NaN clamps to the origin (no direction to clamp towards); an infinity clamps to its edge
-  - `createSequenceGate` drops an update that arrived late on the unordered channel - latest
-    wins, per sender - and recognises a sender restart rather than freezing it out forever
-  - no cursor code touches the Go control plane; this is data-plane only (ADR-0008)
+  - `apps/desktop/src/core/cursor-sender.ts` holds exactly **one pending position per display**
+    and emits on a fixed ~60Hz cadence, so memory is O(displays) rather than O(events)
+  - bounded under abuse: 10,000 pointer events across three displays with no draining leaves
+    `pending: 3` and `coalesced: 9,997` (`keeps memory bounded under sustained high-frequency input`)
+  - latest wins under backpressure: with the channel refusing, then accepting, the message that
+    goes out is the newest position - not the one that was queued first
+    (`sends the latest position, not the oldest, under backpressure`)
+  - sends are paced rather than one-per-event, and each carries an incrementing `seq` so the
+    receiver's sequence gate can drop a late arrival
+  - cursor motion never touches the Go control plane: the module's source is asserted to contain
+    no control-client, realtime-client or fetch reference (ADR-0002, ADR-0008)
+  - 8 unit tests, all with an injected clock and scheduler - no sleeping
 
 ## Recent runs
 
-- P1-0309 done - single active screen-share domain
 - P1-0310 done - minimal camera and microphone tracks
 - P1-0311 done - join AV default policy
 - P1-0401 done - WebRTC data-channel abstraction
 - P1-0402 done - normalised cursor protocol
+- P1-0403 done - cursor sender coalescing
 
 ## Evidence index
 
