@@ -1739,7 +1739,7 @@ tasks:
   plan: PLAN-1
   phase: F
   title: Reliable remote-input protocol
-  status: todo
+  status: done
   goal: Implement versioned pointer/key events over input-reliable and validate membership/presenter grant context.
   user_visible_behaviour: Implement versioned pointer/key events over input-reliable and validate membership/presenter grant
     context.

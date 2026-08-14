@@ -22,39 +22,43 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0507
-- completed: 53 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0508
+- completed: 54 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0506 Windows keyboard injection
+- task: P1-0507 reliable remote-input protocol
 - result: done
-- tests: `make test-go` green (new scan-code suite), `GOOS=windows go build ./...` and
-  `go vet` clean, fmt/lint green
+- tests: `npm test` 267 passed (234 desktop + 33 protocol), `make check` green
 - evidence:
-  - Windows keys are injected by **scan code** (`KEYEVENTF_SCANCODE`), not virtual key, so the
-    presenter's own layout decides which character appears - a guest on a US keyboard and a
-    presenter on a German one both get the key they can see
-  - extended keys carry `KEYEVENTF_EXTENDEDKEY`. ArrowUp and Numpad8 are both scan code
-    `0x48`, so without the flag an arrow key types an 8; the same trap on Enter/NumpadEnter,
-    Slash/NumpadDivide, the right-hand modifiers, Home/Numpad7 and Delete/NumpadDecimal is
-    covered by a test
-  - the scan-code table deliberately lives in `scancodes.go`, not `*_windows.go`: a
-    `_windows.go` file only compiles on Windows, which would leave the part most likely to
-    contain a typo unchecked from this build host
-  - both platforms are held to **one key vocabulary**: a test fails if a `KeyboardEvent.code`
-    is mapped on macOS but not Windows, or the reverse, apart from keys that genuinely have no
-    equivalent (NumpadEqual on PC, NumLock/ScrollLock on Mac). Otherwise a key silently stops
-    working when the pair is mixed
-  - key-up cleanup matches macOS: held keys tracked in press order, released in reverse on
-    disconnect, and latching keys (Caps/Num/Scroll Lock) never tracked - "releasing" Caps Lock
-    would switch it on
-  - `INPUT` is now a proper tagged union with both variants, and the sizes of all three
-    structs are asserted at compile time
-  - unlike macOS, no modifier flag is re-applied per event: a posted Shift-down changes the
-    real keyboard state, so Windows shifts the key that follows
+  - `protocol/ts/src/input.ts` adds the ten `input-reliable` messages from SPEC §11:
+    pointer down/up/click/wheel, key down/up, control grant/revoke, lease acquire/release
+  - every message carries a protocol version, and a version this build does not implement is
+    **refused, not partially understood** - guessing at an unfamiliar field would mean
+    guessing at what to do to somebody else's machine
+  - coordinates are normalised to the shared surface, as cursors are: the sender does not
+    know the presenter's display geometry and must not guess
+  - a key message carries a `KeyboardEvent.code` and nothing else. Typed *content* is not a
+    protocol concept: `isPlausibleKeyCode` refuses anything that is not a key name, so a
+    password cannot travel as a "key"
+  - `input-guard.ts` is the authority, and it trusts nothing in the message: the claimed
+    membership must match the peer the message arrived on; the sender must hold a current
+    grant for that scope; only the presenter's machine injects, and only while sharing; the
+    grant is bound to the shared display, so stopping or switching the share ends control
+    immediately; sequence numbers move forwards only, so a captured action cannot be replayed
+  - **cursor-fast stays separate**: a click that arrives on the cursor channel is refused
+    outright (`wrong-channel`), because that channel is designed to throw packets away
+  - a participant cannot grant themselves control, and a presenter cannot grant control of
+    their machine to themselves
+  - refusal reasons are a fixed vocabulary and never quote the payload - a refusal that echoed
+    the key would put typed content into whatever logs it
+  - `input-sender.ts` sends each action exactly once, in order, never coalesced; clamps
+    coordinates and wheel deltas so an action is bounded rather than dropped by the far side;
+    and on revoke releases everything it was holding, in reverse press order, even though the
+    grant has gone - otherwise the presenter is left holding Cmd
+  - the two halves meet in a test: everything the sender produces is accepted by the guard
 
 ## Recent runs
 
@@ -67,6 +71,7 @@ because it is rewritten in PLAN-1.5.
 - P1-0504 done - macOS keyboard injection
 - P1-0505 done - Windows pointer injection
 - P1-0506 done - Windows keyboard injection
+- P1-0507 done - reliable remote-input protocol
 
 ## Evidence index
 
@@ -82,6 +87,7 @@ because it is rewritten in PLAN-1.5.
 | Bad input payloads never reach the OS | `make test-go` | `internal/commands/commands_test.go` |
 | Typed content is never logged | `npm test` | `never writes typed content to its log` |
 | One key vocabulary across platforms | `make test-go` | `TestBothPlatformsSpeakTheSameKeyVocabulary` |
+| Remote input needs a live grant | `npm test` | `src/core/input-guard.test.ts` |
 
 ## Blocked
 
