@@ -22,35 +22,38 @@ because it is rewritten in PLAN-1.5.
 
 ## Current state
 
-- next task: P1-0406
-- completed: 44 of 68 (phases A, B and C complete; D in progress)
+- next task: P1-0407
+- completed: 45 of 68 (phases A, B and C complete; D in progress)
 - blocked: 1 (P1-0312 - needs two real machines; see Blocked below)
 - one command proves the lot: `make verify` (check + smoke + e2e + boundary + WebRTC)
 
 ## Last run
 
-- task: P1-0405 participant cursor identity
+- task: P1-0406 drawing protocol
 - result: done
-- tests: `npm test` (214 passed incl. 6 identity cases), typecheck/lint green
+- tests: `npm test` (222 passed incl. 8 drawing cases), typecheck/lint green
 - evidence:
-  - identity is keyed on **membership, not user**, which is what stops a rejoining person from
-    inheriting a previous cursor: a rejoin is a new membership, so it gets a clean colour,
-    position and sequence (`does not reuse stale cursor state when the same person rejoins`,
-    driven through the real receiver)
-  - participants are distinguishable by a distinct colour *and* their name - colour is never
-    the only signal
-  - a departed membership is retired promptly and removed from the book, and its cursor is
-    removed from the receiver; a freed colour is reused rather than drifting through the palette
-  - your own cursor is excluded: you already have a real pointer
-  - an unknown membership renders as "Someone" rather than a blank cursor
+  - `protocol/ts/src/drawing.ts` - `stroke.begin` / `stroke.points` / `stroke.end` /
+    `stroke.clear`, with normalised coordinates and width so a stroke looks the same on any
+    receiver, and strokes as vectors on an overlay rather than pixels in the encoded video
+  - ordering within a stroke is reconstructed from a per-message `index`, so a **deliberately
+    reversed** arrival order still yields the right line (the channel is unordered by design)
+  - a lost message leaves a detectable `hasGap` rather than a straight line through the missing
+    section - a wrong line is worse than a visibly incomplete one
+  - bounded everywhere: 64 points per message, 4096 per stroke, a cap on concurrent strokes,
+    and a runaway sender cannot grow a stroke past the limit
+  - malformed input is rejected, not coerced: unknown type, width 5, x 1.5, negative totals and
+    unknown fields all throw
+  - points for a stroke never begun, or attributed to a different membership, are ignored
+  - drawing lives in `protocol/ts` and the data plane only; nothing routes through Go (ADR-0008)
 
 ## Recent runs
 
-- P1-0401 done - WebRTC data-channel abstraction
 - P1-0402 done - normalised cursor protocol
 - P1-0403 done - cursor sender coalescing
 - P1-0404 done - remote cursor overlay and interpolation
 - P1-0405 done - participant cursor identity
+- P1-0406 done - drawing protocol
 
 ## Evidence index
 

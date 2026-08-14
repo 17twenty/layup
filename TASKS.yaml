@@ -1436,7 +1436,7 @@ tasks:
   plan: PLAN-1
   phase: E
   title: Drawing protocol
-  status: todo
+  status: done
   goal: Define stroke begin/points/end/clear messages on annotation-fast with membership attribution.
   user_visible_behaviour: Define stroke begin/points/end/clear messages on annotation-fast with membership attribution.
   depends_on:

@@ -7,3 +7,4 @@ export * from './validate';
 export * from './envelope';
 export * from './realtime';
 export * from './cursor';
+export * from './drawing';
