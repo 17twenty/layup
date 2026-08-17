@@ -169,10 +169,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // HealthResponse is the payload of GET /healthz.
+//
+// It deliberately does not name the deployment environment. /healthz is
+// unauthenticated by design - a load balancer has no credential - so anything
+// in it is public, and the environment label is exactly the thing an attacker
+// wants to know before trying the X-Layup-Dev-User header: "dev" is the one
+// value that would make it work. The label is still in the startup log, where
+// an operator can read it and a stranger cannot.
 type HealthResponse struct {
 	Status          string         `json:"status"`
 	ProtocolVersion int            `json:"protocolVersion"`
-	Environment     string         `json:"environment"`
 	UptimeSeconds   float64        `json:"uptimeSeconds"`
 	Build           buildinfo.Info `json:"build"`
 }
@@ -181,7 +187,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
 		Status:          "ok",
 		ProtocolVersion: protocol.Version,
-		Environment:     s.cfg.Environment,
 		UptimeSeconds:   s.now().Sub(s.startedAt).Seconds(),
 		Build:           buildinfo.Get(),
 	})

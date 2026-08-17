@@ -13,7 +13,13 @@ import (
 
 func turnServer(t *testing.T, env map[string]string) *Server {
 	t.Helper()
-	cfg, err := config.Load(func(key string) string { return env[key] })
+	// LAYUP_ENV=dev: these callers declare an identity (see testServer). A
+	// copy, because a caller may pass a nil or shared map.
+	merged := map[string]string{config.EnvPrefix + "ENV": "dev"}
+	for key, value := range env {
+		merged[key] = value
+	}
+	cfg, err := config.Load(func(key string) string { return merged[key] })
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}

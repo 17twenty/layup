@@ -43,6 +43,19 @@ chown -R caddy:caddy /var/log/caddy
 chmod 0640 /etc/layup/control.env
 chown root:layup /etc/layup/control.env
 
+# The join code is a credential too: control.env.example ships REPLACE_ME, and
+# a server running with that is one grep of this repository away from open.
+JOIN_CODE="$(grep -E '^LAYUP_JOIN_CODE=' /etc/layup/control.env | cut -d= -f2-)"
+if [ "$JOIN_CODE" = "REPLACE_ME" ]; then
+  echo "FATAL: LAYUP_JOIN_CODE is still REPLACE_ME - that code is in the repository." >&2
+  exit 1
+fi
+if grep -qE '^LAYUP_ENV=dev$' /etc/layup/control.env; then
+  echo "FATAL: LAYUP_ENV=dev on a public server accepts X-Layup-Dev-User from anyone." >&2
+  echo "Remedy: set LAYUP_ENV=selfhosted in /etc/layup/control.env." >&2
+  exit 1
+fi
+
 echo "==> coturn"
 # coturn and the control service must agree on the secret; read it from the
 # one file that holds it rather than duplicating it by hand.

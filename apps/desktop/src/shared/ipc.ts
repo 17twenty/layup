@@ -43,7 +43,6 @@ export const controlStatusResponse = isObject({
   clientProtocolVersion: isInteger({ min: 1 }),
   serverProtocolVersion: optional(isInteger({ min: 1 })),
   serverVersion: optional(isString),
-  environment: optional(isString),
   latencyMs: optional(isFiniteNumber),
   detail: optional(isString),
   checkedAtMs: isFiniteNumber,

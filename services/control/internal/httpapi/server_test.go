@@ -11,9 +11,20 @@ import (
 	"github.com/layup-app/layup/services/control/internal/config"
 )
 
+// testServer is the plain route-level server: the development directory, and
+// identities declared with X-Layup-Dev-User rather than proved with a token.
+//
+// It asks for LAYUP_ENV=dev explicitly, because that is what these tests are:
+// a development directory whose people say who they are. The default is now
+// "selfhosted" (config.defaults), under which a declared identity is honoured
+// only for a genuinely local caller - and httptest.NewRequest stamps requests
+// with 192.0.2.1, the documentation range, which is deliberately not local.
+// Tests of *that* rule use authServer (auth_test.go:20) and name the
+// environment they mean.
 func testServer(t *testing.T) *Server {
 	t.Helper()
-	cfg, err := config.Load(func(string) string { return "" })
+	env := map[string]string{config.EnvPrefix + "ENV": "dev"}
+	cfg, err := config.Load(func(key string) string { return env[key] })
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}

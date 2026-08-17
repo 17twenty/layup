@@ -7,12 +7,14 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/layup-app/layup/protocol"
 	"github.com/layup-app/layup/services/control/internal/config"
 	"github.com/layup-app/layup/services/control/internal/directory"
+	"github.com/layup-app/layup/services/control/internal/logging"
 )
 
 const testJoinCode = "LAYUP-7K2M"
@@ -160,8 +162,27 @@ func TestRegisterIsRefusedOnADirectoryThatIssuesNoTokens(t *testing.T) {
 	}
 }
 
+// safeBuffer is a bytes.Buffer a logger and a test can share. The realtime
+// case below writes from the server's goroutines while the test reads.
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 func TestTheTokenIsNeverLogged(t *testing.T) {
-	var logs bytes.Buffer
+	var logs safeBuffer
 	log := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	s := registerServer(t, testJoinCode, log)
 
@@ -187,5 +208,67 @@ func TestTheTokenIsNeverLogged(t *testing.T) {
 	// The join code is a credential too.
 	if strings.Contains(logs.String(), testJoinCode) {
 		t.Fatalf("the join code appeared in the logs:\n%s", logs.String())
+	}
+}
+
+// TestTheTokenIsNeverLoggedByTheRealtimeHandshake covers the path most likely
+// to regress: the WebSocket upgrade carries its credential on the query
+// string, because a WebSocket client cannot set a header, and it runs through
+// logging.Middleware - the one place that logs something derived from the URL.
+// It logs r.URL.Path today; a careless change to r.URL.String() or
+// RequestURI would leak a working token into the service log on every
+// connection. This is the test that would catch that.
+func TestTheTokenIsNeverLoggedByTheRealtimeHandshake(t *testing.T) {
+	var logs safeBuffer
+	log := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	hosted := hostedDirectory(t)
+	user, token, err := hosted.Register("Nick")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	env := map[string]string{config.EnvPrefix + "ENV": "selfhosted"}
+	cfg, err := config.Load(func(key string) string { return env[key] })
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	api := New(cfg, Options{Logger: log, Directory: hosted})
+	api.heartbeatInterval = 40 * time.Millisecond
+
+	// The production wiring, middleware included (cmd/control/main.go).
+	srv := httptest.NewServer(logging.Middleware(log)(api))
+	t.Cleanup(srv.Close)
+
+	conn := dial(t, srv, protocol.QueryProtocolVersion+"=1&"+protocol.QueryToken+"="+token)
+	envelope := readEnvelope(t, conn)
+	if envelope.Type != protocol.TypeHelloOK {
+		t.Fatalf("expected hello.ok first, got %q", envelope.Type)
+	}
+	var hello protocol.HelloOKPayload
+	if err := protocol.DecodePayload(envelope, &hello); err != nil {
+		t.Fatalf("hello payload: %v", err)
+	}
+	if hello.UserID != string(user.ID) {
+		t.Fatalf("the handshake identified %q, expected %q", hello.UserID, user.ID)
+	}
+
+	// A rejected handshake too: an error path is where a credential most
+	// often ends up quoted into a message.
+	const forged = "forged-token-abc123xyz"
+	resp, err := http.Get(srv.URL + "/api/realtime?" + protocol.QueryProtocolVersion +
+		"=1&" + protocol.QueryToken + "=" + forged)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for a forged token, got %d", resp.StatusCode)
+	}
+
+	if strings.Contains(logs.String(), token) {
+		t.Fatalf("the handshake token appeared in the logs:\n%s", logs.String())
+	}
+	if strings.Contains(logs.String(), forged) {
+		t.Fatalf("a rejected token appeared in the logs:\n%s", logs.String())
 	}
 }

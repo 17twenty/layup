@@ -20,7 +20,12 @@ const EnvPrefix = "LAYUP_"
 type Config struct {
 	// ListenAddr is the host:port the HTTP/WS server binds to.
 	ListenAddr string
-	// Environment is a free-form deployment label used in logs (dev, staging, ...).
+	// Environment is a deployment label used in logs. It is *almost* free
+	// form: "dev" is load-bearing, because it is the one value that makes the
+	// server believe a declared X-Layup-Dev-User from a remote caller
+	// (httpapi/auth.go). It therefore defaults to "selfhosted" and is
+	// validated below, so that a dropped or mistyped line closes the server
+	// rather than opening it.
 	Environment string
 	// LogLevel is one of debug, info, warn, error.
 	LogLevel string
@@ -55,7 +60,7 @@ type Config struct {
 func defaults() Config {
 	return Config{
 		ListenAddr:      "127.0.0.1:8787",
-		Environment:     "dev",
+		Environment:     "selfhosted",
 		LogLevel:        "info",
 		LogFormat:       "json",
 		ShutdownTimeout: 5 * time.Second,
@@ -152,11 +157,34 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, EnvPrefix+"FORCE_RELAY needs at least one "+EnvPrefix+"TURN_URLS entry")
 	}
 
-	if v := getenv(EnvPrefix + "JOIN_CODE"); v != "" {
-		cfg.JoinCode = strings.TrimSpace(v)
+	joinCode := strings.TrimSpace(getenv(EnvPrefix + "JOIN_CODE"))
+	stateDir := strings.TrimSpace(getenv(EnvPrefix + "STATE_DIR"))
+	if joinCode != "" {
+		cfg.JoinCode = joinCode
 	}
-	if v := getenv(EnvPrefix + "STATE_DIR"); v != "" {
-		cfg.StateDir = v
+	if stateDir != "" {
+		cfg.StateDir = stateDir
+	}
+
+	// A hosted deployment calling itself a laptop. Refuse to start: "dev"
+	// disables the remote-caller check on X-Layup-Dev-User, and a server with
+	// registered people and a published directory of their ids would hand
+	// that header a real identity to wear. The two are tested against the raw
+	// environment, not the resolved config, because StateDir has a default -
+	// a genuine laptop run that sets neither variable is still allowed to say
+	// "dev".
+	if cfg.Environment == "dev" && (joinCode != "" || stateDir != "") {
+		var set []string
+		if joinCode != "" {
+			set = append(set, EnvPrefix+"JOIN_CODE")
+		}
+		if stateDir != "" {
+			set = append(set, EnvPrefix+"STATE_DIR")
+		}
+		problems = append(problems, fmt.Sprintf(
+			"%sENV=dev is refused when %s is set: dev accepts the %s header from any caller, "+
+				"which on a server with registered identities is impersonation. Use %sENV=selfhosted.",
+			EnvPrefix, strings.Join(set, " and "), "X-Layup-Dev-User", EnvPrefix))
 	}
 
 	if len(problems) > 0 {

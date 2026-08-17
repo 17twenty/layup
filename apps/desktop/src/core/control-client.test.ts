@@ -11,7 +11,6 @@ function jsonResponse(body: unknown, status = 200): Response {
 const healthyBody = {
   status: 'ok',
   protocolVersion: 1,
-  environment: 'dev',
   uptimeSeconds: 3,
   build: { version: '0.1.0', goVersion: 'go1.26.4', platform: 'darwin/arm64' },
 };
@@ -32,7 +31,6 @@ describe('control client probe', () => {
     expect(state.status).toBe('connected');
     expect(state.serverProtocolVersion).toBe(1);
     expect(state.serverVersion).toBe('0.1.0');
-    expect(state.environment).toBe('dev');
     expect(state.latencyMs).toBe(12);
     expect(state.detail).toBeUndefined();
     expect(client.baseUrl).toBe('http://127.0.0.1:8787');

@@ -11,14 +11,22 @@ idempotent.
 ## First run
 
 `bootstrap.sh` refuses to run until `/etc/layup/control.env` exists on the
-server with a real secret in it - that file is never committed, so it has to
+server with real secrets in it - that file is never committed, so it has to
 be created by hand from `control.env.example` first.
 
+There are **two** `REPLACE_ME`s in that template and `bootstrap.sh` refuses to
+proceed while either survives: `LAYUP_TURN_SECRET`, which coturn shares, and
+`LAYUP_JOIN_CODE`, which is the only thing standing between a stranger and an
+identity on this server. It also refuses `LAYUP_ENV=dev`, because that value
+makes the control service believe an `X-Layup-Dev-User` header from any caller
+anywhere - fine on a laptop, an impersonation hole on a public box.
+
 ```bash
-openssl rand -hex 32                      # keep this
+openssl rand -hex 32                      # the TURN secret; keep this
+openssl rand -hex 4                       # the join code; keep this too
 ssh root@157.20.113.124 'mkdir -p /etc/layup'
 scp deploy/vm/control.env.example root@157.20.113.124:/etc/layup/control.env
-ssh root@157.20.113.124 'vi /etc/layup/control.env'   # paste the secret
+ssh root@157.20.113.124 'vi /etc/layup/control.env'   # paste both, leave LAYUP_ENV alone
 scp -r deploy/vm root@157.20.113.124:/tmp/layup-vm
 ssh root@157.20.113.124 'bash /tmp/layup-vm/bootstrap.sh'
 ```

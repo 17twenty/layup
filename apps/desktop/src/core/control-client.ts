@@ -30,7 +30,6 @@ export interface ControlConnectionState {
   /** Present once the server has answered at least the health endpoint. */
   serverProtocolVersion?: number;
   serverVersion?: string;
-  environment?: string;
   latencyMs?: number;
   /** Human-readable reason when the status is not `connected`. */
   detail?: string;
@@ -40,7 +39,6 @@ export interface ControlConnectionState {
 const healthShape = isObject({
   status: isString,
   protocolVersion: isInteger({ min: 1 }),
-  environment: optional(isString),
   // Fractional: the server reports real uptime, not whole seconds.
   uptimeSeconds: optional(isFiniteNumber),
   build: optional(
@@ -444,7 +442,6 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         clientProtocolVersion: PROTOCOL_VERSION,
         serverProtocolVersion: health.protocolVersion,
         serverVersion: health.build?.version,
-        environment: health.environment,
         latencyMs,
         checkedAtMs: startedAt,
       };
