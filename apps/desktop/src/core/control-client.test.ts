@@ -163,3 +163,26 @@ describe('a refusal from the control plane', () => {
     await expect(client.apiGet('/api/layups')).rejects.toThrow(/failed with HTTP 500/);
   });
 });
+
+describe('control client identity', () => {
+  it('sends the bearer token when it has one', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    const client = createControlClient({ baseUrl: 'https://layup.blah.au', token: 't0ken', fetchImpl: fetchMock });
+    await client.me().catch(() => undefined);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    const headers = new Headers(init.headers);
+    expect(headers.get('authorization')).toBe('Bearer t0ken');
+  });
+
+  it('falls back to the dev header when there is no token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    const client = createControlClient({ baseUrl: 'https://layup.blah.au', devUser: 'nick', fetchImpl: fetchMock });
+    await client.me().catch(() => undefined);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    const headers = new Headers(init.headers);
+    expect(headers.get('x-layup-dev-user')).toBe('nick');
+    expect(headers.get('authorization')).toBeNull();
+  });
+});

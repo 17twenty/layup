@@ -14,6 +14,7 @@ import {
   PROTOCOL_VERSION,
   QUERY_DEV_USER,
   QUERY_PROTOCOL_VERSION,
+  QUERY_TOKEN,
   TYPE_HEARTBEAT,
   TYPE_HEARTBEAT_ACK,
   TYPE_HELLO_OK,
@@ -56,6 +57,8 @@ export interface RealtimeLogger {
 export interface RealtimeClientOptions {
   baseUrl: string;
   devUser: string;
+  /** Bearer token from the desktop's config store. Takes priority over `devUser`. */
+  token?: string;
   socketFactory?: (url: string) => RealtimeSocket;
   /** Connection is considered dead after heartbeatInterval * this factor. */
   heartbeatTimeoutFactor?: number;
@@ -83,11 +86,15 @@ export interface RealtimeClient {
 
 const noopLogger: RealtimeLogger = { debug: () => {}, info: () => {}, warn: () => {} };
 
-export function realtimeUrl(baseUrl: string, devUser: string): string {
+export function realtimeUrl(baseUrl: string, devUser: string, token?: string): string {
   const url = new URL(baseUrl.replace(/\/+$/, '') + '/api/realtime');
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   url.searchParams.set(QUERY_PROTOCOL_VERSION, String(PROTOCOL_VERSION));
-  url.searchParams.set(QUERY_DEV_USER, devUser);
+  if (token) {
+    url.searchParams.set(QUERY_TOKEN, token);
+  } else {
+    url.searchParams.set(QUERY_DEV_USER, devUser);
+  }
   return url.toString();
 }
 
@@ -234,7 +241,7 @@ export function createRealtimeClient(options: RealtimeClientOptions): RealtimeCl
 
     let next: RealtimeSocket;
     try {
-      next = socketFactory(realtimeUrl(options.baseUrl, options.devUser));
+      next = socketFactory(realtimeUrl(options.baseUrl, options.devUser, options.token));
     } catch (error) {
       scheduleReconnect(error instanceof Error ? error.message : String(error));
       return;

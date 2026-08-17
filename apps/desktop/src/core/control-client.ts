@@ -63,8 +63,12 @@ export interface ControlClientOptions {
    * PLAN-1 development identity: a handle ("karl") or user id. There is no
    * password or token yet - the server resolves it against its directory and
    * decides the organisation itself.
+   *
+   * Ignored once a `token` is present.
    */
   devUser?: string;
+  /** Bearer token from the desktop's config store. Takes priority over `devUser`. */
+  token?: string;
 }
 
 /** Header carrying the PLAN-1 development identity. */
@@ -382,7 +386,11 @@ export function createControlClient(options: ControlClientOptions): ControlClien
       [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
       Accept: 'application/json',
     };
-    if (options.devUser) headers[DEV_USER_HEADER] = options.devUser;
+    if (options.token) {
+      headers.Authorization = `Bearer ${options.token}`;
+    } else if (options.devUser) {
+      headers[DEV_USER_HEADER] = options.devUser;
+    }
     return headers;
   }
 
