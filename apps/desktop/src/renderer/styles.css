@@ -1295,3 +1295,98 @@ body {
 .shell--waiting {
   min-height: 100vh;
 }
+
+/* The permissions screen: four rows, each with a verdict and one thing to do.
+   Wider than the add-server card because a row carries a sentence, not a
+   field. */
+.onboarding__card--wide {
+  width: min(560px, 100%);
+}
+
+.permissions {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.permissions__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #23262e;
+}
+
+.permissions__what {
+  display: grid;
+  gap: 2px;
+}
+
+.permissions__name {
+  font-weight: 600;
+}
+
+.permissions__purpose {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* What to actually do, in the OS's own words for the pane it lives in. */
+.permissions__guidance {
+  color: #d98c3f;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.permissions__status {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.permissions__status--granted,
+.permissions__status--not-required {
+  color: #6fbf7f;
+}
+
+.permissions__status--denied,
+.permissions__status--restricted {
+  color: #f0805a;
+}
+
+.permissions__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* The way back to the permissions screen. Chrome, in the footer, next to the
+   other things a tester reads back to us. */
+.shell__footer-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+  margin: 0 0 6px;
+}
+
+/* Shown in place of the remote-control switches when macOS will discard every
+   event anyway. A switch here would be the silent failure with a nicer face. */
+.control__blocked {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.control__blocked p {
+  margin: 0;
+  color: #f0805a;
+}

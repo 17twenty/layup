@@ -219,6 +219,40 @@ export const capturePermissionResponse = isObject({
 });
 export type CapturePermissionResponse = ReturnType<typeof capturePermissionResponse>;
 
+/**
+ * Everything a call needs the operating system's permission for.
+ *
+ * Mirrors PermissionState in main/permissions.ts. The renderer is told *what
+ * is missing and what to do about it* - never a handle to the OS, and never
+ * the answer to "may I bypass this".
+ */
+export const permissionKind = isEnum([
+  'camera',
+  'microphone',
+  'screen',
+  'accessibility',
+] as const);
+export type PermissionKind = ReturnType<typeof permissionKind>;
+
+const permissionStateShape = isObject({
+  status: isEnum(['granted', 'denied', 'restricted', 'not-determined', 'not-required', 'unknown'] as const),
+  ok: isBoolean,
+  guidance: isString,
+  canOpenSettings: isBoolean,
+  canRequest: isBoolean,
+});
+
+export const permissionsResponse = isObject({
+  camera: permissionStateShape,
+  microphone: permissionStateShape,
+  screen: permissionStateShape,
+  accessibility: permissionStateShape,
+});
+export type PermissionsResponse = ReturnType<typeof permissionsResponse>;
+export type PermissionState = PermissionsResponse['camera'];
+
+export const permissionKindRequest = isObject({ kind: permissionKind });
+
 const iceServerShape = isObject({
   urls: isArrayOf(isString, { max: 20 }),
   username: optional(isString),
@@ -419,6 +453,15 @@ export const ipcChannels = {
   'capture:sources': channel(isVoid, captureSourcesResponse),
   'capture:permission': channel(isVoid, capturePermissionResponse),
   'capture:openSettings': channel(isVoid, isBoolean),
+  'permissions:all': channel(isVoid, permissionsResponse),
+  /**
+   * Raises the real OS prompt where macOS has one. Answers whether the
+   * permission is granted now: screen recording and accessibility have no
+   * prompt at all and answer false, which is what makes the button say
+   * "Open Settings" instead of pretending.
+   */
+  'permissions:request': channel(permissionKindRequest, isBoolean),
+  'permissions:openSettings': channel(permissionKindRequest, isBoolean),
   'control:status': channel(isVoid, controlStatusResponse),
   'control:remote': channel(isVoid, remoteControlResponse),
   'identity:current': channel(isVoid, identityResponse),

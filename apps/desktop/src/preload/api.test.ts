@@ -15,6 +15,7 @@ describe('preload bridge surface', () => {
       'input',
       'layup',
       'people',
+      'permissions',
       'preferences',
       'protocolVersion',
       'realtime',

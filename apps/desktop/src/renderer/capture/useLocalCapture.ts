@@ -4,6 +4,16 @@ import type { CaptureSourcesResponse } from '../../shared/ipc';
 type CaptureSource = CaptureSourcesResponse['sources'][number];
 
 /**
+ * What happened when capture was asked for.
+ *
+ * A refusal is returned, not only stashed in state: the caller decides in the
+ * same turn whether to announce a share, and React state is not readable yet
+ * at that point. Announcing one anyway is how a refused `getUserMedia` became
+ * a share with no video in it and no message anywhere.
+ */
+export type CaptureResult = { ok: true } | { ok: false; reason: string };
+
+/**
  * Local screen capture: pick a source, preview it, stop cleanly.
  *
  * The renderer never receives a capture handle from the main process - it gets
@@ -16,7 +26,7 @@ export interface LocalCapture {
   /** The source currently being captured, if any. */
   active?: CaptureSource;
   stream?: MediaStream;
-  start(source: CaptureSource): Promise<void>;
+  start(source: CaptureSource): Promise<CaptureResult>;
   stop(): void;
   error?: string;
 }
@@ -57,7 +67,7 @@ export function useLocalCapture(): LocalCapture {
   }, []);
 
   const start = useCallback(
-    async (source: CaptureSource) => {
+    async (source: CaptureSource): Promise<CaptureResult> => {
       stop();
       try {
         const video: DesktopCaptureConstraints = {
@@ -75,8 +85,22 @@ export function useLocalCapture(): LocalCapture {
         setStream(next);
         setActive(source);
         setError(undefined);
+        return { ok: true };
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        // Chromium's message for this is "Could not start video source", which
+        // tells nobody anything. The cause is almost always the Screen
+        // Recording permission, and the privileged side is the only place that
+        // knows - so ask it, and say the thing somebody can act on.
+        let reason = `Layup could not start capturing that screen (${detail}).`;
+        try {
+          const permission = await window.layup.capture.permission();
+          if (!permission.canCapture && permission.guidance) reason = permission.guidance;
+        } catch {
+          // No answer: the raw refusal is still better than silence.
+        }
+        setError(reason);
+        return { ok: false, reason };
       }
     },
     [stop],

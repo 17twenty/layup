@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { LayupStateResponse, RemoteControlStateResponse, ShareStateResponse } from '../../shared/ipc';
+import type {
+  LayupStateResponse,
+  PermissionsResponse,
+  RemoteControlStateResponse,
+  ShareStateResponse,
+} from '../../shared/ipc';
 import { LayupRoom } from './LayupRoom';
 
 /**
@@ -113,8 +118,37 @@ const capture = vi.hoisted(() => ({
 }));
 vi.mock('../capture/useLocalCapture', () => ({ useLocalCapture: () => capture }));
 
+/**
+ * macOS permissions, as the room asks for them (task 9). Granted here unless a
+ * test says otherwise; Accessibility is the one that matters to this surface.
+ */
+const grantedPermission = {
+  status: 'granted' as const,
+  ok: true,
+  guidance: '',
+  canOpenSettings: true,
+  canRequest: false,
+};
+const permissionsAll = vi.fn(
+  async (): Promise<PermissionsResponse> => ({
+    camera: grantedPermission,
+    microphone: grantedPermission,
+    screen: grantedPermission,
+    accessibility: grantedPermission,
+  }),
+);
+const openAccessibilitySettings = vi.fn(async () => true);
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks leaves implementations in place, so a test that says
+  // Accessibility is missing would say it for every test after it.
+  permissionsAll.mockResolvedValue({
+    camera: grantedPermission,
+    microphone: grantedPermission,
+    screen: grantedPermission,
+    accessibility: grantedPermission,
+  });
   shareState = {};
   controlState = idleControl;
   room.scopes = [];
@@ -150,6 +184,11 @@ beforeEach(() => {
           platform: 'darwin',
         }),
         openSettings: async () => true,
+      },
+      permissions: {
+        all: permissionsAll,
+        request: async () => true,
+        openSettings: openAccessibilitySettings,
       },
       ice: { config: async () => ({ iceServers: [], forceRelay: false }) },
       ui: { setMode: async (mode: string) => ({ mode }), onMode: () => () => {} },
@@ -339,5 +378,69 @@ describe('the media never stops', () => {
     await userEvent.click(screen.getByTestId('choose-camera'));
     await userEvent.click(screen.getByTestId('device-cam_1'));
     expect(room.setCameraDevice).toHaveBeenCalledWith('cam_1');
+  });
+});
+
+/**
+ * Where a missing Accessibility grant actually bites (task 9).
+ *
+ * The presenter's switches are the only place remote control is turned on, so
+ * they are the only place the truth about it matters. Flipping "Mouse" with
+ * the permission missing is a switch that appears to work and does nothing -
+ * the failure the helper's own source calls the worst available.
+ */
+describe('remote control the OS will not allow', () => {
+  const presentingShare = {
+    share: {
+      id: 'shr_1',
+      presenterMembershipId: ME,
+      sourceId: 'screen:1:0',
+      allowDrawing: true,
+      allowPointer: false,
+      allowKeyboard: false,
+    },
+  };
+
+  it('replaces the switches with the guidance and a way to fix it', async () => {
+    shareState = presentingShare;
+    permissionsAll.mockResolvedValue({
+      camera: grantedPermission,
+      microphone: grantedPermission,
+      screen: grantedPermission,
+      accessibility: {
+        status: 'denied' as const,
+        ok: false,
+        guidance: 'Open Privacy & Security → Accessibility, tick Layup, then restart it.',
+        canOpenSettings: true,
+        canRequest: false,
+      },
+    });
+
+    render(<LayupRoom layup={layup} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('control-accessibility')).toHaveTextContent(/Accessibility/),
+    );
+    expect(screen.queryByTestId('allow-pointer')).toBeNull();
+
+    await userEvent.click(screen.getByTestId('open-accessibility-settings'));
+    expect(openAccessibilitySettings).toHaveBeenCalledWith('accessibility');
+  });
+
+  it('asks the privileged side, never the renderer, and only while presenting', async () => {
+    shareState = {};
+    render(<LayupRoom layup={layup} />);
+
+    await waitFor(() => expect(screen.getByTestId('compact-bar')).toBeInTheDocument());
+    // Not presenting: there are no switches to be wrong about.
+    expect(permissionsAll).not.toHaveBeenCalled();
+  });
+
+  it('leaves the switches alone when the helper says macOS is happy', async () => {
+    shareState = presentingShare;
+    render(<LayupRoom layup={layup} />);
+
+    await waitFor(() => expect(screen.getByTestId('allow-pointer')).toBeInTheDocument());
+    expect(screen.queryByTestId('control-accessibility')).toBeNull();
   });
 });

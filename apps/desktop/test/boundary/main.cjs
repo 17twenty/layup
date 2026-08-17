@@ -31,6 +31,26 @@ app.whenReady().then(async () => {
       platform: process.platform,
     }),
     'capture:openSettings': () => true,
+    // All four, exactly as the real service reports them. The harness proves
+    // the channels exist and that the renderer cannot reach past them - it
+    // grants nothing and opens nothing.
+    'permissions:all': () => {
+      const granted = {
+        status: 'granted',
+        ok: true,
+        guidance: '',
+        canOpenSettings: process.platform === 'darwin',
+        canRequest: false,
+      };
+      return {
+        camera: granted,
+        microphone: granted,
+        screen: granted,
+        accessibility: granted,
+      };
+    },
+    'permissions:request': () => false,
+    'permissions:openSettings': () => false,
     'control:status': () => ({
       status: 'unreachable',
       baseUrl: 'http://127.0.0.1:8787',
@@ -137,6 +157,7 @@ app.whenReady().then(async () => {
       'input',
       'layup',
       'people',
+      'permissions',
       'preferences',
       'protocolVersion',
       'realtime',

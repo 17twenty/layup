@@ -13,7 +13,13 @@ import { TitleBar } from './shell/TitleBar';
 import { HappeningNow } from './layup/HappeningNow';
 import { Invitations } from './requests/Invitations';
 import { AddServer } from './onboarding/AddServer';
-import type { IdentityResponse, LayupStateResponse, ServerStateResponse } from '../shared/ipc';
+import { Permissions } from './onboarding/Permissions';
+import type {
+  IdentityResponse,
+  LayupStateResponse,
+  PermissionsResponse,
+  ServerStateResponse,
+} from '../shared/ipc';
 
 /**
  * People are the home screen (SPEC.md §2.1). Connection and identity detail is
@@ -25,6 +31,13 @@ export function App() {
   // Undefined until the privileged side answers: unknown is not "no server",
   // and it is not "a server" either. Nothing is asked of either until it is.
   const [server, setServer] = useState<ServerStateResponse | undefined>();
+  // What macOS has agreed to. Undefined until asked - and a screen is never
+  // put in somebody's way over an answer that has not arrived.
+  const [permissions, setPermissions] = useState<PermissionsResponse | undefined>();
+  // Skipping is per-run on purpose: screen recording only takes effect after a
+  // restart, so the next launch is exactly when it is worth asking again.
+  const [permissionsDismissed, setPermissionsDismissed] = useState(false);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +88,35 @@ export function App() {
     };
   }, [configured]);
 
+  useEffect(() => {
+    // Asked once a server exists, which is the moment somebody has actually
+    // committed to using this. Asking on the add-server screen would be a
+    // permission sheet in front of a person who has not arrived yet.
+    if (!configured) return;
+    let cancelled = false;
+    void window.layup.permissions
+      .all()
+      .then((next) => {
+        if (!cancelled) setPermissions(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [configured]);
+
   const inLayup = Boolean(layup?.layup);
+
+  // Anything macOS has not agreed to. Unknown counts as fine: a status we
+  // could not read is not a refusal, and must not become a nag.
+  const permissionsMissing = permissions
+    ? Object.values(permissions).some((entry) => !entry.ok)
+    : false;
+
+  // Shown after registration when something is missing, and any time it is
+  // asked for from the footer. Never over a live layup: the call wins.
+  const askingForPermissions =
+    configured && !inLayup && (permissionsOpen || (permissionsMissing && !permissionsDismissed));
 
   // The directory is a window of its own shape; in a layup the room decides,
   // because only it knows whether a screen has arrived.
@@ -93,6 +134,17 @@ export function App() {
     // No server means no people to show and nobody to ask: adding one is the
     // whole application until it is done.
     <AddServer />
+  ) : askingForPermissions ? (
+    // Before the call rather than during it. Skippable, and the footer link
+    // below is how somebody comes back after the restart it asks for.
+    <Permissions
+      doneLabel={permissionsOpen ? 'Done' : 'Skip for now'}
+      onChanged={setPermissions}
+      onDone={() => {
+        setPermissionsOpen(false);
+        setPermissionsDismissed(true);
+      }}
+    />
   ) : inLayup ? (
     // In a layup, the layup is the whole application. No directory, no
     // Happening Now, no header: those are for deciding who to be with, and
@@ -138,6 +190,16 @@ export function App() {
         <ControlStatus />
         <RealtimeStatus />
         <UpdateNotice />
+        {/* Screen Recording only takes effect after a restart, so people come
+            back to this. It is reachable from every non-call screen. */}
+        <button
+          type="button"
+          className="shell__footer-link"
+          onClick={() => setPermissionsOpen(true)}
+          data-testid="open-permissions"
+        >
+          {permissionsMissing ? 'Permissions — something is missing' : 'Permissions'}
+        </button>
         <p className="meta">
           {/* The one string a tester reads back to us when something is wrong. */}
           v{BUILD_INFO.version} ({BUILD_INFO.commit}) · protocol v{PROTOCOL_VERSION}

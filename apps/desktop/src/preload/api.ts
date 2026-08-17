@@ -6,6 +6,7 @@ import {
   type ChannelSpec,
   type EventName,
   type EventPayload,
+  type PermissionKind,
   type RequestOf,
   type ResponseOf,
 } from '../shared/ipc';
@@ -84,6 +85,18 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       permission: () => invoke('capture:permission', undefined),
       /** Opens the OS screen-recording settings page. */
       openSettings: () => invoke('capture:openSettings', undefined),
+    },
+    permissions: {
+      /** Camera, microphone, screen recording and accessibility, all at once. */
+      all: () => invoke('permissions:all', undefined),
+      /**
+       * Raises the real OS prompt, where there is one. Answers whether the
+       * permission is granted now - false for the two macOS only grants in
+       * System Settings, so the caller offers the settings pane instead.
+       */
+      request: (kind: PermissionKind) => invoke('permissions:request', { kind }),
+      /** Opens the exact settings pane this permission is granted in. */
+      openSettings: (kind: PermissionKind) => invoke('permissions:openSettings', { kind }),
     },
     control: {
       /** Current connection state of the Go control plane. */

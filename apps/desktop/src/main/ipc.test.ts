@@ -43,6 +43,23 @@ const goodHandlers: Handlers = {
     platform: 'darwin',
   }),
   'capture:openSettings': () => true,
+  'permissions:all': () => {
+    const granted = {
+      status: 'granted' as const,
+      ok: true,
+      guidance: '',
+      canOpenSettings: true,
+      canRequest: false,
+    };
+    return {
+      camera: granted,
+      microphone: granted,
+      screen: granted,
+      accessibility: granted,
+    };
+  },
+  'permissions:request': () => true,
+  'permissions:openSettings': () => true,
   'control:status': () => controlState,
   'control:remote': () => ({ helperRunning: false, pointer: false, keyboard: false }),
   'identity:current': () => ({ devUser: 'nick', resolved: false }),
@@ -118,6 +135,9 @@ describe('main IPC boundary', () => {
       'capture:sources',
       'capture:permission',
       'capture:openSettings',
+      'permissions:all',
+      'permissions:request',
+      'permissions:openSettings',
       'control:status',
       'control:remote',
       'identity:current',

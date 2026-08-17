@@ -246,12 +246,6 @@ const capture = createCaptureService({
   log: log.with({ component: 'capture' }),
 });
 
-const permissions = createPermissionService({
-  systemPreferences,
-  openExternal: (url) => shell.openExternal(url),
-  log: log.with({ component: 'permissions' }),
-});
-
 const ice = createIceSupervisor({
   client: controlClient,
   log: log.with({ component: 'ice' }),
@@ -269,6 +263,16 @@ const helper = createHelperSupervisor({
     process.env.LAYUP_HELPER_BINARY ||
     path.join(process.resourcesPath ?? __dirname, 'layup-input-helper'),
   log: log.with({ component: 'input-helper' }),
+});
+
+const permissions = createPermissionService({
+  systemPreferences,
+  openExternal: (url) => shell.openExternal(url),
+  // Accessibility is read from the helper's own AXIsProcessTrusted answer, not
+  // guessed here: it is the process that would actually post the event, and a
+  // guess is what makes remote control fail without saying anything.
+  helperState: () => helper.state(),
+  log: log.with({ component: 'permissions' }),
 });
 
 /**
@@ -477,6 +481,9 @@ function buildHandlers(): Handlers {
     'capture:sources': () => capture.listSources().then((sources) => ({ sources })),
     'capture:permission': () => permissions.capture(),
     'capture:openSettings': () => permissions.openCaptureSettings(),
+    'permissions:all': () => permissions.all(),
+    'permissions:request': (input) => permissions.request(input.kind),
+    'permissions:openSettings': (input) => permissions.openSettings(input.kind),
     'control:status': () => control.status(),
     'control:remote': () => {
       const state = helper.state();

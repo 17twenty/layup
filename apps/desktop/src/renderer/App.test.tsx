@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { App } from './App';
-import type { LayupStateResponse, UpdateStateResponse } from '../shared/ipc';
+import type {
+  LayupStateResponse,
+  PermissionsResponse,
+  UpdateStateResponse,
+} from '../shared/ipc';
 
 // The room's own wiring (media, signalling, remote control) is exercised in
 // LayupRoom.test.tsx. Here App is under test - specifically, that it renders
@@ -18,6 +23,14 @@ vi.mock('./layup/LayupRoom', () => ({
  * answer arrives. These tests pin down what is on screen in that gap: nothing
  * the answer might contradict, and no request to a server nobody has added.
  */
+const granted = {
+  status: 'granted' as const,
+  ok: true,
+  guidance: '',
+  canOpenSettings: true,
+  canRequest: false,
+};
+
 function bridge(serverState: Promise<unknown>) {
   const people = { list: vi.fn(async () => ({ people: [] })), onChanged: vi.fn(() => () => {}) };
   const layup = {
@@ -48,6 +61,18 @@ function bridge(serverState: Promise<unknown>) {
         platform: 'darwin',
       })),
       openSettings: vi.fn(),
+    },
+    permissions: {
+      all: vi.fn(
+        async (): Promise<PermissionsResponse> => ({
+          camera: granted,
+          microphone: granted,
+          screen: granted,
+          accessibility: granted,
+        }),
+      ),
+      request: vi.fn(async () => true),
+      openSettings: vi.fn(async () => true),
     },
     control: { status: vi.fn(async () => undefined) },
     identity: { current: vi.fn(async () => undefined) },
@@ -210,5 +235,151 @@ describe('the title bar drag strip', () => {
     await screen.findByTestId('room');
     expect(screen.getByTestId('titlebar')).toHaveClass('drag');
     expect(screen.queryByRole('heading', { level: 1, name: 'Layup' })).toBeNull();
+  });
+});
+
+/**
+ * Permissions, before the call rather than during it (task 9).
+ *
+ * Two people paired for the first time and spent the call in System Settings.
+ * The screen is skippable - it must never be a wall between somebody and the
+ * person waiting for them - but Screen Recording needs a restart, so the way
+ * back to it is permanent.
+ */
+const missing = {
+  status: 'denied' as const,
+  ok: false,
+  guidance: 'macOS is not letting Layup control this Mac.',
+  canOpenSettings: true,
+  canRequest: false,
+};
+
+describe('asking for permissions after registration', () => {
+  it('shows the permissions screen when something is missing', async () => {
+    const api = bridge(
+      Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }),
+    );
+    api.permissions.all.mockResolvedValue({
+      camera: granted,
+      microphone: granted,
+      screen: granted,
+      accessibility: missing,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByTestId('permission-accessibility')).toBeInTheDocument();
+    // And it is a screen, not a modal over the directory.
+    expect(screen.queryByRole('region', { name: 'People' })).toBeNull();
+  });
+
+  it('is skippable, and the directory is right there behind it', async () => {
+    const api = bridge(
+      Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }),
+    );
+    api.permissions.all.mockResolvedValue({
+      camera: granted,
+      microphone: granted,
+      screen: missing,
+      accessibility: granted,
+    });
+
+    render(<App />);
+
+    await userEvent.click(await screen.findByTestId('permissions-done'));
+    expect(await screen.findByRole('region', { name: 'People' })).toBeInTheDocument();
+  });
+
+  it('leaves a way back, because screen recording needs a restart', async () => {
+    const api = bridge(
+      Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }),
+    );
+    api.permissions.all.mockResolvedValue({
+      camera: granted,
+      microphone: granted,
+      screen: missing,
+      accessibility: granted,
+    });
+
+    render(<App />);
+
+    await userEvent.click(await screen.findByTestId('permissions-done'));
+    const link = await screen.findByTestId('open-permissions');
+    // The footer says so, rather than making somebody remember.
+    expect(link).toHaveTextContent(/something is missing/i);
+
+    await userEvent.click(link);
+    expect(await screen.findByTestId('permission-screen')).toBeInTheDocument();
+  });
+
+  it('is reachable from the footer even when nothing is missing', async () => {
+    bridge(
+      Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }),
+    );
+
+    render(<App />);
+
+    const link = await screen.findByTestId('open-permissions');
+    expect(link).toHaveTextContent(/^Permissions$/);
+    await userEvent.click(link);
+    expect(await screen.findByTestId('permission-camera')).toBeInTheDocument();
+  });
+
+  it('never puts a permission screen over a live layup', async () => {
+    const api = bridge(
+      Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }),
+    );
+    api.permissions.all.mockResolvedValue({
+      camera: missing,
+      microphone: missing,
+      screen: missing,
+      accessibility: missing,
+    });
+    api.layup.current.mockResolvedValue({
+      youAreCreatorMembership: true,
+      layup: {
+        id: 'lay_1',
+        organisationId: 'org_1',
+        visibility: 'PRIVATE',
+        active: true,
+        createdAt: '2026-08-17T00:00:00Z',
+        hasCreatorAuthority: true,
+        participants: [],
+      },
+      membershipId: 'mem_1',
+    });
+
+    render(<App />);
+
+    // The call wins. Permissions are asked for before one, never during.
+    expect(await screen.findByTestId('room')).toBeInTheDocument();
+    expect(screen.queryByTestId('permission-camera')).toBeNull();
+  });
+
+  it('asks nothing of the OS before a server has been added', async () => {
+    const api = bridge(Promise.resolve({ configured: false }));
+
+    render(<App />);
+
+    await screen.findByRole('heading', { level: 1 });
+    expect(api.permissions.all).not.toHaveBeenCalled();
+  });
+
+  it('keeps the title bar on the permissions screen', async () => {
+    const api = bridge(
+      Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }),
+    );
+    api.permissions.all.mockResolvedValue({
+      camera: granted,
+      microphone: granted,
+      screen: granted,
+      accessibility: missing,
+    });
+
+    render(<App />);
+
+    await screen.findByTestId('permission-accessibility');
+    expect(screen.getByTestId('titlebar')).toHaveClass('drag');
+    expect(screen.getByTestId('mute-toggle')).toHaveClass('no-drag');
   });
 });

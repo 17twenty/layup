@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   LayupStateResponse,
+  PermissionsResponse,
   RemoteControlStateResponse,
   ShareStateResponse,
 } from '../../shared/ipc';
@@ -53,6 +54,9 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
   const [control, setControl] = useState<RemoteControlStateResponse>(emptyControl);
   const [error, setError] = useState<string | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Only Accessibility is read here, and only while presenting: it is the one
+  // whose absence makes the switches below a lie.
+  const [permissions, setPermissions] = useState<PermissionsResponse | undefined>();
   const capture = useLocalCapture();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
 
@@ -78,6 +82,23 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
     };
   }, [layup.layup?.id]);
 
+  useEffect(() => {
+    // Asked when the switches are about to be shown, and again whenever this
+    // machine starts presenting: a grant can be revoked between calls, and the
+    // helper's answer is the only one that counts.
+    if (!presenting) return;
+    let cancelled = false;
+    void window.layup.permissions
+      .all()
+      .then((next) => {
+        if (!cancelled) setPermissions(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [presenting]);
+
   const run = useCallback(async (action: () => Promise<unknown>) => {
     setError(undefined);
     try {
@@ -97,7 +118,15 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
         return;
       }
       setPickerOpen(false);
-      await capture.start(source);
+      const started = await capture.start(source);
+      if (!started.ok) {
+        // A refused getUserMedia used to close the picker and announce a share
+        // with no video in it - the layup was told somebody was presenting a
+        // black rectangle. The refusal is almost always a permission, so it is
+        // said out loud and nothing is announced.
+        setError(started.reason);
+        return;
+      }
       await run(() => window.layup.share.start(sourceId));
     },
     [capture, run],
@@ -248,6 +277,10 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
       onSetAllowed={(scope, allowed) => void run(() => window.layup.control.allow(scope, allowed))}
       onStop={(target) => void run(() => window.layup.control.stop(target))}
       onResume={(target) => void run(() => window.layup.control.resume(target))}
+      {...(permissions ? { accessibility: permissions.accessibility } : {})}
+      onOpenAccessibilitySettings={() =>
+        void window.layup.permissions.openSettings('accessibility')
+      }
     />
   ) : null;
 
