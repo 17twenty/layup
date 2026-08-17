@@ -145,6 +145,13 @@ LAYUP_DEPLOY_HOST ?= root@157.20.113.124
 LAYUP_DEPLOY_DOMAIN ?= layup.blah.au
 export LAYUP_DEPLOY_DOMAIN
 
+.PHONY: publish
+publish: ## Upload the built DMG to the dev VM
+	@ls apps/desktop/release/*.dmg >/dev/null 2>&1 || (echo "run 'make release' first" && exit 1)
+	ssh $(LAYUP_DEPLOY_HOST) 'install -d -m 0755 /srv/layup/public/download'
+	scp apps/desktop/release/*.dmg $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/Layup.dmg
+	@echo "https://$(LAYUP_DEPLOY_DOMAIN)/download/Layup.dmg"
+
 .PHONY: deploy-build
 deploy-build: ## Cross-compile the control service for the dev VM
 	cd $(CONTROL_DIR) && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \

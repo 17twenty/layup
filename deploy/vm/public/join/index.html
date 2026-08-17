@@ -135,14 +135,13 @@
 
   <div class="buttons">
     <!--
-      Wired in plan 03 (packaging): this becomes a real DMG link once the app
-      is signed and notarised and published somewhere. Disabled rather than
-      pointed at nothing, so clicking it cannot look like a silent failure the
-      way the deep-link button below is allowed to.
+      Wired in plan 03 (packaging): the app is signed, notarised, stapled and
+      published; this points straight at the DMG (deploy/vm/README.md,
+      `make publish`).
     -->
-    <button type="button" class="button button--secondary" disabled title="coming soon">
+    <a class="button button--secondary" href="/download/Layup.dmg" download>
       Download Layup
-    </button>
+    </a>
     <a id="open-in-layup" class="button button--primary" aria-disabled="true">
       Open in Layup
     </a>
