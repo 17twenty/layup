@@ -750,6 +750,15 @@ body {
   color: #ffb4bf;
 }
 
+/* A device fell back to the default rather than leaving a dead track - a
+   notice, not an error: the call is fine, just not on the device you picked. */
+.faces__notice {
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--warn, #d98c3f);
+}
+
 /* ---- A call: the people fill the window, controls sit under them ---- */
 
 /* One stable full-bleed drag layer. A drag strip that changes shape as faces
@@ -872,7 +881,8 @@ body {
   font-size: 11px;
 }
 
-.faces--stage .faces__error {
+.faces--stage .faces__error,
+.faces--stage .faces__notice {
   position: absolute;
   inset: auto 8px 8px 8px;
 }

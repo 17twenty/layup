@@ -78,6 +78,14 @@ export function FaceTiles({
             {local.error}
           </p>
         ) : null}
+        {/* A device that vanished mid-call fell back to the default rather
+            than leaving a dead track (core/av.ts's switchInput) - said out
+            loud here, or it is a silent fallback nobody can explain. */}
+        {local.deviceNotice ? (
+          <p className="faces__notice" role="status" data-testid="face-device-notice">
+            {local.deviceNotice}
+          </p>
+        ) : null}
       </figure>
   );
 
