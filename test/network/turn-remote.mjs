@@ -21,18 +21,24 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveToken } from './identity.mjs';
+
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const desktop = join(repoRoot, 'apps', 'desktop');
 const domain = process.env.LAYUP_DEPLOY_DOMAIN || 'layup.blah.au';
-const devUser = process.env.LAYUP_DEV_USER || 'nick';
 
-// A later plan restricts X-Layup-Dev-User to loopback callers, so a bearer
-// token is preferred whenever one is available. Today the control service
-// only implements the dev-user header, so LAYUP_TOKEN is unset and this falls
-// through to it - that is expected, not a bug in this script.
-const authHeaders = process.env.LAYUP_TOKEN
-  ? { Authorization: `Bearer ${process.env.LAYUP_TOKEN}` }
-  : { 'X-Layup-Dev-User': devUser };
+// X-Layup-Dev-User is no longer accepted from off-host, so /api/turn needs a
+// real token: LAYUP_TOKEN if set, otherwise one registered here and now with
+// LAYUP_JOIN_CODE (test/network/identity.mjs).
+const token = await resolveToken({
+  domain,
+  protocolVersion: 1,
+  displayName: 'turn-remote harness',
+}).catch((error) => {
+  console.error(error.message);
+  process.exit(1);
+});
+const authHeaders = { Authorization: `Bearer ${token}` };
 
 const response = await fetch(`https://${domain}/api/turn`, {
   headers: { 'X-Layup-Protocol-Version': '1', ...authHeaders },
