@@ -21,6 +21,7 @@ import { createRealtimeSupervisor } from './realtime';
 import { createPeopleStore, TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE } from '../core/people-store';
 import { createControlClient, type ControlClient } from '../core/control-client';
 import { createConfigStore, type DesktopConfig } from './config';
+import { createPreferencesStore, type DesktopPreferences } from './preferences';
 import { registerWithServer } from './server';
 import { parseJoinLink } from './deep-link';
 import { createLayupSupervisor } from './layups';
@@ -65,6 +66,17 @@ const configStore = createConfigStore({
 });
 
 let config: DesktopConfig | undefined = configStore.read();
+
+/**
+ * Preferences that exist whether or not a server has been added - and, unlike
+ * `config`, survive `server:forget`. Starts with one: whether the arrival
+ * knock is muted.
+ */
+const preferencesStore = createPreferencesStore({
+  path: path.join(app.getPath('userData'), 'preferences.json'),
+});
+
+let preferences: DesktopPreferences = preferencesStore.read();
 
 /**
  * Where the control plane is right now.
@@ -200,6 +212,10 @@ const attention = createAttentionController({
       windows.withWindow((window) => {
         if (!window.isFocused()) window.flashFrame(true);
       });
+      // The renderer's knock is driven by this exact call, not a second
+      // reading of `requests:changed` - so the sound and the bounce can never
+      // disagree about which arrivals are new.
+      broadcast('attention:alert', undefined);
     },
   },
 });
@@ -517,6 +533,13 @@ function buildHandlers(): Handlers {
     },
     'update:state': () => updater.state(),
     'update:install': () => updater.quitAndInstall(),
+    'preferences:get': () => preferences,
+    'preferences:set': (input) => {
+      preferences = input;
+      preferencesStore.write(preferences);
+      log.info('preferences changed', { soundsMuted: preferences.soundsMuted });
+      return preferences;
+    },
   };
 }
 

@@ -222,6 +222,19 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       onState: (handler: (state: EventPayload<'realtime:state'>) => void) =>
         subscribe('realtime:state', handler),
     },
+    preferences: {
+      /** Small preferences with no server of their own - currently just the mute toggle. */
+      get: () => invoke('preferences:get', undefined),
+      set: (next: { soundsMuted: boolean }) => invoke('preferences:set', next),
+    },
+    attention: {
+      /**
+       * Fires exactly when the dock/taskbar alerts for a newly arrived
+       * request (main/attention.ts's `alerted` set) - never on a repeat and
+       * never on a request going away. Returns unsubscribe.
+       */
+      onAlert: (handler: () => void) => subscribe('attention:alert', () => handler()),
+    },
   } as const;
 }
 

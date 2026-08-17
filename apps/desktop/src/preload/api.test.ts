@@ -7,6 +7,7 @@ describe('preload bridge surface', () => {
     const api = createLayupApi(async () => ({}));
     expect(Object.keys(api).sort()).toEqual([
       'app',
+      'attention',
       'capture',
       'control',
       'ice',
@@ -14,6 +15,7 @@ describe('preload bridge surface', () => {
       'input',
       'layup',
       'people',
+      'preferences',
       'protocolVersion',
       'realtime',
       'requests',

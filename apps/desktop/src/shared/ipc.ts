@@ -402,6 +402,15 @@ export const uiModeShape = isObject({
 });
 export type UiModeResponse = ReturnType<typeof uiModeShape>;
 
+/**
+ * Small, persisted preferences that are not tied to any server.
+ *
+ * Starts with one field - whether notification sounds are muted - because
+ * somebody will be in a meeting when a knock arrives.
+ */
+export const preferencesResponse = isObject({ soundsMuted: isBoolean });
+export type PreferencesResponse = ReturnType<typeof preferencesResponse>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'server:state': channel(isVoid, serverStateResponse),
@@ -459,6 +468,8 @@ export const ipcChannels = {
    * otherwise.
    */
   'update:install': channel(isVoid, isBoolean),
+  'preferences:get': channel(isVoid, preferencesResponse),
+  'preferences:set': channel(preferencesResponse, preferencesResponse),
 } as const;
 
 /**
@@ -485,6 +496,12 @@ export const ipcEvents = {
   'requests:changed': requestsResponse,
   /** An update appeared, downloaded, failed, or is waiting for a restart. */
   'update:changed': updateStateResponse,
+  /**
+   * A request just arrived - the exact moment the dock badges, bounces and
+   * sets a tooltip (main/attention.ts). The renderer plays a knock from the
+   * same trigger, so the sound and the bounce can never disagree.
+   */
+  'attention:alert': isVoid,
 } as const;
 
 export type EventName = keyof typeof ipcEvents;

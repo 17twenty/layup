@@ -77,6 +77,8 @@ app.whenReady().then(async () => {
     // The harness installs nothing; it only proves the channel exists and that
     // the renderer cannot reach past it.
     'update:install': () => false,
+    'preferences:get': () => ({ soundsMuted: false }),
+    'preferences:set': (input) => input,
   });
 
   const win = new BrowserWindow({
@@ -127,6 +129,7 @@ app.whenReady().then(async () => {
     JSON.stringify(probe.layupKeys),
     JSON.stringify([
       'app',
+      'attention',
       'capture',
       'control',
       'ice',
@@ -134,6 +137,7 @@ app.whenReady().then(async () => {
       'input',
       'layup',
       'people',
+      'preferences',
       'protocolVersion',
       'realtime',
       'requests',

@@ -92,6 +92,8 @@ const goodHandlers: Handlers = {
   'ui:mode': () => ({ mode: 'compact' as const }),
   'update:state': () => ({ status: 'idle' as const }),
   'update:install': () => false,
+  'preferences:get': () => ({ soundsMuted: false }),
+  'preferences:set': (input) => input,
 };
 
 describe('main IPC boundary', () => {
@@ -149,6 +151,8 @@ describe('main IPC boundary', () => {
       'ui:mode',
       'update:state',
       'update:install',
+      'preferences:get',
+      'preferences:set',
     ]);
   });
 
