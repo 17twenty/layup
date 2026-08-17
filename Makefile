@@ -41,6 +41,10 @@ build-js: ## Build the protocol binding and desktop bundles
 build-go: ## Build every Go module in the workspace
 	@for m in $(GO_MODULES); do echo "==> build $$m"; (cd $$m && go build ./...) || exit 1; done
 
+.PHONY: build-helper
+build-helper: ## Build the input helper as a universal macOS binary
+	bash native/input-helper/build.sh
+
 .PHONY: typecheck
 typecheck: ## Typecheck TypeScript workspaces
 	npm run typecheck
