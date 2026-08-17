@@ -63,3 +63,30 @@ func TestLoadFailsFastWithUsefulError(t *testing.T) {
 		}
 	}
 }
+
+func TestJoinCodeAndStateDirAreLoaded(t *testing.T) {
+	cfg, err := Load(env(map[string]string{
+		"LAYUP_JOIN_CODE": "LAYUP-7K2M",
+		"LAYUP_STATE_DIR": "/var/lib/layup",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.JoinCode != "LAYUP-7K2M" {
+		t.Errorf("JoinCode = %q, want LAYUP-7K2M", cfg.JoinCode)
+	}
+	if cfg.StateDir != "/var/lib/layup" {
+		t.Errorf("StateDir = %q, want /var/lib/layup", cfg.StateDir)
+	}
+}
+
+// An unset join code must not silently mean "anyone may register".
+func TestJoinCodeDefaultsToEmptyWhichForbidsRegistration(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.JoinCode != "" {
+		t.Errorf("JoinCode = %q, want empty", cfg.JoinCode)
+	}
+}

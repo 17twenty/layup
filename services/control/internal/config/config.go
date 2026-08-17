@@ -42,6 +42,13 @@ type Config struct {
 	// ForceRelay makes clients use relay candidates only, for testing the TURN
 	// path and for deployments whose policy requires it.
 	ForceRelay bool
+
+	// JoinCode gates self-registration. Empty means registration is refused:
+	// an accidentally open server is worse than an unusable one.
+	JoinCode string
+	// StateDir holds the only thing this service persists - identities and
+	// their tokens. Layups and presence stay in memory (ARCHITECTURE.md §10).
+	StateDir string
 }
 
 // Default values chosen for local development on a single machine.
@@ -53,6 +60,7 @@ func defaults() Config {
 		LogFormat:       "json",
 		ShutdownTimeout: 5 * time.Second,
 		AllowedOrigins:  nil,
+		StateDir:        "/var/lib/layup",
 	}
 }
 
@@ -142,6 +150,13 @@ func Load(getenv Getenv) (Config, error) {
 	}
 	if cfg.ForceRelay && len(cfg.TurnURLs) == 0 {
 		problems = append(problems, EnvPrefix+"FORCE_RELAY needs at least one "+EnvPrefix+"TURN_URLS entry")
+	}
+
+	if v := getenv(EnvPrefix + "JOIN_CODE"); v != "" {
+		cfg.JoinCode = strings.TrimSpace(v)
+	}
+	if v := getenv(EnvPrefix + "STATE_DIR"); v != "" {
+		cfg.StateDir = v
 	}
 
 	if len(problems) > 0 {
