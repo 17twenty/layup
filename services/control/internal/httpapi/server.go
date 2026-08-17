@@ -151,7 +151,10 @@ func (s *Server) routes() {
 	authed.HandleFunc("POST /api/layups/{id}/share/settings", s.handleShareSettings)
 	authed.HandleFunc("GET /api/layups/{id}/share/drawing", s.handleDrawingCheck)
 	authed.HandleFunc("POST /api/layups/{id}/link", s.handleCreateLink)
-	authed.HandleFunc("POST /api/links/{token}/join", s.handleJoinByLink)
+	// The token travels in the JSON body, never the path: Caddy's access-log
+	// filter redacts query strings but not paths, so a path-based token would
+	// be written to /var/log/caddy/layup.log in cleartext on every join.
+	authed.HandleFunc("POST /api/links/join", s.handleJoinByLink)
 	authed.HandleFunc("GET /api/turn", s.handleTurnCredentials)
 	authed.HandleFunc("GET /api/requests", s.handleListRequests)
 	authed.HandleFunc("POST /api/requests", s.handleCreateRequest)

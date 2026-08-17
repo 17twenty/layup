@@ -76,6 +76,15 @@ type LinkDTO struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+// joinByLinkRequest is the body of POST /api/links/join.
+//
+// The token lives in the JSON body, never in the URL: Caddy's access-log
+// filter redacts query strings but not paths, so a token in the path would
+// land in cleartext in /var/log/caddy/layup.log on every redemption.
+type joinByLinkRequest struct {
+	Token string `json:"token"`
+}
+
 func (s *Server) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 	identity, ok := IdentityFrom(r.Context())
 	if !ok {
@@ -124,7 +133,13 @@ func (s *Server) handleJoinByLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	record, ok := s.links.resolve(r.PathValue("token"))
+	var body joinByLinkRequest
+	if err := decodeJSON(r, &body); err != nil {
+		s.writeAPIError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	record, ok := s.links.resolve(body.Token)
 	if !ok {
 		// One message for "never existed" and "no longer valid": a link is not
 		// an oracle for which layups exist.
