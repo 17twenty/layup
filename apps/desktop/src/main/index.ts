@@ -10,6 +10,7 @@ import {
 } from 'electron';
 import * as path from 'node:path';
 import { readFileSync } from 'node:fs';
+import { autoUpdater } from 'electron-updater';
 import { PROTOCOL_VERSION } from '@layup/protocol';
 import { registerIpcHandlers, type Handlers } from './ipc';
 import type { EventName } from '../shared/ipc';
@@ -35,6 +36,7 @@ import { MODE_SPECS } from './window-modes';
 import { createWindowModes, type WindowModes } from './window-modes';
 import { createWindowRegistry } from './windows';
 import { secureWebPreferences } from './window';
+import { createUpdater } from './updater';
 
 /**
  * Electron main process. Owns windows, capture, media and the privileged side
@@ -382,6 +384,21 @@ for (const type of ['signal.offer', 'signal.answer', 'signal.candidate', 'signal
   });
 }
 
+/**
+ * Keeping this desktop current, without ever restarting somebody mid-call.
+ *
+ * `isBusy` is the whole safety property: while there is a layup there is a
+ * person on the other end of it, and no update is worth interrupting them.
+ * Downloading happens quietly; restarting only happens when somebody clicks
+ * the line in the footer with no layup running (Task 2, PLAN 0.2.0).
+ */
+const updater = createUpdater({
+  log: log.with({ component: 'updater' }),
+  autoUpdater,
+  isBusy: () => Boolean(layups.state().layup),
+  onChanged: (state) => broadcast('update:changed', state),
+});
+
 /** What the renderer is told about the server. Never the token. */
 function serverState() {
   return {
@@ -498,6 +515,8 @@ function buildHandlers(): Handlers {
       modes?.apply(input.mode);
       return { mode: modes?.mode() ?? input.mode };
     },
+    'update:state': () => updater.state(),
+    'update:install': () => updater.quitAndInstall(),
   };
 }
 
@@ -604,6 +623,10 @@ app.whenReady().then(() => {
   createMainWindow();
   realtime.start();
 
+  // A development run has no feed and no signature to check against, so asking
+  // would only produce an error nobody caused.
+  if (app.isPackaged) updater.start();
+
   // Put this desktop back where it was. Restarting the application is not
   // leaving the room.
   void layups.restore();
@@ -616,6 +639,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  updater.dispose();
   realtime.stop();
   // The helper exits with the desktop; nothing privileged outlives us.
   helper.stop();

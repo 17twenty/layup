@@ -4,6 +4,7 @@ import { BUILD_INFO } from '../shared/build-info';
 import { ControlStatus } from './ControlStatus';
 import { Identity } from './Identity';
 import { RealtimeStatus } from './RealtimeStatus';
+import { UpdateNotice } from './UpdateNotice';
 import { PeopleGrid } from './people/PeopleGrid';
 import { LayupPanel } from './layup/LayupPanel';
 import { LayupRoom } from './layup/LayupRoom';
@@ -140,6 +141,7 @@ export function App() {
         <Identity />
         <ControlStatus />
         <RealtimeStatus />
+        <UpdateNotice />
         <p className="meta">
           {/* The one string a tester reads back to us when something is wrong. */}
           v{BUILD_INFO.version} ({BUILD_INFO.commit}) · protocol v{PROTOCOL_VERSION}

@@ -203,6 +203,18 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       /** The mode actually in effect. Returns unsubscribe. */
       onMode: (handler: (payload: EventPayload<'ui:mode'>) => void) => subscribe('ui:mode', handler),
     },
+    update: {
+      /** Whether a newer Layup is waiting, and how far along it is. */
+      state: () => invoke('update:state', undefined),
+      /**
+       * Asks to restart into a downloaded update. Answers false when there is
+       * nothing to install or a layup is live - the privileged side decides.
+       */
+      install: () => invoke('update:install', undefined),
+      /** Subscribe to update-state changes. Returns unsubscribe. */
+      onChanged: (handler: (state: EventPayload<'update:changed'>) => void) =>
+        subscribe('update:changed', handler),
+    },
     realtime: {
       /** Current realtime connection state. */
       status: () => invoke('realtime:status', undefined),

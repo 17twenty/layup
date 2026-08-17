@@ -72,6 +72,11 @@ app.whenReady().then(async () => {
     'requests:accept': () => undefined,
     'requests:decline': () => undefined,
     'requests:cancel': () => undefined,
+    'ui:mode': () => ({ mode: 'home' }),
+    'update:state': () => ({ status: 'idle' }),
+    // The harness installs nothing; it only proves the channel exists and that
+    // the renderer cannot reach past it.
+    'update:install': () => false,
   });
 
   const win = new BrowserWindow({
@@ -136,6 +141,7 @@ app.whenReady().then(async () => {
       'share',
       'signal',
       'ui',
+      'update',
     ]),
   );
   expect('app:info protocolVersion', probe.appInfo && probe.appInfo.protocolVersion, 1);

@@ -37,6 +37,31 @@ body {
   font-size: 12px;
 }
 
+/* Footer chrome, deliberately: an update is never a dialog over a call. */
+.update {
+  font-size: 12px;
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+
+.update--error {
+  color: var(--warn, #d98c3f);
+}
+
+.update__restart {
+  background: none;
+  border: 1px solid #3a3f4b;
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 4px 10px;
+}
+
+.update__restart:hover {
+  border-color: var(--accent);
+}
+
 .status {
   font-size: 13px;
   margin: 0 0 16px;

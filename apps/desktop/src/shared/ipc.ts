@@ -383,6 +383,20 @@ export const serverPrefillPayload = isObject({
 });
 export type ServerPrefillPayload = ReturnType<typeof serverPrefillPayload>;
 
+/**
+ * Whether a newer Layup is waiting, and how far along it is.
+ *
+ * Mirrors UpdateState in main/updater.ts. The renderer is told *about* an
+ * update; the decision to restart stays on the privileged side, which is the
+ * only place that knows whether a layup is live.
+ */
+export const updateStateResponse = isObject({
+  status: isEnum(['idle', 'checking', 'available', 'downloading', 'ready', 'error'] as const),
+  version: optional(isString),
+  message: optional(isString),
+});
+export type UpdateStateResponse = ReturnType<typeof updateStateResponse>;
+
 export const uiModeShape = isObject({
   mode: isEnum(['home', 'compact', 'picker', 'viewer'] as const),
 });
@@ -438,6 +452,13 @@ export const ipcChannels = {
     isObject({ injected: isBoolean, reason: optional(isString) }),
   ),
   'ui:mode': channel(uiModeShape, uiModeShape),
+  'update:state': channel(isVoid, updateStateResponse),
+  /**
+   * Asks to restart into a downloaded update. Answers whether it actually
+   * happened: a live layup is refused, and the renderer is never told
+   * otherwise.
+   */
+  'update:install': channel(isVoid, isBoolean),
 } as const;
 
 /**
@@ -462,6 +483,8 @@ export const ipcEvents = {
   'people:changed': peopleResponse,
   'layup:changed': layupStateResponse,
   'requests:changed': requestsResponse,
+  /** An update appeared, downloaded, failed, or is waiting for a restart. */
+  'update:changed': updateStateResponse,
 } as const;
 
 export type EventName = keyof typeof ipcEvents;

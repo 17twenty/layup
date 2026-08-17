@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { App } from './App';
+import type { UpdateStateResponse } from '../shared/ipc';
 
 /**
  * The bridge, with a server answer that can be held open.
@@ -53,6 +54,11 @@ function bridge(serverState: Promise<unknown>) {
     },
     layup,
     ui: { setMode: vi.fn(async () => ({ mode: 'home' })), onMode: vi.fn(() => () => {}) },
+    update: {
+      state: vi.fn(async (): Promise<UpdateStateResponse> => ({ status: 'idle' })),
+      install: vi.fn(async () => false),
+      onChanged: vi.fn(() => () => {}),
+    },
     realtime: {
       status: vi.fn(async () => ({ status: 'idle', attempt: 0 })),
       onState: vi.fn(() => () => {}),
@@ -84,6 +90,21 @@ describe('bootstrap shell', () => {
     const meta = await screen.findByText(/protocol v\d+/);
     expect(meta.textContent).toMatch(/^v\d+\.\d+\.\d+\S* \(([0-9a-f]{7,40}|dev)\) · protocol v\d+$/);
     expect(meta.textContent).not.toMatch(/undefined/);
+  });
+
+  it('keeps the restart affordance in the footer, where a layup never shows one', async () => {
+    const api = bridge(
+      Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }),
+    );
+    api.update.state.mockResolvedValue({ status: 'ready', version: '0.3.0' });
+
+    const { container } = render(<App />);
+
+    const restart = await screen.findByRole('button', { name: /restart layup/i });
+    // Footer chrome, not an overlay: the layup shell renders no footer at all,
+    // so this can never appear over a call.
+    expect(container.querySelector('footer.shell__footer')?.contains(restart)).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('shows nothing but the add-server screen when no server has been added', async () => {

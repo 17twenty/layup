@@ -90,6 +90,8 @@ const goodHandlers: Handlers = {
   'control:stopAll': () => idleControl,
   'input:offer': () => ({ injected: false, reason: 'stopped' }),
   'ui:mode': () => ({ mode: 'compact' as const }),
+  'update:state': () => ({ status: 'idle' as const }),
+  'update:install': () => false,
 };
 
 describe('main IPC boundary', () => {
@@ -145,6 +147,8 @@ describe('main IPC boundary', () => {
       'control:stopAll',
       'input:offer',
       'ui:mode',
+      'update:state',
+      'update:install',
     ]);
   });
 

@@ -56,6 +56,9 @@ release: build-helper ## Build, sign and notarise the macOS app
 	@# electron-builder staples the .app, then builds the DMG around it, leaving
 	@# the DMG itself unsigned and ticketless. The DMG is what gets downloaded.
 	bash scripts/notarize-dmg.sh apps/desktop/release/Layup-*-universal.dmg
+	@# Signing and stapling changed the DMG after electron-builder measured it,
+	@# so the feed now describes a file that no longer exists.
+	node scripts/restamp-feed.mjs apps/desktop/release/latest-mac.yml
 
 .PHONY: typecheck
 typecheck: ## Typecheck TypeScript workspaces
@@ -146,11 +149,28 @@ LAYUP_DEPLOY_DOMAIN ?= layup.blah.au
 export LAYUP_DEPLOY_DOMAIN
 
 .PHONY: publish
-publish: ## Upload the built DMG to the dev VM
+publish: ## Upload the DMG, the update zip and the feed manifest to the dev VM
 	@ls apps/desktop/release/*.dmg >/dev/null 2>&1 || (echo "run 'make release' first" && exit 1)
+	@# Squirrel.Mac cannot update from a DMG. No zip means a download page and
+	@# no update path, which looks identical until nobody ever gets a fix.
+	@ls apps/desktop/release/*-mac.zip >/dev/null 2>&1 || (echo "no update zip: check mac.target in electron-builder.yml" && exit 1)
+	@# The manifest *is* the feed. Without it nothing ever updates, and it looks
+	@# exactly like it is working.
+	@test -f apps/desktop/release/latest-mac.yml || (echo "no latest-mac.yml: check the publish block in electron-builder.yml" && exit 1)
 	ssh $(LAYUP_DEPLOY_HOST) 'install -d -m 0755 /srv/layup/public/download'
+	@# Under their own versioned names, because latest-mac.yml names them.
+	scp apps/desktop/release/*.dmg apps/desktop/release/*-mac.zip $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
+	@# Blockmaps make an update a delta instead of a full download. Their
+	@# absence only costs bandwidth, so a missing one is not a failed publish.
+	-scp apps/desktop/release/*.blockmap $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
+	@# And again under the stable name the download page links to.
 	scp apps/desktop/release/*.dmg $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/Layup.dmg
+	@# Last: until the manifest lands the feed still describes the previous
+	@# release, which is the only thing it is safe for it to describe.
+	scp apps/desktop/release/latest-mac.yml $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/latest-mac.yml
 	@echo "https://$(LAYUP_DEPLOY_DOMAIN)/download/Layup.dmg"
+	@echo "feed: https://$(LAYUP_DEPLOY_DOMAIN)/download/latest-mac.yml"
+	@curl -fsS https://$(LAYUP_DEPLOY_DOMAIN)/download/latest-mac.yml | head -3
 
 .PHONY: deploy-build
 deploy-build: ## Cross-compile the control service for the dev VM

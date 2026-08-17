@@ -17,7 +17,12 @@ extraResources:
 mac:
   category: public.app-category.productivity
   target:
+    # Both, and both matter. The DMG is what a person downloads once; the zip is
+    # the only thing Squirrel.Mac can update from - it cannot mount a DMG - so
+    # without it there is a download page and no update path at all.
     - target: dmg
+      arch: [universal]
+    - target: zip
       arch: [universal]
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -41,3 +46,14 @@ mac:
 
 dmg:
   artifactName: Layup-${version}-universal.dmg
+
+# The update feed. Caddy serves /srv/layup/public, so the manifest and the
+# artifacts sit together at https://layup.blah.au/download/. Generic means no
+# provider account and no tokens: a directory, over https, and nothing else.
+#
+# Declaring it here is also what makes electron-builder emit latest-mac.yml at
+# build time. Without that manifest nothing ever updates, and it looks exactly
+# like it is working.
+publish:
+  - provider: generic
+    url: https://layup.blah.au/download/

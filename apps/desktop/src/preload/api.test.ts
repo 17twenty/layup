@@ -21,6 +21,7 @@ describe('preload bridge surface', () => {
       'share',
       'signal',
       'ui',
+      'update',
     ]);
     expect(Object.keys(api.app)).toEqual(['info']);
     const serialised = JSON.stringify(api, (_key, value) =>
