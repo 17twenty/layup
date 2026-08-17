@@ -181,6 +181,11 @@ const layups = createLayupSupervisor({
     // rebuild must not stop somebody creating or joining a layup, so it is
     // reported rather than thrown back at the caller.
     try {
+      // Who is a guest comes first: the input guard reads this set on every
+      // message a peer sends, and remote control never touches the control
+      // plane, so this is the whole of what keeps a browser visitor off this
+      // machine's mouse and keyboard.
+      remote.setParticipants(state.layup?.participants ?? []);
       remote.setMembership(state.membershipId, state.layup?.id);
       // The layup tells us who is presenting right now, which live events
       // cannot: they only describe what happens next.
