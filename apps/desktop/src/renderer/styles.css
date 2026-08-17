@@ -219,6 +219,18 @@ body {
 .requests {
   display: grid;
   gap: 8px;
+  /* Pinned to the top of whatever it sits in, and above whatever scrolls
+     underneath it, so a card is reachable the instant it arrives no matter
+     how small the window is or how far down the page you happen to be. */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  padding-bottom: 8px;
+  /* A pile of requests grows the section internally rather than pushing its
+     own buttons off the window - never clip a card, scroll instead. */
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .request {
@@ -735,12 +747,24 @@ body {
 }
 
 .shell--layup {
-  display: block;
+  display: flex;
+  flex-direction: column;
   padding: 0;
   gap: 0;
   height: 100vh;
   min-height: 0;
-  overflow: hidden;
+  /* An invitation arriving mid-call must never be clipped: the room below it
+     shrinks to make room (.shell--layup .room, below) and, failing that,
+     this scrolls rather than cutting the card's buttons off. */
+  overflow-y: auto;
+}
+
+/* In a layup, the call still owns the window - it only yields the space an
+   invitation actually needs, instead of both insisting on 100vh at once. */
+.shell--layup .room {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .call {
