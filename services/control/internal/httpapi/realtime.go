@@ -17,7 +17,8 @@ import (
 //
 // The handshake travels on the query string because the WebSocket client in the
 // desktop runtime cannot set request headers. Headers are still honoured when
-// present, so tooling like curl behaves the same way.
+// present, so tooling like curl behaves the same way. Neither the query string
+// nor the error text is ever logged, because both can carry a token.
 func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 	version, err := realtimeVersion(r)
 	if err != nil {
@@ -30,15 +31,10 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reference := r.Header.Get(HeaderDevUser)
-	if reference == "" {
-		reference = r.URL.Query().Get(protocol.QueryDevUser)
-	}
-	if reference == "" {
-		s.writeAPIError(w, r, http.StatusUnauthorized, "unauthenticated", "missing development identity")
-		return
-	}
-	user, err := s.directory.Resolve(reference)
+	// The same authenticator as the REST routes, deliberately: the upgrade
+	// endpoint sits outside requireIdentity, and a second copy of the rules
+	// here is how one of them would get missed.
+	user, err := s.authenticate(r)
 	if err != nil {
 		status := http.StatusUnauthorized
 		if !errors.Is(err, domain.ErrNotFound) {

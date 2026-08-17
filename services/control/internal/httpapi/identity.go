@@ -16,6 +16,9 @@ import (
 // simply declare who they are. Anything stronger is PLAN-2 (SPEC.md §17).
 const HeaderDevUser = "X-Layup-Dev-User"
 
+// HeaderAuthorization carries a bearer token issued by registration.
+const HeaderAuthorization = "Authorization"
+
 // Identity is the authenticated caller.
 type Identity struct {
 	User domain.User
@@ -33,17 +36,12 @@ func IdentityFrom(ctx context.Context) (Identity, bool) {
 	return identity, ok
 }
 
-// requireIdentity resolves the development identity for a request and rejects
-// unknown or missing ones. It runs inside the protocol-version guard.
+// requireIdentity resolves the caller for a request and rejects unknown or
+// missing credentials. It runs inside the protocol-version guard, and defers
+// every rule about who counts as authenticated to s.authenticate.
 func (s *Server) requireIdentity(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reference := r.Header.Get(HeaderDevUser)
-		if reference == "" {
-			s.writeAPIError(w, r, http.StatusUnauthorized, "unauthenticated",
-				"missing "+HeaderDevUser+" header")
-			return
-		}
-		user, err := s.directory.Resolve(reference)
+		user, err := s.authenticate(r)
 		if err != nil {
 			status := http.StatusUnauthorized
 			if !errors.Is(err, domain.ErrNotFound) {
