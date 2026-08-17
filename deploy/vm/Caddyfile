@@ -24,16 +24,19 @@ layup.blah.au {
 	# connection writes a working credential into /var/log/caddy/layup.log in
 	# cleartext - the control service is careful never to log a token
 	# (services/control/internal/httpapi/auth.go) and the reverse proxy would
-	# quietly undo that. The path is still logged; only the credential is not.
+	# quietly undo that.
+	#
+	# The query string goes in its entirety rather than by name. Naming the
+	# parameters to redact is an allow-list of everything we have thought of so
+	# far, and the next credential-bearing parameter would leak verbatim until
+	# somebody noticed. Dropping the lot cannot be outgrown. The path survives,
+	# so the log still says what was called and when.
 	log {
 		output file /var/log/caddy/layup.log
 		format filter {
 			wrap json
 			fields {
-				request>uri query {
-					replace token REDACTED
-					replace devUser REDACTED
-				}
+				request>uri regexp "[?].*" "?[redacted]"
 			}
 		}
 	}
