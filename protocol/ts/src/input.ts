@@ -152,8 +152,14 @@ export const controlGrant = isObject({
   v: version,
   /** The presenter issuing the grant; only they may. */
   membershipId: isString,
-  /** Who is being granted control. */
-  targetMembershipId: isString,
+  /**
+   * Who is being granted control. Absent means everyone in the layup.
+   *
+   * Sharing control is a mode, not a list of permissions: the presenter says
+   * "the mouse is shared" and it is shared with the room. Naming one person is
+   * the exception - used to put somebody back after they were stopped.
+   */
+  targetMembershipId: optional(isString),
   scope: isEnum(CONTROL_SCOPES),
   /**
    * Identifies this grant. A revoke names it, so a revoke that races a re-grant
