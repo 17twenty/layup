@@ -18,7 +18,23 @@ layup.blah.au {
 		file_server
 	}
 
+	# The realtime handshake carries its bearer token on the query string,
+	# because a WebSocket client cannot set an Authorization header. Caddy's
+	# access log records the full request URI, so without this filter every
+	# connection writes a working credential into /var/log/caddy/layup.log in
+	# cleartext - the control service is careful never to log a token
+	# (services/control/internal/httpapi/auth.go) and the reverse proxy would
+	# quietly undo that. The path is still logged; only the credential is not.
 	log {
 		output file /var/log/caddy/layup.log
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					replace token REDACTED
+					replace devUser REDACTED
+				}
+			}
+		}
 	}
 }
