@@ -340,9 +340,15 @@ func (s *Server) afterLayupChange(ctx context.Context, view domain.LayupView, ac
 func (s *Server) layupDTO(view domain.LayupView) LayupDTO {
 	participants := make([]ParticipantDTO, 0, len(view.Participants))
 	for _, participant := range view.Participants {
+		// The directory is the first source and stays that way. It simply has
+		// no answer for a guest - who is in no directory by design - and an
+		// unnamed participant is worse than useless: the people in the call
+		// would see a blank row where a person is.
 		name := ""
 		if user, err := s.directory.UserByID(participant.UserID); err == nil {
 			name = user.DisplayName
+		} else if guestName, ok := s.guests.displayName(participant.UserID); ok {
+			name = guestName
 		}
 		participants = append(participants, ParticipantDTO{
 			MembershipID:        string(participant.MembershipID),

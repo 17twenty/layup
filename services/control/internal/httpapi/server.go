@@ -132,6 +132,11 @@ func (s *Server) routes() {
 	// Registration is how a client gets a credential, so it cannot itself
 	// require one. The join code is the gate.
 	public.HandleFunc("POST /api/register", s.handleRegister)
+	// Redeeming an invitation link as a browser guest is how someone with no
+	// account gets a credential at all, so it cannot itself require one. The
+	// link token is the gate, and what it buys is deliberately small: a
+	// session scoped to one layup (guest_auth.go).
+	public.HandleFunc("POST /api/guest/join", s.handleGuestJoin)
 
 	// The realtime endpoint authenticates itself (handshake on the query
 	// string), so it sits beside the versioned REST routes.

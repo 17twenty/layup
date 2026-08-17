@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/layup-app/layup/services/control/internal/domain"
 )
 
 // TURN credentials follow the coturn REST convention: the username is an expiry
@@ -43,6 +45,30 @@ func turnCredential(secret, userID string, expiresAt time.Time) (string, string)
 	return username, base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
+// iceServers builds the ICE configuration for one user id.
+//
+// It is shared by GET /api/turn and the guest-join response, which hands a
+// browser its ICE servers in the same breath as its seat - a guest arriving on
+// a phone network needs TURN before anything can connect, and one round trip
+// fewer is one fewer chance to fail. The credential is derived from the user
+// id, so a guest's is theirs alone and expires like anyone else's.
+func (s *Server) iceServers(userID domain.UserID, expiresAt time.Time) []IceServerDTO {
+	cfg := s.cfg
+	servers := make([]IceServerDTO, 0, 2)
+	if len(cfg.StunURLs) > 0 {
+		servers = append(servers, IceServerDTO{URLs: cfg.StunURLs})
+	}
+	if len(cfg.TurnURLs) > 0 && cfg.TurnSecret != "" {
+		username, credential := turnCredential(cfg.TurnSecret, string(userID), expiresAt)
+		servers = append(servers, IceServerDTO{
+			URLs:       cfg.TurnURLs,
+			Username:   username,
+			Credential: credential,
+		})
+	}
+	return servers
+}
+
 func (s *Server) handleTurnCredentials(w http.ResponseWriter, r *http.Request) {
 	identity, ok := IdentityFrom(r.Context())
 	if !ok {
@@ -52,19 +78,7 @@ func (s *Server) handleTurnCredentials(w http.ResponseWriter, r *http.Request) {
 
 	cfg := s.cfg
 	expiresAt := s.now().Add(DefaultTurnCredentialTTL)
-	servers := make([]IceServerDTO, 0, 2)
-
-	if len(cfg.StunURLs) > 0 {
-		servers = append(servers, IceServerDTO{URLs: cfg.StunURLs})
-	}
-	if len(cfg.TurnURLs) > 0 && cfg.TurnSecret != "" {
-		username, credential := turnCredential(cfg.TurnSecret, string(identity.User.ID), expiresAt)
-		servers = append(servers, IceServerDTO{
-			URLs:       cfg.TurnURLs,
-			Username:   username,
-			Credential: credential,
-		})
-	}
+	servers := s.iceServers(identity.User.ID, expiresAt)
 
 	// The credential itself is never logged - only that one was issued.
 	s.log.InfoContext(r.Context(), "issued ICE configuration",
