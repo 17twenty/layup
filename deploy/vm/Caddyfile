@@ -1,0 +1,24 @@
+layup.blah.au {
+	encode zstd gzip
+
+	# The control plane. `handle` rather than a bare matcher so ordering is
+	# explicit rather than inferred. Caddy proxies the WebSocket upgrade on
+	# /api/realtime transparently - no special directive is required.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle /healthz {
+		reverse_proxy 127.0.0.1:8787
+	}
+
+	# The join page and the downloadable app. Populated in plan 03; an empty
+	# directory here is correct, not a placeholder.
+	handle {
+		root * /srv/layup/public
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/layup.log
+	}
+}

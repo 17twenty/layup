@@ -1,0 +1,29 @@
+[Unit]
+Description=Layup control plane
+Documentation=https://github.com/layup-app/layup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=layup
+Group=layup
+EnvironmentFile=/etc/layup/control.env
+ExecStart=/usr/local/bin/layup-control
+Restart=on-failure
+RestartSec=2
+
+# The control plane needs no privilege beyond a loopback socket.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+# Plan 02 persists the identity store here. Creating it now costs nothing.
+StateDirectory=layup
+
+[Install]
+WantedBy=multi-user.target
