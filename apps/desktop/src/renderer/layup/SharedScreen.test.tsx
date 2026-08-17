@@ -27,7 +27,7 @@ describe('shared screen', () => {
   it('treats no shared screen as a normal state, not an error', () => {
     render(<SharedScreen remotes={[remote()]} />);
     expect(screen.getByTestId('no-screen').textContent).toMatch(
-      /Nobody is sharing a screen. Audio and video carry on regardless./,
+      /Nobody is sharing a screen/,
     );
     expect(screen.queryByRole('alert')).toBeNull();
   });

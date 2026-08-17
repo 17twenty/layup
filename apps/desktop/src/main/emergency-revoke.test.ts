@@ -103,8 +103,6 @@ beforeEach(() => {
 
   control.setAllowed('pointer', true);
   control.setAllowed('keyboard', true);
-  control.grant(GUEST, 'pointer');
-  control.grant(GUEST, 'keyboard');
 });
 
 describe('emergency revoke', () => {
@@ -120,7 +118,6 @@ describe('emergency revoke', () => {
     await router.settle();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(control.state().grants).toEqual([]);
     expect(control.state().anyoneHasControl).toBe(false);
     // Held input is released, keys before buttons.
     expect(calls).toEqual([
@@ -133,6 +130,7 @@ describe('emergency revoke', () => {
 
   it('refuses the very next message, before anybody has been told', async () => {
     const result = await emergency.trigger('button');
+    // Both switches were on; both are off.
     expect(result.revoked).toBe(2);
 
     // The local half runs first on purpose: a message that arrives late must
@@ -152,6 +150,8 @@ describe('emergency revoke', () => {
         return true;
       },
     });
+    // Everything the presenter announced since the switches went on - all of
+    // it untargeted, because sharing is with the room.
     for (const message of broadcast) sender.applyControl(message);
     sender.pointerDown({ displayId: DISPLAY, x: 0.5, y: 0.5, button: 'left' });
     sender.keyDown('ShiftLeft');
@@ -196,6 +196,33 @@ describe('emergency revoke', () => {
     expect(lines.join('\n')).toContain('could not be registered');
   });
 
+  it('survives an OS that rejects the accelerator outright', () => {
+    // Electron throws a TypeError for an accelerator it cannot parse rather
+    // than returning false. Losing the shortcut must never be worse than not
+    // having one: it broke layup creation once, and must not again.
+    const lines: string[] = [];
+    const hostile = createEmergencyRevoke({
+      control,
+      router,
+      holders: () => [],
+      log: createLogger({ level: 'warn', write: (line) => lines.push(line) }),
+      register: () => {
+        throw new TypeError('conversion failure from CommandOrControl+Alt+Shift+Nonsense');
+      },
+    });
+
+    expect(() => hostile.arm()).not.toThrow();
+    expect(hostile.armed()).toBe(false);
+    expect(lines.join('\n')).toContain('rejected outright');
+  });
+
+  it('uses an accelerator the OS can actually parse', () => {
+    // Punctuation is the literal character; a name like "Backslash" is not a
+    // key Electron knows.
+    expect(EMERGENCY_REVOKE_SHORTCUT).toBe('CommandOrControl+Alt+Shift+\\');
+    expect(EMERGENCY_REVOKE_SHORTCUT).not.toMatch(/Backslash|Backspace/);
+  });
+
   it('gives the shortcut back when it is disarmed', () => {
     emergency.arm();
     expect(shortcuts.has(EMERGENCY_REVOKE_SHORTCUT)).toBe(true);
@@ -205,7 +232,7 @@ describe('emergency revoke', () => {
   });
 
   it('is safe to press when nobody has control', async () => {
-    control.revokeAll();
+    control.stopAll();
     const result = await emergency.trigger('shortcut');
     expect(result).toEqual({ revoked: 0, cause: 'shortcut' });
   });

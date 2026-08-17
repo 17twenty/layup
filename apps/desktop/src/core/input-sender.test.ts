@@ -149,10 +149,9 @@ describe('remote input sender', () => {
       localMembershipId: PRESENTER,
       isPresenting: () => true,
       sharedDisplayId: () => DISPLAY,
+      allowsScope: () => true,
       presenterMembershipId: () => PRESENTER,
     });
-    guard.grant(GUEST, 'pointer');
-    guard.grant(GUEST, 'keyboard');
 
     sender.applyControl(grant('pointer'));
     sender.applyControl(grant('keyboard'));

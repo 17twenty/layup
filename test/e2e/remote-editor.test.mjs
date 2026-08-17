@@ -239,10 +239,9 @@ test('a remote participant can use an ordinary editor', async () => {
   const editor = createEditor(['const total = 0;', 'return total;', '', 'done']);
   const session = createSession(editor);
 
+  // Two switches, and the room can use them: no per-person grants.
   session.control.setAllowed('pointer', true);
   session.control.setAllowed('keyboard', true);
-  session.control.grant(GUEST, 'pointer');
-  session.control.grant(GUEST, 'keyboard');
   session.deliverControl();
   assert.deepEqual(session.sender.scopes(), ['pointer', 'keyboard']);
 

@@ -5,8 +5,9 @@ import { Identity } from './Identity';
 import { RealtimeStatus } from './RealtimeStatus';
 import { PeopleGrid } from './people/PeopleGrid';
 import { LayupPanel } from './layup/LayupPanel';
+import { LayupRoom } from './layup/LayupRoom';
+import { useWindowMode } from './shell/useWindowMode';
 import { HappeningNow } from './layup/HappeningNow';
-import { CapturePicker } from './capture/CapturePicker';
 import { Invitations } from './requests/Invitations';
 import type { IdentityResponse, LayupStateResponse } from '../shared/ipc';
 
@@ -42,9 +43,27 @@ export function App() {
     };
   }, []);
 
+  const inLayup = Boolean(layup?.layup);
+
+  // The directory is a window of its own shape; in a layup the room decides,
+  // because only it knows whether a screen has arrived.
+  useWindowMode({ inLayup: false, pickerOpen: false, hasIncomingScreen: false });
+
+  if (inLayup) {
+    // In a layup, the layup is the whole application. No directory, no
+    // Happening Now, no header: those are for deciding who to be with, and
+    // that decision is made.
+    return (
+      <div className="shell shell--layup">
+        <Invitations currentLayupId={layup?.layup?.id} />
+        <LayupRoom layup={layup!} onLeave={() => void window.layup.layup.leave()} />
+      </div>
+    );
+  }
+
   return (
     <div className="shell">
-      <header className="shell__header">
+      <header className="shell__header drag">
         <h1>Layup</h1>
         <p className="tagline">People → Layup → Share → Collaborate</p>
       </header>
@@ -55,14 +74,9 @@ export function App() {
         selfUserId={identity?.userId}
         onAction={(person, action) => {
           // A click is a social request, never a media start (SPEC.md §4).
-          const currentLayupId = layup?.layup?.id;
           switch (action.kind) {
             case 'start':
-              // Already in a layup? Invite them here rather than starting another.
-              void window.layup.requests.invite(
-                person.userId,
-                currentLayupId ? { layupId: currentLayupId } : {},
-              );
+              void window.layup.requests.invite(person.userId, {});
               return;
             case 'knock':
               // We never learn which private layup they are in.
@@ -78,7 +92,6 @@ export function App() {
         }}
       />
       <LayupPanel />
-      <CapturePicker />
 
       <footer className="shell__footer">
         <Identity />

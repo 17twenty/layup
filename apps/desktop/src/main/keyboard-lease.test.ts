@@ -17,6 +17,8 @@ let guard: InputGuard;
 let leases: InputLeases;
 let router: RemoteInputRouter;
 let clock = 0;
+/** Which scopes this machine is sharing with the layup. */
+let shared: Set<'pointer' | 'keyboard'>;
 const sequences = new Map<string, number>();
 
 const helper: HelperClient = {
@@ -45,6 +47,7 @@ function key(code: string, down: boolean, membershipId = KARL) {
 const from = (membershipId: string) => ({ membershipId, channel: CHANNEL_INPUT });
 
 beforeEach(() => {
+  shared = new Set();
   calls = [];
   clock = 1_000;
   sequences.clear();
@@ -53,9 +56,10 @@ beforeEach(() => {
     isPresenting: () => true,
     sharedDisplayId: () => DISPLAY,
     presenterMembershipId: () => PRESENTER,
+    allowsScope: (scope) => shared.has(scope),
   });
-  guard.grant(KARL, 'keyboard');
-  guard.grant(SAM, 'keyboard');
+  shared.add('keyboard');
+  
   leases = createInputLeases({ idleTimeoutMs: 2_000, now: () => clock });
   router = createRemoteInputRouter({
     guard,
@@ -152,7 +156,7 @@ describe('keyboard focus lease', () => {
   });
 
   it('keeps the pointer and the keyboard independent', async () => {
-    guard.grant(SAM, 'pointer');
+    shared.add('pointer');
     await router.handle(key('KeyA', true), from(KARL));
 
     // Karl typing must not stop Sam clicking.

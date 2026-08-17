@@ -26,6 +26,8 @@ let guard: InputGuard;
 let router: RemoteInputRouter;
 let helperRunning = true;
 let seq = 0;
+/** Which scopes this machine is sharing with the layup. */
+let shared: Set<'pointer' | 'keyboard'>;
 let clock = 0;
 let leases: ReturnType<typeof createInputLeases>;
 
@@ -67,6 +69,7 @@ function click(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  shared = new Set();
   calls = [];
   helperRunning = true;
   seq = 0;
@@ -76,6 +79,7 @@ beforeEach(() => {
     isPresenting: () => true,
     sharedDisplayId: () => DISPLAY,
     presenterMembershipId: () => PRESENTER,
+    allowsScope: (scope) => shared.has(scope),
   });
   leases = createInputLeases({ idleTimeoutMs: 2_000, now: () => clock });
   router = createRemoteInputRouter({
@@ -89,7 +93,7 @@ beforeEach(() => {
 
 describe('remote click and wheel path', () => {
   it("clicks where the sender aimed, in the presenter's pixels", async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     expect(await router.handle(click(), fromGuest)).toEqual({ injected: true });
 
     // A quarter across a 1920 display, halfway down 1080.
@@ -101,14 +105,14 @@ describe('remote click and wheel path', () => {
   });
 
   it('positions before pressing', async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     await router.handle(click({ x: 1, y: 1 }), fromGuest);
     // A button posted at the old position clicks whatever used to be there.
     expect(calls[0]).toEqual({ command: 'pointer.move', payload: { x: 1919, y: 1079 } });
   });
 
   it('sends a double-click as two presses in one place', async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     await router.handle(click({ clickCount: 2, button: 'right' }), fromGuest);
 
     expect(calls.filter((call) => call.command === 'pointer.move')).toHaveLength(1);
@@ -116,7 +120,7 @@ describe('remote click and wheel path', () => {
   });
 
   it('scrolls under the pointer', async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     seq += 1;
     const wheel = {
       type: TYPE_POINTER_WHEEL,
@@ -137,12 +141,12 @@ describe('remote click and wheel path', () => {
   });
 
   it("drops a revoked participant's actions before anything is aimed", async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     await router.handle(click(), fromGuest);
     calls = [];
 
-    guard.revoke({ membershipId: GUEST });
-    expect(await router.handle(click(), fromGuest)).toEqual({ injected: false, reason: 'no-grant' });
+    guard.stop(GUEST);
+    expect(await router.handle(click(), fromGuest)).toEqual({ injected: false, reason: 'stopped' });
     // Nothing reached the OS - not even a pointer move.
     expect(calls).toEqual([]);
     expect(router.stats()).toMatchObject({ refused: 1 });
@@ -152,7 +156,7 @@ describe('remote click and wheel path', () => {
     // Cursors are overlays. They arrive on their own channel, and the guard
     // refuses them outright - so a moving cursor cannot drag the real pointer
     // around the presenter's machine (SPEC.md §8.1).
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     const cursor = {
       type: TYPE_CURSOR_MOVE,
       membershipId: GUEST,
@@ -174,7 +178,7 @@ describe('remote click and wheel path', () => {
   it('sends a key as a key, never as a pointer action', async () => {
     // The keyboard has its own grant and its own lease; what it must never do
     // is move or press the pointer on its way through.
-    guard.grant(GUEST, 'keyboard');
+    shared.add('keyboard');
     const result = await router.handle(
       { type: TYPE_KEY_DOWN, v: INPUT_PROTOCOL_VERSION, membershipId: GUEST, code: 'KeyA', seq: 1 },
       fromGuest,
@@ -184,14 +188,14 @@ describe('remote click and wheel path', () => {
   });
 
   it('stays usable when the helper is not running', async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     helperRunning = false;
     expect(await router.handle(click(), fromGuest)).toEqual({ injected: false, reason: 'no-helper' });
     expect(router.stats()).toMatchObject({ unavailable: 1 });
   });
 
   it('refuses to guess at an unknown display', async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     // The share moved to a display this router does not know about.
     const result = await router.handle(click(), fromGuest);
     expect(result).toEqual({ injected: true });
@@ -211,8 +215,8 @@ describe('remote click and wheel path', () => {
   });
 
   it('gives a drag to whoever started it', async () => {
-    guard.grant(GUEST, 'pointer');
-    guard.grant(OTHER, 'pointer');
+    shared.add('pointer');
+    
 
     expect(await router.handle(down(), fromGuest)).toEqual({ injected: true });
     expect(router.dragging()).toBe(GUEST);
@@ -232,8 +236,8 @@ describe('remote click and wheel path', () => {
   });
 
   it('hands the pointer back on mouse-up', async () => {
-    guard.grant(GUEST, 'pointer');
-    guard.grant(OTHER, 'pointer');
+    shared.add('pointer');
+    
 
     await router.handle(down(), fromGuest);
     await router.handle(up(), fromGuest);
@@ -243,7 +247,7 @@ describe('remote click and wheel path', () => {
   });
 
   it('does not leave a button down when a drag times out', async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     await router.handle(down(), fromGuest);
     calls = [];
 
@@ -258,7 +262,7 @@ describe('remote click and wheel path', () => {
   });
 
   it('lets go of everything when a participant disconnects', async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     await router.handle(down({ button: 'right' }), fromGuest);
     calls = [];
 
@@ -269,7 +273,7 @@ describe('remote click and wheel path', () => {
   });
 
   it('keeps a slow drag alive while it is still moving', async () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     await router.handle(down(), fromGuest);
 
     for (let step = 0; step < 5; step += 1) {
@@ -294,6 +298,6 @@ describe('remote click and wheel path', () => {
       fromGuest,
     );
     expect(lines.join('\n')).not.toContain('KeyQ');
-    expect(lines.join('\n')).toContain('no-grant');
+    expect(lines.join('\n')).toContain('scope-off');
   });
 });

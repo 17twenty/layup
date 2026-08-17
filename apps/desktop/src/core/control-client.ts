@@ -120,6 +120,16 @@ const participantShape = isObject({
   isCreatorMembership: isBoolean,
 });
 
+const activeShareShape = isObject({
+  id: isString,
+  presenterMembershipId: isString,
+  presenterName: optional(isString),
+  sourceId: optional(isString),
+  allowDrawing: isBoolean,
+  allowPointer: isBoolean,
+  allowKeyboard: isBoolean,
+});
+
 export const layupShape = isObject({
   id: isString,
   organisationId: isString,
@@ -131,6 +141,15 @@ export const layupShape = isObject({
   hasCreatorAuthority: isBoolean,
   creatorMembershipId: optional(isString),
   participants: isArrayOf(participantShape, { max: 200 }),
+  /**
+   * The shared desktop, when there is one. Absent is the normal state.
+   *
+   * Unknown properties are rejected rather than ignored, which is the right
+   * default and also means a field the server sends and this does not know
+   * about takes the whole layup down with it - as this one did, silently
+   * stopping every state update the moment anybody shared.
+   */
+  activeShare: optional(activeShareShape),
 });
 export type Layup = ReturnType<typeof layupShape>;
 export type Participant = ReturnType<typeof participantShape>;
@@ -244,6 +263,21 @@ export class ControlRequestError extends Error {
   }
 }
 
+/**
+ * What went wrong, in the server's words where it gave any.
+ *
+ * The server explains its refusals in sentences meant for people - "ask the
+ * current presenter to hand over the screen" - and throwing away that sentence
+ * to show "HTTP 403 (forbidden)" turns an answer into a puzzle. The method and
+ * path stay on the error for the log, not for the window.
+ */
+function describeFailure(method: string, path: string, status: number, body: unknown): string {
+  const message = extractErrorMessage(body);
+  if (message) return message;
+  const code = extractErrorCode(body);
+  return `${method} ${path} failed with HTTP ${status}${code ? ` (${code})` : ''}`;
+}
+
 /** The active shared desktop, as the control plane describes it. */
 export interface ScreenShare {
   id: string;
@@ -299,6 +333,13 @@ export interface ControlClient {
   leaveLayup(layupId: string): Promise<MembershipResult>;
   /** Reads current layup state. */
   getLayup(layupId: string): Promise<Layup>;
+  /**
+   * The layup this user is in right now, if any.
+   *
+   * Asked at startup: without it, restarting the application looks like being
+   * thrown out of the room you are standing in.
+   */
+  currentLayup(): Promise<MembershipResult | undefined>;
   /** Organisation-open layups (Happening Now). */
   openLayups(): Promise<OpenLayups>;
   /** ICE servers plus short-lived TURN credentials, and the relay policy. */
@@ -512,6 +553,14 @@ export function createControlClient(options: ControlClientOptions): ControlClien
       return shareRequestShape(envelope.payload, 'screen.share_request');
     },
 
+    async currentLayup(): Promise<MembershipResult | undefined> {
+      const envelope = await this.apiGet<{ payload?: unknown }>('/api/layups/current');
+      const payload = (envelope.payload ?? {}) as { layup?: unknown };
+      // No layup is an ordinary answer, and looks different from an empty one.
+      if (!payload.layup) return undefined;
+      return membershipResultShape(envelope.payload, 'layup.current');
+    },
+
     async createLink(layupId: string): Promise<InvitationLink> {
       const envelope = await this.apiPost<{ payload?: unknown }>(
         `/api/layups/${encodeURIComponent(layupId)}/link`,
@@ -541,7 +590,7 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         const parsed = await response.json().catch(() => undefined);
         const code = extractErrorCode(parsed);
         throw new ControlRequestError(
-          `POST ${path} failed with HTTP ${response.status}${code ? ` (${code})` : ''}`,
+          describeFailure('POST', path, response.status, parsed),
           response.status,
           code,
         );
@@ -555,7 +604,7 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         const body = await response.json().catch(() => undefined);
         const code = extractErrorCode(body);
         throw new ControlRequestError(
-          `GET ${path} failed with HTTP ${response.status}${code ? ` (${code})` : ''}`,
+          describeFailure('GET', path, response.status, body),
           response.status,
           code,
         );
@@ -571,6 +620,14 @@ function describeNetworkFailure(cause: unknown, timeoutMs: number): string {
   }
   const reason = cause instanceof Error ? cause.message : String(cause);
   return `control service unreachable (${reason})`;
+}
+
+function extractErrorMessage(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const payload = (body as { payload?: unknown }).payload;
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const message = (payload as { message?: unknown }).message;
+  return typeof message === 'string' && message.trim() !== '' ? message : undefined;
 }
 
 function extractErrorCode(body: unknown): string | undefined {

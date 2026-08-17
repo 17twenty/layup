@@ -38,6 +38,7 @@ function harness(states: ControlConnectionState[]) {
     listRequests: unusedHere,
     acceptRequest: unusedHere,
     declineRequest: unusedHere,
+    currentLayup: unusedHere,
     startShare: unusedHere,
     stopShare: unusedHere,
     requestShare: unusedHere,

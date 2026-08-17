@@ -2,25 +2,27 @@ import type { ControlScope } from '@layup/protocol';
 import type { RemoteControlState } from '../../core/remote-control';
 
 /**
- * The presenter's remote-control switches (SPEC.md §7.3, ADR-0005).
+ * Two switches (SPEC.md §7.3, ADR-0005).
  *
- * This panel only ever appears on the machine being shared, because the
- * decisions it makes are about that machine. It asks nothing about who created
- * the layup: a creator has no authority over somebody else's keyboard.
+ * Sharing the mouse and keyboard is a mode, not a permissions matrix: everyone
+ * in the layup is someone you chose to be in a room with, and several of them
+ * acting at once - funnelled through this machine's one mouse and keyboard - is
+ * what the feature is for.
  *
- * Two things are deliberate about the layout. The switches read as plain
- * statements of what is on, not as permissions being administered. And "Stop
- * all control" is always present while anybody holds control, so revoking never
- * requires finding the right participant first.
+ * Stopping one person exists, and is deliberately not on this panel by default:
+ * it appears next to somebody only once they are actually interacting, because
+ * that is the only moment it means anything.
+ *
+ * Nothing here asks about creators or moderators. A layup creator has no say
+ * over somebody else's keyboard; the only question is "is this my screen?".
  */
 export interface RemoteControlPanelProps {
   state: RemoteControlState;
-  /** Participants who could be given control - never including yourself. */
+  /** Who is in the layup, other than you. */
   participants: Array<{ membershipId: string; displayName: string }>;
   onSetAllowed: (scope: ControlScope, allowed: boolean) => void;
-  onGrant: (membershipId: string, scope: ControlScope) => void;
-  onRevoke: (membershipId: string) => void;
-  onRevokeAll: () => void;
+  onStop: (membershipId: string) => void;
+  onResume: (membershipId: string) => void;
 }
 
 const SCOPES: Array<{ scope: ControlScope; label: string }> = [
@@ -32,14 +34,16 @@ export function RemoteControlPanel({
   state,
   participants,
   onSetAllowed,
-  onGrant,
-  onRevoke,
-  onRevokeAll,
+  onStop,
+  onResume,
 }: RemoteControlPanelProps) {
-  const holders = new Map(state.grants.map((grant) => [grant.membershipId, grant.scopes]));
+  const stopped = new Map(state.stopped.map((entry) => [entry.membershipId, entry.scopes]));
+  const sharing = SCOPES.filter(({ scope }) => state.allowed[scope]).map(({ label }) =>
+    label.toLowerCase(),
+  );
 
   return (
-    <section className="control" aria-label="Remote control">
+    <section className="control" aria-label="Sharing control of this machine">
       <div className="control__switches">
         {SCOPES.map(({ scope, label }) => (
           <label key={scope} className="control__switch">
@@ -54,83 +58,56 @@ export function RemoteControlPanel({
         ))}
       </div>
 
-      {state.anyoneHasControl ? (
-        <p className="control__indicator" data-testid="control-indicator" role="status">
-          {describeHolders(state, participants)} can control this machine.
-        </p>
-      ) : (
-        <p className="control__indicator control__indicator--idle" data-testid="control-indicator">
-          Nobody can control this machine.
-        </p>
-      )}
+      <p className="control__summary" data-testid="control-summary">
+        {sharing.length === 0
+          ? 'Only you can use this machine.'
+          : `Everyone here can use your ${sharing.join(' and ')}.`}
+      </p>
 
-      <ul className="control__people">
-        {participants.map((participant) => {
-          const scopes = holders.get(participant.membershipId) ?? [];
-          return (
-            <li key={participant.membershipId} className="control__person">
-              <span className="control__name">{participant.displayName}</span>
-              {scopes.length > 0 ? (
-                <>
-                  <span className="control__scopes" data-testid={`scopes-${participant.membershipId}`}>
-                    {scopes.map((scope) => scopeLabel(scope)).join(' + ')}
-                  </span>
+      {stopped.size > 0 ? (
+        <ul className="control__people">
+          {[...stopped.keys()].map((membershipId) => {
+            const person = participants.find((entry) => entry.membershipId === membershipId);
+            return (
+              <li key={membershipId} className="control__person">
+                <span className="control__name">{person?.displayName ?? 'Someone'}</span>
+                <span className="control__scopes">stopped</span>
+                <button
+                  type="button"
+                  onClick={() => onResume(membershipId)}
+                  data-testid={`resume-${membershipId}`}
+                >
+                  Let back in
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      {/* Stopping somebody is the exception, so it lives with the people, not
+          with the switches - and only while sharing is actually on. */}
+      {sharing.length > 0 && participants.length > 0 ? (
+        <details className="control__more">
+          <summary>Stop one person</summary>
+          <ul className="control__people">
+            {participants
+              .filter((participant) => !stopped.has(participant.membershipId))
+              .map((participant) => (
+                <li key={participant.membershipId} className="control__person">
+                  <span className="control__name">{participant.displayName}</span>
                   <button
                     type="button"
-                    onClick={() => onRevoke(participant.membershipId)}
-                    data-testid={`revoke-${participant.membershipId}`}
+                    onClick={() => onStop(participant.membershipId)}
+                    data-testid={`stop-${participant.membershipId}`}
                   >
                     Stop
                   </button>
-                </>
-              ) : (
-                SCOPES.map(({ scope, label }) => (
-                  <button
-                    key={scope}
-                    type="button"
-                    // A switch that is off is the presenter's answer already:
-                    // the button says why rather than failing silently.
-                    disabled={!state.allowed[scope]}
-                    title={state.allowed[scope] ? undefined : `${label} control is switched off`}
-                    onClick={() => onGrant(participant.membershipId, scope)}
-                    data-testid={`grant-${scope}-${participant.membershipId}`}
-                  >
-                    Give {label.toLowerCase()}
-                  </button>
-                ))
-              )}
-            </li>
-          );
-        })}
-      </ul>
-
-      {state.anyoneHasControl ? (
-        <button
-          type="button"
-          className="control__stop"
-          onClick={onRevokeAll}
-          data-testid="revoke-all"
-        >
-          Stop all control
-        </button>
+                </li>
+              ))}
+          </ul>
+        </details>
       ) : null}
     </section>
   );
-}
-
-function scopeLabel(scope: ControlScope): string {
-  return scope === 'pointer' ? 'mouse' : 'keyboard';
-}
-
-function describeHolders(
-  state: RemoteControlState,
-  participants: Array<{ membershipId: string; displayName: string }>,
-): string {
-  const names = state.grants.map(
-    (grant) =>
-      participants.find((participant) => participant.membershipId === grant.membershipId)?.displayName ??
-      'Someone',
-  );
-  if (names.length === 1) return names[0]!;
-  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }

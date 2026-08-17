@@ -4,14 +4,9 @@ import userEvent from '@testing-library/user-event';
 import type { RemoteControlState } from '../../core/remote-control';
 import { RemoteControlIndicator } from './RemoteControlIndicator';
 
-const participants = [
-  { membershipId: 'm-karl', displayName: 'Karl' },
-  { membershipId: 'm-sam', displayName: 'Sam' },
-];
-
 const held: RemoteControlState = {
   allowed: { pointer: true, keyboard: true },
-  grants: [{ membershipId: 'm-karl', scopes: ['keyboard', 'pointer'] }],
+  stopped: [],
   anyoneHasControl: true,
 };
 
@@ -19,8 +14,7 @@ describe('remote control indicator', () => {
   it('shows nothing when nobody has control', () => {
     render(
       <RemoteControlIndicator
-        state={{ allowed: { pointer: false, keyboard: false }, grants: [], anyoneHasControl: false }}
-        participants={participants}
+        state={{ allowed: { pointer: false, keyboard: false }, stopped: [], anyoneHasControl: false }}
         onStopAll={vi.fn()}
       />,
     );
@@ -32,14 +26,13 @@ describe('remote control indicator', () => {
     render(
       <RemoteControlIndicator
         state={held}
-        participants={participants}
         shortcut="Ctrl+Alt+Shift+\\"
         onStopAll={vi.fn()}
       />,
     );
 
     const banner = screen.getByTestId('remote-control-banner');
-    expect(banner).toHaveTextContent('Karl (keyboard + mouse) is controlling this machine');
+    expect(banner).toHaveTextContent('Everyone here can use your mouse and keyboard');
     // A screen-reader user must not have to discover this for themselves.
     expect(banner).toHaveAttribute('role', 'alert');
     expect(banner).toHaveAttribute('aria-live', 'assertive');
@@ -52,34 +45,30 @@ describe('remote control indicator', () => {
   it('stops everything in one press', async () => {
     const onStopAll = vi.fn();
     render(
-      <RemoteControlIndicator state={held} participants={participants} onStopAll={onStopAll} />,
+      <RemoteControlIndicator state={held} onStopAll={onStopAll} />,
     );
     await userEvent.click(screen.getByTestId('stop-all'));
     expect(onStopAll).toHaveBeenCalledTimes(1);
   });
 
-  it('names everybody who is controlling', () => {
+  it('mentions anybody who has been stopped', () => {
     render(
       <RemoteControlIndicator
         state={{
-          allowed: { pointer: true, keyboard: true },
-          grants: [
-            { membershipId: 'm-karl', scopes: ['pointer'] },
-            { membershipId: 'm-sam', scopes: ['keyboard'] },
-          ],
+          allowed: { pointer: true, keyboard: false },
+          stopped: [{ membershipId: 'm-karl', scopes: ['pointer'] }],
           anyoneHasControl: true,
         }}
-        participants={participants}
         onStopAll={vi.fn()}
       />,
     );
     expect(screen.getByTestId('remote-control-banner')).toHaveTextContent(
-      'Karl (mouse), Sam (keyboard) are controlling this machine',
+      'Everyone here can use your mouse. 1 stopped.',
     );
   });
 
   it('still offers the button when the OS refused the shortcut', () => {
-    render(<RemoteControlIndicator state={held} participants={participants} onStopAll={vi.fn()} />);
+    render(<RemoteControlIndicator state={held} onStopAll={vi.fn()} />);
     expect(screen.queryByTestId('stop-shortcut')).toBeNull();
     expect(screen.getByTestId('stop-all')).toBeInTheDocument();
   });

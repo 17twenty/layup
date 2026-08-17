@@ -81,7 +81,7 @@ export function LayupPanel() {
 
       {!layup.hasCreatorAuthority && (
         <p className="layup__note" data-testid="no-creator">
-          No creator authority — the original creator has left. Nobody inherits it.
+          The person who started this has left.
         </p>
       )}
 

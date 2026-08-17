@@ -21,8 +21,12 @@ import type { Logger } from './logging';
 /**
  * Chosen to be unreachable by accident and impossible to hit while typing:
  * three modifiers and a key nothing else claims.
+ *
+ * The key is the literal character, not a name. Electron accelerators take
+ * punctuation as itself (`\\`), and reject names like "Backslash" by throwing
+ * rather than returning false - which is why arming is also wrapped below.
  */
-export const EMERGENCY_REVOKE_SHORTCUT = 'CommandOrControl+Alt+Shift+Backslash';
+export const EMERGENCY_REVOKE_SHORTCUT = 'CommandOrControl+Alt+Shift+\\';
 
 export type EmergencyCause = 'shortcut' | 'button' | 'share-ended';
 
@@ -57,7 +61,7 @@ export function createEmergencyRevoke(options: EmergencyRevokeOptions): Emergenc
   async function trigger(cause: EmergencyCause): Promise<EmergencyRevokeResult> {
     // Order matters. Withdraw first, so the guard refuses the very next
     // message; then let go of everything held; then tell people.
-    const revoked = options.control.revokeAll();
+    const revoked = options.control.stopAll();
     for (const membershipId of options.holders()) {
       await options.router.releaseFor(membershipId, 'revoked');
     }
@@ -77,7 +81,18 @@ export function createEmergencyRevoke(options: EmergencyRevokeOptions): Emergenc
       if (armed) return true;
       const register = options.register;
       if (!register) return false;
-      armed = register(EMERGENCY_REVOKE_SHORTCUT, () => void trigger('shortcut'));
+      try {
+        armed = register(EMERGENCY_REVOKE_SHORTCUT, () => void trigger('shortcut'));
+      } catch (error) {
+        // A refusal must never be worse than not having the shortcut: losing
+        // the accelerator cannot be allowed to break the layup around it.
+        armed = false;
+        options.log.warn('the emergency revoke shortcut was rejected outright', {
+          shortcut: EMERGENCY_REVOKE_SHORTCUT,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
       if (!armed) {
         // Another application already owns the combination. Say so plainly:
         // the on-screen stop button is still there, and a person who thinks

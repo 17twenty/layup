@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocalCapture } from './useLocalCapture';
-import type { CapturePermissionResponse } from '../../shared/ipc';
+import type { CapturePermissionResponse, CaptureSourcesResponse } from '../../shared/ipc';
+
+type CaptureSource = CaptureSourcesResponse['sources'][number];
 
 /**
- * Screen/window picker with a live local preview.
+ * Screen/window picker.
  *
- * Sharing with a layup arrives in P1-0308; this proves capture itself works and
- * that stopping releases the OS capture indicator.
+ * Two callers, one component: on its own it previews locally, so capture can be
+ * proved without a layup; given `onPicked` it hands the source straight to the
+ * caller and shows no preview, because a second capture stream while you are
+ * choosing one is a waste and lights the OS recording indicator for nothing.
  */
-export function CapturePicker() {
+export interface CapturePickerProps {
+  /** Given a source instead of previewing it. */
+  onPicked?: (source: CaptureSource) => void;
+}
+
+export function CapturePicker({ onPicked }: CapturePickerProps = {}) {
   const capture = useLocalCapture();
+  const screens = capture.sources.filter((source) => source.kind === 'screen').length;
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [permission, setPermission] = useState<CapturePermissionResponse | undefined>();
@@ -37,6 +47,25 @@ export function CapturePicker() {
         </button>
       </header>
 
+      {/* Displays and windows are granted separately on macOS, and the app
+          usually has to be restarted before a new grant takes. Enumerating
+          seven windows and no screens looks perfectly healthy while being
+          useless, so say which half is missing. */}
+      {permission?.canCapture && capture.sources.length > 0 && screens === 0 && (
+        <p className="capture__permission" role="alert" data-testid="no-screens">
+          Only windows are available - macOS has not granted this app whole-screen recording.
+          {permission.canOpenSettings ? (
+            <button
+              type="button"
+              className="tile__action tile__action--secondary"
+              onClick={() => void window.layup.capture.openSettings()}
+            >
+              Open settings
+            </button>
+          ) : null}
+        </p>
+      )}
+
       {permission && !permission.canCapture && (
         <div className="capture__permission" role="alert" data-testid="capture-permission">
           <p>{permission.guidance}</p>
@@ -60,7 +89,7 @@ export function CapturePicker() {
             <button
               type="button"
               className={`capture__source${capture.active?.id === source.id ? ' capture__source--active' : ''}`}
-              onClick={() => void capture.start(source)}
+              onClick={() => (onPicked ? onPicked(source) : void capture.start(source))}
               data-testid={`source-${source.id}`}
             >
               {source.thumbnailDataUrl && <img src={source.thumbnailDataUrl} alt="" />}
@@ -71,7 +100,9 @@ export function CapturePicker() {
         ))}
       </ul>
 
-      {capture.active && (
+      {/* No preview when somebody else is going to use the source: a second
+          capture stream costs nothing but the OS recording indicator. */}
+      {!onPicked && capture.active && (
         <div className="capture__preview">
           <video ref={videoRef} autoPlay muted playsInline data-testid="capture-preview" />
           <button type="button" className="tile__action tile__action--secondary" onClick={capture.stop}>

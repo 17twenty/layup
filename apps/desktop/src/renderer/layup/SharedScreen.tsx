@@ -30,7 +30,7 @@ export function SharedScreen({ remotes, localScreen, overlay }: SharedScreenProp
         <p className="screen__empty" data-testid="no-screen">
           {localScreen
             ? 'You are sharing your screen.'
-            : 'Nobody is sharing a screen. Audio and video carry on regardless.'}
+            : 'Nobody is sharing a screen.'}
         </p>
       </section>
     );

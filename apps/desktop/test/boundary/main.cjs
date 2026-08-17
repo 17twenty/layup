@@ -123,11 +123,15 @@ app.whenReady().then(async () => {
       'control',
       'ice',
       'identity',
+      'input',
       'layup',
       'people',
       'protocolVersion',
       'realtime',
       'requests',
+      'share',
+      'signal',
+      'ui',
     ]),
   );
   expect('app:info protocolVersion', probe.appInfo && probe.appInfo.protocolVersion, 1);

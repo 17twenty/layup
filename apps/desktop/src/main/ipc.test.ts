@@ -23,6 +23,12 @@ const controlState = {
   checkedAtMs: 1,
 };
 
+const idleControl = {
+  allowed: { pointer: false, keyboard: false },
+  stopped: [],
+  anyoneHasControl: false,
+};
+
 const goodHandlers: Handlers = {
   'app:info': () => ({ appVersion: '0.1.0', protocolVersion: 1, platform: 'darwin' }),
   'capture:sources': () => ({ sources: [] }),
@@ -69,6 +75,18 @@ const goodHandlers: Handlers = {
   'requests:accept': () => undefined,
   'requests:decline': () => undefined,
   'requests:cancel': () => undefined,
+  'signal:send': () => true,
+  'share:current': () => ({}),
+  'share:start': () => ({}),
+  'share:stop': () => ({}),
+  'share:ask': () => ({}),
+  'control:state': () => idleControl,
+  'control:allow': () => idleControl,
+  'control:stop': () => idleControl,
+  'control:resume': () => idleControl,
+  'control:stopAll': () => idleControl,
+  'input:offer': () => ({ injected: false, reason: 'stopped' }),
+  'ui:mode': () => ({ mode: 'compact' as const }),
 };
 
 describe('main IPC boundary', () => {
@@ -109,6 +127,18 @@ describe('main IPC boundary', () => {
       'requests:accept',
       'requests:decline',
       'requests:cancel',
+      'signal:send',
+      'share:current',
+      'share:start',
+      'share:stop',
+      'share:ask',
+      'control:state',
+      'control:allow',
+      'control:stop',
+      'control:resume',
+      'control:stopAll',
+      'input:offer',
+      'ui:mode',
     ]);
   });
 

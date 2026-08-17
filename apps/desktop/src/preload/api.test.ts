@@ -5,7 +5,22 @@ import { ValidationError } from '@layup/protocol';
 describe('preload bridge surface', () => {
   it('exposes only the declared API and nothing from Node or Electron', () => {
     const api = createLayupApi(async () => ({}));
-    expect(Object.keys(api).sort()).toEqual(['app', 'capture', 'control', 'ice', 'identity', 'layup', 'people', 'protocolVersion', 'realtime', 'requests']);
+    expect(Object.keys(api).sort()).toEqual([
+      'app',
+      'capture',
+      'control',
+      'ice',
+      'identity',
+      'input',
+      'layup',
+      'people',
+      'protocolVersion',
+      'realtime',
+      'requests',
+      'share',
+      'signal',
+      'ui',
+    ]);
     expect(Object.keys(api.app)).toEqual(['info']);
     const serialised = JSON.stringify(api, (_key, value) =>
       typeof value === 'function' ? '[fn]' : value,

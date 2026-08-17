@@ -18,6 +18,8 @@ let leases: InputLeases;
 let router: RemoteInputRouter;
 let clock = 0;
 let seq = 0;
+/** Which scopes this machine is sharing with the layup. */
+let shared: Set<'pointer' | 'keyboard'>;
 
 const helper: HelperClient = {
   connect: async () => {},
@@ -61,6 +63,7 @@ function keyAction(code: string, down = true) {
 }
 
 beforeEach(() => {
+  shared = new Set();
   calls = [];
   clock = 1_000;
   seq = 0;
@@ -69,9 +72,10 @@ beforeEach(() => {
     isPresenting: () => true,
     sharedDisplayId: () => DISPLAY,
     presenterMembershipId: () => PRESENTER,
+    allowsScope: (scope) => shared.has(scope),
   });
-  guard.grant(GUEST, 'pointer');
-  guard.grant(GUEST, 'keyboard');
+  shared.add('pointer');
+  shared.add('keyboard');
   leases = createInputLeases({ idleTimeoutMs: 10_000, now: () => clock });
   router = createRemoteInputRouter({
     guard,

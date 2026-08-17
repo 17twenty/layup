@@ -7,8 +7,10 @@
  * is decided here, from state the presenter's own machine owns:
  *
  *   - only the presenter's machine injects, and only while it is sharing;
- *   - the sender must hold a current grant for the scope they are using, issued
- *     locally by the presenter and revocable in one step;
+ *   - the scope must be **shared**. Control is a mode, not a list of
+ *     permissions: the presenter shares the mouse with the layup, or does not.
+ *     One person can still be stopped individually - that is the exception, and
+ *     it is a *stop*, not the withdrawal of something granted by name;
  *   - the claimed membership must match the peer the message arrived from, so a
  *     participant cannot act as somebody else;
  *   - the message must arrive on `input-reliable`. Accepting a click from
@@ -31,14 +33,11 @@ import {
 } from '@layup/protocol';
 import { CHANNEL_INPUT } from './data-channels';
 
-export interface ControlGrantRecord {
-  grantId: string;
-  /** Who may act. */
+/** Somebody the presenter has stopped while the scope is otherwise shared. */
+export interface StoppedParticipant {
   membershipId: string;
   scope: ControlScope;
-  /** Which shared display the grant is bound to. */
-  displayId: string;
-  issuedAtMs: number;
+  stoppedAtMs: number;
 }
 
 /** Why a message was refused. Deliberately coarse: never echoes the payload. */
@@ -48,13 +47,13 @@ export type RefusalReason =
   | 'membership-mismatch'
   | 'not-presenting'
   | 'not-presenter'
-  | 'no-grant'
+  | 'stopped'
   | 'scope-off'
   | 'wrong-display'
   | 'replayed';
 
 export type InputDecision =
-  | { allowed: true; message: InputMessage; grant?: ControlGrantRecord }
+  | { allowed: true; message: InputMessage }
   | { allowed: false; reason: RefusalReason };
 
 export interface InputGuardOptions {
@@ -79,14 +78,16 @@ export interface InputGuardOptions {
 }
 
 export interface InputGuard {
-  /** Issues a grant. Only meaningful on the presenter's machine. */
-  grant(membershipId: string, scope: ControlScope): ControlGrantRecord | undefined;
   /**
-   * Revokes grants. With no filter it revokes everything - the emergency stop.
-   * Returns how many grants were withdrawn.
+   * Stops one participant in one scope, while it stays shared with everybody
+   * else. With no scope, stops them in both.
    */
-  revoke(filter?: { membershipId?: string; scope?: ControlScope; grantId?: string }): number;
-  grants(): ControlGrantRecord[];
+  stop(membershipId: string, scope?: ControlScope): number;
+  /** Lets a stopped participant back in. */
+  resume(membershipId: string, scope?: ControlScope): void;
+  stopped(): StoppedParticipant[];
+  /** Forgets every individual stop - used when a scope is switched off. */
+  clearStops(): void;
   /** Whether a membership may act in a scope right now. */
   allows(membershipId: string, scope: ControlScope): boolean;
   /** Judges one incoming message. */
@@ -97,63 +98,48 @@ export interface InputGuard {
 
 export function createInputGuard(options: InputGuardOptions): InputGuard {
   const now = options.now ?? (() => Date.now());
-  let counter = 0;
-  const newGrantId = options.newGrantId ?? (() => `grant-${(counter += 1)}`);
-  const grants = new Map<string, ControlGrantRecord>();
+  // People the presenter has stopped by name. Everybody else is allowed
+  // whenever the scope is shared: that is what "shared" means.
+  const stops = new Map<string, StoppedParticipant>();
   // Highest sequence accepted per membership. Strictly increasing: unlike
   // cursor movement, an action replayed from an old capture must never be
-  // acted on, and a genuine reconnect gets a fresh grant, which clears it.
+  // acted on.
   const sequences = new Map<string, number>();
 
   const key = (membershipId: string, scope: ControlScope) => `${membershipId}:${scope}`;
+  const scopeShared = (scope: ControlScope) => options.allowsScope?.(scope) ?? false;
 
   const refuse = (reason: RefusalReason): InputDecision => ({ allowed: false, reason });
 
+  function sharedDisplay(): string | undefined {
+    return options.isPresenting() ? options.sharedDisplayId() : undefined;
+  }
+
   return {
-    grant(membershipId, scope) {
-      // A presenter cannot grant control of a desktop they are not sharing, and
-      // nobody can grant themselves control of their own machine.
-      if (!options.isPresenting()) return undefined;
-      if (options.allowsScope && !options.allowsScope(scope)) return undefined;
-      const displayId = options.sharedDisplayId();
-      if (!displayId) return undefined;
-      if (membershipId === options.localMembershipId) return undefined;
-
-      const record: ControlGrantRecord = {
-        grantId: newGrantId(),
-        membershipId,
-        scope,
-        displayId,
-        issuedAtMs: now(),
-      };
-      grants.set(key(membershipId, scope), record);
-      // A fresh grant starts a fresh sequence: the previous session's numbers
-      // must not lock out the new one.
-      sequences.delete(membershipId);
-      return record;
-    },
-
-    revoke(filter = {}) {
-      let removed = 0;
-      for (const [entry, record] of [...grants.entries()]) {
-        if (filter.membershipId && record.membershipId !== filter.membershipId) continue;
-        if (filter.scope && record.scope !== filter.scope) continue;
-        if (filter.grantId && record.grantId !== filter.grantId) continue;
-        grants.delete(entry);
-        removed += 1;
+    stop(membershipId, scope) {
+      const scopes: ControlScope[] = scope ? [scope] : ['pointer', 'keyboard'];
+      let stopped = 0;
+      for (const each of scopes) {
+        stops.set(key(membershipId, each), { membershipId, scope: each, stoppedAtMs: now() });
+        stopped += 1;
       }
-      return removed;
+      return stopped;
     },
 
-    grants: () => [...grants.values()],
+    resume(membershipId, scope) {
+      const scopes: ControlScope[] = scope ? [scope] : ['pointer', 'keyboard'];
+      for (const each of scopes) stops.delete(key(membershipId, each));
+    },
+
+    stopped: () => [...stops.values()],
+
+    clearStops: () => stops.clear(),
 
     allows(membershipId, scope) {
-      if (options.allowsScope && !options.allowsScope(scope)) return false;
-      const record = grants.get(key(membershipId, scope));
-      if (!record) return false;
-      // A grant is bound to the share it was issued for: stopping the share, or
-      // switching display, ends it (SPEC.md §7.3).
-      return options.isPresenting() && options.sharedDisplayId() === record.displayId;
+      if (membershipId === options.localMembershipId) return false;
+      if (!sharedDisplay()) return false;
+      if (!scopeShared(scope)) return false;
+      return !stops.has(key(membershipId, scope));
     },
 
     accept(raw, from) {
@@ -174,8 +160,8 @@ export function createInputGuard(options: InputGuardOptions): InputGuard {
       if (previous !== undefined && message.seq <= previous) return refuse('replayed');
 
       if (isControlMessage(message)) {
-        // Only the presenter decides who has control. If we are presenting,
-        // that is us, and a peer claiming otherwise is refused outright.
+        // Only the presenter decides how their machine is shared. If we are
+        // presenting, that is us, and a peer claiming otherwise is refused.
         if (options.isPresenting()) return refuse('not-presenter');
         const presenter = options.presenterMembershipId?.();
         if (!presenter || presenter !== message.membershipId) return refuse('not-presenter');
@@ -183,33 +169,31 @@ export function createInputGuard(options: InputGuardOptions): InputGuard {
         return { allowed: true, message };
       }
 
-      // Everything below acts on this machine, so it needs a grant.
+      // Everything below acts on this machine.
       if (!options.isPresenting()) return refuse('not-presenting');
 
       const scope = isLeaseMessage(message) ? message.scope : scopeOf(message);
       if (!scope) return refuse('malformed');
 
-      if (options.allowsScope && !options.allowsScope(scope)) return refuse('scope-off');
+      if (!scopeShared(scope)) return refuse('scope-off');
+      if (stops.has(key(message.membershipId, scope))) return refuse('stopped');
 
-      const record = grants.get(key(message.membershipId, scope));
-      if (!record) return refuse('no-grant');
-
-      const sharedDisplay = options.sharedDisplayId();
-      if (!sharedDisplay || sharedDisplay !== record.displayId) return refuse('wrong-display');
+      const display = sharedDisplay();
+      if (!display) return refuse('wrong-display');
       // A pointer action names the display it is aimed at; aiming at one that is
       // not being shared is not something to interpret generously.
-      if (isPointerMessage(message) && message.displayId !== record.displayId) {
+      if (isPointerMessage(message) && message.displayId !== display) {
         return refuse('wrong-display');
       }
 
       sequences.set(message.membershipId, message.seq);
-      return { allowed: true, message, grant: record };
+      return { allowed: true, message };
     },
 
     forget(membershipId) {
       sequences.delete(membershipId);
-      for (const [entry, record] of [...grants.entries()]) {
-        if (record.membershipId === membershipId) grants.delete(entry);
+      for (const scope of ['pointer', 'keyboard'] as const) {
+        stops.delete(key(membershipId, scope));
       }
     },
   };

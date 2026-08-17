@@ -13,28 +13,20 @@ import type { RemoteControlState } from '../../core/remote-control';
  */
 export interface RemoteControlIndicatorProps {
   state: RemoteControlState;
-  participants: Array<{ membershipId: string; displayName: string }>;
   /** The global emergency shortcut, or undefined when the OS refused it. */
   shortcut?: string;
   onStopAll: () => void;
 }
 
-export function RemoteControlIndicator({
-  state,
-  participants,
-  shortcut,
-  onStopAll,
-}: RemoteControlIndicatorProps) {
+export function RemoteControlIndicator({ state, shortcut, onStopAll }: RemoteControlIndicatorProps) {
   // Nothing to say when nobody has control: an indicator that is always on
   // stops being an indicator.
   if (!state.anyoneHasControl) return null;
 
-  const holders = state.grants.map((grant) => ({
-    name:
-      participants.find((participant) => participant.membershipId === grant.membershipId)
-        ?.displayName ?? 'Someone',
-    scopes: grant.scopes,
-  }));
+  const shared = (['pointer', 'keyboard'] as const)
+    .filter((scope) => state.allowed[scope])
+    .map((scope) => (scope === 'pointer' ? 'mouse' : 'keyboard'));
+  const stopped = state.stopped.length;
 
   return (
     <aside
@@ -47,10 +39,8 @@ export function RemoteControlIndicator({
     >
       <span className="remote-banner__dot" aria-hidden="true" />
       <p className="remote-banner__text">
-        {holders
-          .map((holder) => `${holder.name} (${holder.scopes.map(readable).join(' + ')})`)
-          .join(', ')}{' '}
-        {holders.length === 1 ? 'is' : 'are'} controlling this machine.
+        Everyone here can use your {shared.join(' and ')}.
+        {stopped > 0 ? ` ${stopped} stopped.` : ''}
       </p>
       <button type="button" className="remote-banner__stop" onClick={onStopAll} data-testid="stop-all">
         Stop
@@ -64,6 +54,3 @@ export function RemoteControlIndicator({
   );
 }
 
-function readable(scope: string): string {
-  return scope === 'pointer' ? 'mouse' : scope;
-}

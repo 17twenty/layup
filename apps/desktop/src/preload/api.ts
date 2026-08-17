@@ -72,6 +72,55 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       status: () => invoke('control:status', undefined),
       /** Whether remote control is possible on this machine, and why not. */
       remote: () => invoke('control:remote', undefined),
+      /** What this machine is sharing, and who has been stopped. */
+      sharing: () => invoke('control:state', undefined),
+      /** Shares the mouse or the keyboard with the layup, or stops sharing it. */
+      allow: (scope: 'pointer' | 'keyboard', allowed: boolean) =>
+        invoke('control:allow', { scope, allowed }),
+      /** Stops one person while everybody else carries on. */
+      stop: (membershipId: string) => invoke('control:stop', { membershipId }),
+      /** Lets a stopped person back in. */
+      resume: (membershipId: string) => invoke('control:resume', { membershipId }),
+      /** Stops everybody, at once. */
+      stopAll: () => invoke('control:stopAll', undefined),
+      /** Subscribe to grant changes. Returns unsubscribe. */
+      onChanged: (handler: (state: EventPayload<'control:changed'>) => void) =>
+        subscribe('control:changed', handler),
+      /**
+       * A control decision the privileged side wants delivered to the peers.
+       * The renderer is the postman here, not the author.
+       */
+      onSend: (handler: (message: EventPayload<'control:send'>) => void) =>
+        subscribe('control:send', handler),
+    },
+    share: {
+      /** The shared desktop right now, and any transition notice. */
+      current: () => invoke('share:current', undefined),
+      /** Starts sharing a capture source, taking over if someone else was. */
+      start: (sourceId: string) => invoke('share:start', { sourceId }),
+      /** Stops your own share. The layup carries on. */
+      stop: () => invoke('share:stop', undefined),
+      /** Asks the presenter of an advertised session for the screen. */
+      ask: () => invoke('share:ask', undefined),
+      /** Subscribe to share changes. Returns unsubscribe. */
+      onChanged: (handler: (state: EventPayload<'share:changed'>) => void) =>
+        subscribe('share:changed', handler),
+    },
+    signal: {
+      /** Relays one WebRTC signalling message through the control plane. */
+      send: (type: string, message: EventPayload<'signal:received'>['message']) =>
+        invoke('signal:send', { type, message }),
+      /** Subscribe to relayed signalling. Returns unsubscribe. */
+      onReceived: (handler: (envelope: EventPayload<'signal:received'>) => void) =>
+        subscribe('signal:received', handler),
+    },
+    input: {
+      /**
+       * Offers a message a peer sent us. Whether it becomes an OS event is
+       * decided in the privileged process, from state this side cannot reach.
+       */
+      offer: (fromMembershipId: string, message: Record<string, unknown>) =>
+        invoke('input:offer', { fromMembershipId, message }),
     },
     identity: {
       /** Who this desktop is running as (PLAN-1 development identity). */
@@ -126,6 +175,15 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       /** Subscribe to pending-request changes. Returns unsubscribe. */
       onChanged: (handler: (state: EventPayload<'requests:changed'>) => void) =>
         subscribe('requests:changed', handler),
+    },
+    ui: {
+      /**
+       * Asks for a window shape: compact while you are just together, bigger
+       * to choose a screen or to watch one.
+       */
+      setMode: (mode: 'home' | 'compact' | 'picker' | 'viewer') => invoke('ui:mode', { mode }),
+      /** The mode actually in effect. Returns unsubscribe. */
+      onMode: (handler: (payload: EventPayload<'ui:mode'>) => void) => subscribe('ui:mode', handler),
     },
     realtime: {
       /** Current realtime connection state. */

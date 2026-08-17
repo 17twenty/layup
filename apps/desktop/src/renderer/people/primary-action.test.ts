@@ -92,4 +92,20 @@ describe('presence labels', () => {
     // A redacted private layup has no title to show, and must not invent one.
     expect(presenceLabel(person({ activity: 'IN_PRIVATE_LAYUP', layupTitle: undefined }))).toBe('In a layup');
   });
+  it('does not offer to join the layup you are already in', () => {
+    // "Join" next to somebody you are already sitting with reads as though you
+    // are not really together.
+    const together = primaryActionFor(
+      person({ activity: 'IN_OPEN_LAYUP', layupId: 'lay_abc12345' }),
+      { currentLayupId: 'lay_abc12345' },
+    );
+    expect(together).toMatchObject({ kind: 'none', label: 'Here with you', disabled: true });
+
+    // Somebody in a *different* layup is still somewhere to go.
+    const elsewhere = primaryActionFor(
+      person({ activity: 'IN_OPEN_LAYUP', layupId: 'lay_other1234' }),
+      { currentLayupId: 'lay_abc12345' },
+    );
+    expect(elsewhere).toMatchObject({ kind: 'join', label: 'Join' });
+  });
 });

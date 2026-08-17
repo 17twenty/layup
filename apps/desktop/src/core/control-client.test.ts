@@ -132,3 +132,34 @@ describe('control client versioned API', () => {
     await expect(client.apiGet('/api/protocol')).rejects.toThrow(/426.*unsupported_protocol_version/);
   });
 });
+
+describe('a refusal from the control plane', () => {
+  it('is reported in the words the server used', async () => {
+    // "HTTP 403 (forbidden)" is a puzzle; the server already wrote the answer.
+    const client = createControlClient({
+      baseUrl: 'http://control.test',
+      fetchImpl: (async () =>
+        new Response(
+          JSON.stringify({
+            v: 1,
+            type: 'error',
+            payload: { code: 'forbidden', message: 'ask the current presenter to hand over the screen' },
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } },
+        )) as unknown as typeof fetch,
+    });
+
+    await expect(client.apiPost('/api/layups/lay_1/share')).rejects.toThrow(
+      /ask the current presenter to hand over the screen/,
+    );
+  });
+
+  it('falls back to the status when the server said nothing useful', async () => {
+    const client = createControlClient({
+      baseUrl: 'http://control.test',
+      fetchImpl: (async () => new Response('nope', { status: 500 })) as unknown as typeof fetch,
+    });
+
+    await expect(client.apiGet('/api/layups')).rejects.toThrow(/failed with HTTP 500/);
+  });
+});

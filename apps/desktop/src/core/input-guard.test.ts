@@ -5,16 +5,19 @@ import {
   TYPE_KEY_DOWN,
   TYPE_POINTER_CLICK,
   TYPE_POINTER_DOWN,
+  type ControlScope,
 } from '@layup/protocol';
 import { CHANNEL_CURSOR, CHANNEL_INPUT } from './data-channels';
 import { createInputGuard, type InputGuard } from './input-guard';
 
 const GUEST = 'm-guest';
+const OTHER = 'm-other';
 const PRESENTER = 'm-presenter';
 const DISPLAY = 'display-1';
 
 let presenting = true;
 let sharedDisplay: string | undefined = DISPLAY;
+let shared: Set<ControlScope>;
 let guard: InputGuard;
 let seq = 0;
 
@@ -38,50 +41,66 @@ const fromGuest = { membershipId: GUEST, channel: CHANNEL_INPUT };
 beforeEach(() => {
   presenting = true;
   sharedDisplay = DISPLAY;
+  shared = new Set();
   seq = 0;
   guard = createInputGuard({
     localMembershipId: PRESENTER,
     isPresenting: () => presenting,
     sharedDisplayId: () => sharedDisplay,
     presenterMembershipId: () => PRESENTER,
-    now: () => 1_000,
+    allowsScope: (scope) => shared.has(scope),
   });
 });
 
 describe('remote input guard', () => {
-  it('refuses everything until the presenter grants control', () => {
-    expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: false, reason: 'no-grant' });
+  it('refuses everything until the scope is shared, then allows the room', () => {
+    expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: false, reason: 'scope-off' });
 
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
+
+    // Shared means shared: nobody had to be named first.
     expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: true });
+    expect(guard.accept(click({ membershipId: OTHER }), { membershipId: OTHER, channel: CHANNEL_INPUT })).toMatchObject(
+      { allowed: true },
+    );
 
-    // Pointer and keyboard are granted separately.
+    // The mouse being shared says nothing about the keyboard.
     expect(
       guard.accept(
         { type: TYPE_KEY_DOWN, v: INPUT_PROTOCOL_VERSION, membershipId: GUEST, code: 'KeyA', seq: 50 },
         fromGuest,
       ),
-    ).toMatchObject({ allowed: false, reason: 'no-grant' });
+    ).toMatchObject({ allowed: false, reason: 'scope-off' });
   });
 
-  it('revokes in one step, including everyone at once', () => {
-    guard.grant(GUEST, 'pointer');
-    guard.grant('m-other', 'keyboard');
-    expect(guard.grants()).toHaveLength(2);
+  it('stops one person while everybody else carries on', () => {
+    shared.add('pointer');
+    guard.stop(GUEST);
 
-    expect(guard.revoke({ membershipId: GUEST })).toBe(1);
-    expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: false, reason: 'no-grant' });
+    expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: false, reason: 'stopped' });
+    expect(
+      guard.accept(click({ membershipId: OTHER }), { membershipId: OTHER, channel: CHANNEL_INPUT }),
+    ).toMatchObject({ allowed: true });
+    expect(guard.stopped()).toEqual([
+      expect.objectContaining({ membershipId: GUEST, scope: 'pointer' }),
+      expect.objectContaining({ membershipId: GUEST, scope: 'keyboard' }),
+    ]);
 
-    // The emergency stop takes no argument and leaves nothing behind.
-    guard.grant(GUEST, 'pointer');
-    expect(guard.revoke()).toBe(2);
-    expect(guard.grants()).toHaveLength(0);
+    guard.resume(GUEST);
+    expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: true });
+  });
+
+  it('never lets the presenter act on their own machine through the guard', () => {
+    shared.add('pointer');
+    // Their own hands are not remote input, and a message claiming to be them
+    // is somebody else lying.
+    expect(guard.allows(PRESENTER, 'pointer')).toBe(false);
   });
 
   it('will not accept an action from the cursor channel', () => {
+    shared.add('pointer');
     // cursor-fast throws packets away by design. A click that arrived there is
     // not a click we can be sure about (ADR-0008).
-    guard.grant(GUEST, 'pointer');
     expect(guard.accept(click(), { membershipId: GUEST, channel: CHANNEL_CURSOR })).toMatchObject({
       allowed: false,
       reason: 'wrong-channel',
@@ -89,155 +108,116 @@ describe('remote input guard', () => {
   });
 
   it('will not let a participant act as somebody else', () => {
-    guard.grant(GUEST, 'pointer');
-    guard.grant('m-other', 'pointer');
-
-    // Arrived on the guest's connection, but claims to be another membership.
-    expect(guard.accept(click({ membershipId: 'm-other' }), fromGuest)).toMatchObject({
+    shared.add('pointer');
+    expect(guard.accept(click({ membershipId: OTHER }), fromGuest)).toMatchObject({
       allowed: false,
       reason: 'membership-mismatch',
     });
   });
 
   it('refuses a replayed action', () => {
-    guard.grant(GUEST, 'pointer');
+    shared.add('pointer');
     const first = click();
     expect(guard.accept(first, fromGuest)).toMatchObject({ allowed: true });
-    // The same message, captured and sent again.
     expect(guard.accept(first, fromGuest)).toMatchObject({ allowed: false, reason: 'replayed' });
     expect(guard.accept(click({ seq: 0 }), fromGuest)).toMatchObject({ allowed: false, reason: 'replayed' });
   });
 
   it('refuses malformed messages without interpreting them', () => {
-    guard.grant(GUEST, 'pointer');
-    for (const raw of [
-      undefined,
-      'pointer.click',
-      { type: 'pointer.click' },
-      click({ button: 'extra' }),
-      click({ x: 42 }),
-      click({ v: 99 }),
-    ]) {
+    shared.add('pointer');
+    for (const raw of [undefined, 'pointer.click', { type: 'pointer.click' }, click({ button: 'extra' }), click({ x: 42 }), click({ v: 99 })]) {
       expect(guard.accept(raw, fromGuest)).toMatchObject({ allowed: false, reason: 'malformed' });
     }
   });
 
-  it('ends every grant when the share does', () => {
-    guard.grant(GUEST, 'pointer');
+  it('ends when the share does', () => {
+    shared.add('pointer');
     expect(guard.allows(GUEST, 'pointer')).toBe(true);
 
-    // Stopping the share ends control immediately - the grant was for that
-    // share, not for the machine (SPEC.md §7.3).
+    // Sharing control is about a screen you are showing, not about your machine
+    // for ever after (SPEC.md §7.3).
     presenting = false;
     expect(guard.allows(GUEST, 'pointer')).toBe(false);
     expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: false, reason: 'not-presenting' });
 
-    // Sharing a different display does not resurrect it either.
     presenting = true;
     sharedDisplay = 'display-2';
-    expect(guard.allows(GUEST, 'pointer')).toBe(false);
-    expect(guard.accept(click({ displayId: 'display-2' }), fromGuest)).toMatchObject({
-      allowed: false,
-      reason: 'wrong-display',
-    });
+    expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: false, reason: 'wrong-display' });
   });
 
-  it('refuses an action aimed at a display that is not being shared', () => {
-    guard.grant(GUEST, 'pointer');
-    expect(guard.accept(click({ displayId: 'display-9' }), fromGuest)).toMatchObject({
-      allowed: false,
-      reason: 'wrong-display',
-    });
-  });
-
-  it('will not let a participant grant themselves control', () => {
+  it('will not let a participant share your machine on your behalf', () => {
     const forged = {
       type: TYPE_CONTROL_GRANT,
       v: INPUT_PROTOCOL_VERSION,
       membershipId: GUEST,
-      targetMembershipId: GUEST,
       scope: 'pointer',
       grantId: 'g-forged',
       seq: 1,
     };
     expect(guard.accept(forged, fromGuest)).toMatchObject({ allowed: false, reason: 'not-presenter' });
-    expect(guard.grants()).toHaveLength(0);
-
-    // Nor can the presenter grant control of a machine to itself.
-    expect(guard.grant(PRESENTER, 'pointer')).toBeUndefined();
   });
 
-  it('accepts a grant from the presenter when we are the guest', () => {
-    // The same guard runs on both sides; on the guest it is how the local UI
-    // learns it has control.
+  it('accepts the presenter telling us what is shared, when we are the guest', () => {
     const guest = createInputGuard({
       localMembershipId: GUEST,
       isPresenting: () => false,
       sharedDisplayId: () => DISPLAY,
       presenterMembershipId: () => PRESENTER,
+      allowsScope: () => false,
     });
 
-    const decision = guest.accept(
-      {
-        type: TYPE_CONTROL_GRANT,
-        v: INPUT_PROTOCOL_VERSION,
-        membershipId: PRESENTER,
-        targetMembershipId: GUEST,
-        scope: 'pointer',
-        grantId: 'g-1',
-        seq: 1,
-      },
-      { membershipId: PRESENTER, channel: CHANNEL_INPUT },
-    );
-    expect(decision).toMatchObject({ allowed: true });
-
-    // But a guest still cannot be told to act by another guest.
     expect(
       guest.accept(
         {
           type: TYPE_CONTROL_GRANT,
           v: INPUT_PROTOCOL_VERSION,
-          membershipId: 'm-other',
-          targetMembershipId: GUEST,
+          membershipId: PRESENTER,
+          scope: 'pointer',
+          grantId: 'g-1',
+          seq: 1,
+        },
+        { membershipId: PRESENTER, channel: CHANNEL_INPUT },
+      ),
+    ).toMatchObject({ allowed: true });
+
+    // But not another guest claiming to speak for the presenter.
+    expect(
+      guest.accept(
+        {
+          type: TYPE_CONTROL_GRANT,
+          v: INPUT_PROTOCOL_VERSION,
+          membershipId: OTHER,
           scope: 'pointer',
           grantId: 'g-2',
           seq: 2,
         },
-        { membershipId: 'm-other', channel: CHANNEL_INPUT },
+        { membershipId: OTHER, channel: CHANNEL_INPUT },
       ),
     ).toMatchObject({ allowed: false, reason: 'not-presenter' });
   });
 
-  it('forgets a membership that leaves', () => {
-    guard.grant(GUEST, 'pointer');
+  it('forgets a membership that leaves, including that it was stopped', () => {
+    shared.add('pointer');
+    guard.stop(GUEST);
     guard.accept(click(), fromGuest);
 
     guard.forget(GUEST);
-    expect(guard.grants()).toHaveLength(0);
 
-    // And a rejoining membership is not locked out by the old sequence.
-    guard.grant(GUEST, 'pointer');
-    expect(guard.accept(click({ seq: 1 }), fromGuest)).toMatchObject({ allowed: true });
+    // A membership that comes back is a new one: it should not inherit a
+    // decision made about somebody who left.
+    expect(guard.stopped()).toEqual([]);
+    expect(guard.accept(click({ seq: 1, type: TYPE_POINTER_DOWN }), fromGuest)).toMatchObject({
+      allowed: true,
+    });
   });
 
   it('reports a refusal without echoing what was refused', () => {
-    guard.grant(GUEST, 'keyboard');
     presenting = false;
     const decision = guard.accept(
       { type: TYPE_KEY_DOWN, v: INPUT_PROTOCOL_VERSION, membershipId: GUEST, code: 'KeyQ', seq: 1 },
       fromGuest,
     );
-    // The reason is a fixed vocabulary. A refusal that quoted the key would put
-    // typed content into whatever logs it (SPEC.md §13.4).
     expect(decision).toEqual({ allowed: false, reason: 'not-presenting' });
     expect(JSON.stringify(decision)).not.toContain('KeyQ');
-  });
-
-  it('accepts a pointer press only from the granted membership', () => {
-    guard.grant(GUEST, 'pointer');
-    const other = { membershipId: 'm-other', channel: CHANNEL_INPUT };
-    expect(
-      guard.accept(click({ membershipId: 'm-other', type: TYPE_POINTER_DOWN }), other),
-    ).toMatchObject({ allowed: false, reason: 'no-grant' });
   });
 });

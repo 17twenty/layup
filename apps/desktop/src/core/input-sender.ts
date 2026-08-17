@@ -146,7 +146,9 @@ export function createInputSender(options: InputSenderOptions): InputSender {
 
     applyControl(message) {
       if (message.type === TYPE_CONTROL_GRANT) {
-        if (message.targetMembershipId !== options.membershipId) return;
+        // No target means the presenter shared with the room, which includes
+        // us; a named target is the exception, for putting one person back.
+        if (message.targetMembershipId && message.targetMembershipId !== options.membershipId) return;
         granted.add(message.scope);
         return;
       }

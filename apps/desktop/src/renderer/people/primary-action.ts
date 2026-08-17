@@ -21,6 +21,8 @@ export interface PrimaryAction {
 export interface PrimaryActionPolicy {
   /** Organisation policy may forbid surfacing an action for a DND person. */
   allowInterruptingDND?: boolean;
+  /** The layup the viewer is in, so it is not offered to them again. */
+  currentLayupId?: string;
 }
 
 export function primaryActionFor(person: Person, policy: PrimaryActionPolicy = {}): PrimaryAction {
@@ -56,6 +58,18 @@ export function primaryActionFor(person: Person, policy: PrimaryActionPolicy = {
       emphasis: 'secondary',
       disabled: true,
       hint: 'Organisation policy hides actions for people in do-not-disturb',
+    };
+  }
+
+  // Somebody in the layup you are already in is not somewhere to go: offering
+  // "Join" there reads as though you are not really together.
+  if (policy.currentLayupId && person.layupId === policy.currentLayupId) {
+    return {
+      kind: 'none',
+      label: 'Here with you',
+      emphasis: 'secondary',
+      disabled: true,
+      hint: 'You are both in this layup',
     };
   }
 

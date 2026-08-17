@@ -108,7 +108,9 @@ describe('layup panel', () => {
     });
 
     await waitFor(() => expect(screen.getByTestId('no-creator')).toBeTruthy());
-    expect(screen.getByTestId('no-creator').textContent).toMatch(/Nobody inherits it/);
+    // What matters is that the state is shown at all, not that the interface
+    // recites the rule behind it.
+    expect(screen.getByTestId('no-creator').textContent).toMatch(/has left/);
     // No affordance exists to claim or transfer authority.
     expect(screen.queryByRole('button', { name: /make.*host|claim|transfer/i })).toBeNull();
   });

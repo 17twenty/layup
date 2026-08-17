@@ -544,3 +544,299 @@ body {
   opacity: 0.85;
   font-size: 12px;
 }
+
+/* The live layup: shared screen, cursors and the control surfaces */
+.room {
+  display: grid;
+  gap: 12px;
+}
+
+.room__surface {
+  position: relative;
+  outline: none;
+}
+
+/* A focus ring that means something: keystrokes only travel while the shared
+   screen is deliberately focused. */
+.room__surface:focus-visible {
+  box-shadow: 0 0 0 2px #5b8def;
+  border-radius: 8px;
+}
+
+.room__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room__hint,
+.room__notice {
+  color: #8b93a3;
+  margin: 0;
+}
+
+.room__error {
+  color: #ffb4bf;
+  margin: 0;
+}
+
+/* In a layup, the layup is the application: the screen leads, the directory
+   moves aside rather than sitting on top of it. */
+.shell--in-layup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 16px;
+}
+
+.shell--in-layup .shell__header,
+.shell--in-layup .shell__footer,
+.shell--in-layup .invitations {
+  grid-column: 1 / -1;
+}
+
+.shell__stage {
+  min-width: 0;
+}
+
+.shell__aside {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+/* Secondary in a layup: still reachable, no longer competing with the screen. */
+.shell__aside .people__grid {
+  grid-template-columns: 1fr;
+}
+
+/* Faces: present, small, not the main event */
+.faces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.faces__tile {
+  position: relative;
+  margin: 0;
+  width: 160px;
+  background: #161a21;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.faces__video {
+  display: block;
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  background: #0b0d11;
+}
+
+/* A video of yourself that moves the wrong way is unusable. */
+.faces__video--mirrored {
+  transform: scaleX(-1);
+}
+
+.faces__tile figcaption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: #cfd6e4;
+}
+
+.faces__tile figcaption span:first-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.faces__tile figcaption button {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.faces__state {
+  color: #8b93a3;
+}
+
+.faces__error {
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: #ffb4bf;
+}
+
+/* ---- A call: the people fill the window, controls sit under them ---- */
+
+/* One stable full-bleed drag layer. A drag strip that changes shape as faces
+   come and go leaves stale hit-test rectangles on macOS; interactive things
+   opt out once, globally, rather than each remembering to. */
+.drag {
+  -webkit-app-region: drag;
+}
+
+.drag button,
+.drag select,
+.drag input,
+.drag textarea,
+.drag a,
+.drag video,
+.drag [role='button'],
+.no-drag,
+.no-drag * {
+  -webkit-app-region: no-drag;
+}
+
+.shell--layup {
+  display: block;
+  padding: 0;
+  gap: 0;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.call {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100vh;
+  background: #0b0d11;
+}
+
+.call__stage {
+  min-height: 0;
+  /* Room for the traffic lights, which float over the content on macOS. */
+  padding: 28px 8px 8px;
+}
+
+/* Faces as the content: however many there are, they share the window. */
+.faces--stage {
+  display: grid;
+  gap: 6px;
+  height: 100%;
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.faces--stage .faces__tile {
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  border-radius: 10px;
+  position: relative;
+}
+
+.faces--stage .faces__video {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+
+/* The name sits on the video rather than taking a row of its own. */
+.faces--stage figcaption {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgb(11 13 17 / 65%);
+  font-size: 11px;
+}
+
+.faces--stage .faces__error {
+  position: absolute;
+  inset: auto 8px 8px 8px;
+}
+
+.callbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: 4px;
+  padding: 8px 6px 10px;
+  background: #12151c;
+  border-top: 1px solid #23262e;
+}
+
+.callbar__button {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  min-width: 64px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.callbar__button:hover {
+  background: #1b1f28;
+}
+
+.callbar__button svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Sharing is why the application exists; leaving is the only red thing here. */
+.callbar__button--share svg {
+  color: #38d39f;
+}
+
+.callbar__button--sharing svg {
+  color: #e0b452;
+}
+
+.callbar__button--leave svg {
+  color: #ff4d64;
+}
+
+/* Muted or camera-off reads at a glance, not just in the label. */
+.callbar__button[aria-pressed='true'] svg {
+  color: #ff4d64;
+}
+
+/* Smaller tiles, in a row, under a shared screen. */
+.faces--compact {
+  gap: 6px;
+}
+
+.faces--compact .faces__tile {
+  width: 104px;
+}
+
+.faces--compact .faces__video {
+  height: 58px;
+}
+
+.faces--compact figcaption {
+  font-size: 10px;
+  gap: 4px;
+}
+
+/* The picker sheet: the window grows for exactly as long as this is open. */
+.room--picker {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 28px 12px 12px;
+}
+
+.room__sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room__sheet-header h2 {
+  margin: 0;
+  font-size: 15px;
+}

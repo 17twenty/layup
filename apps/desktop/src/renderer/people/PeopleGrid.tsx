@@ -13,9 +13,11 @@ export interface PeopleGridProps {
   /** Wired to invitations/knocks in Phase C. */
   onAction?: (person: Person, action: PrimaryAction) => void;
   selfUserId?: string;
+  /** The layup you are in, so the people already in it are not offered again. */
+  currentLayupId?: string;
 }
 
-export function PeopleGrid({ onAction, selfUserId }: PeopleGridProps) {
+export function PeopleGrid({ onAction, selfUserId, currentLayupId }: PeopleGridProps) {
   const { people, loaded } = usePeople();
   const others = people.filter((person) => person.userId !== selfUserId);
 
@@ -23,7 +25,7 @@ export function PeopleGrid({ onAction, selfUserId }: PeopleGridProps) {
     <section className="people" aria-label="People">
       <header className="people__header">
         <h2>People</h2>
-        <p className="people__hint">Click a person to start a layup. No room codes.</p>
+        <p className="people__hint">Click someone to start a layup.</p>
       </header>
 
       {!loaded && <p className="people__empty">Loading people…</p>}
@@ -33,15 +35,28 @@ export function PeopleGrid({ onAction, selfUserId }: PeopleGridProps) {
 
       <ul className="people__grid">
         {others.map((person) => (
-          <PersonTile key={person.userId} person={person} onAction={onAction} />
+          <PersonTile
+            key={person.userId}
+            person={person}
+            onAction={onAction}
+            {...(currentLayupId ? { currentLayupId } : {})}
+          />
         ))}
       </ul>
     </section>
   );
 }
 
-function PersonTile({ person, onAction }: { person: Person; onAction?: PeopleGridProps['onAction'] }) {
-  const action = primaryActionFor(person);
+function PersonTile({
+  person,
+  onAction,
+  currentLayupId,
+}: {
+  person: Person;
+  onAction?: PeopleGridProps['onAction'];
+  currentLayupId?: string;
+}) {
+  const action = primaryActionFor(person, currentLayupId ? { currentLayupId } : {});
   const initials = person.displayName
     .split(/\s+/)
     .map((part) => part[0] ?? '')

@@ -7,6 +7,7 @@
  * renderer nor a buggy handler can push unchecked data across the boundary.
  */
 import {
+  ValidationError,
   isArrayOf,
   isBoolean,
   isEnum,
@@ -114,6 +115,18 @@ const layupShape = isObject({
   hasCreatorAuthority: isBoolean,
   creatorMembershipId: optional(isString),
   participants: isArrayOf(participantShape, { max: 200 }),
+  /** The shared desktop, when there is one (see control-client's layupShape). */
+  activeShare: optional(
+    isObject({
+      id: isString,
+      presenterMembershipId: isString,
+      presenterName: optional(isString),
+      sourceId: optional(isString),
+      allowDrawing: isBoolean,
+      allowPointer: isBoolean,
+      allowKeyboard: isBoolean,
+    }),
+  ),
 });
 
 /** Mirrors LayupState in main/layups.ts. */
@@ -236,6 +249,100 @@ export const remoteControlResponse = isObject({
 });
 export type RemoteControlResponse = ReturnType<typeof remoteControlResponse>;
 
+/**
+ * A relayed WebRTC signalling message (SPEC.md §10.2).
+ *
+ * The control plane never sees media; it forwards these between peers. The
+ * shape is checked here so a malformed one is refused at the boundary rather
+ * than inside the peer connection.
+ */
+export const signalMessageShape = isObject({
+  layupId: isString,
+  toMembershipId: isString,
+  fromMembershipId: optional(isString),
+  fromUserId: optional(isString),
+  sdp: optional(isString),
+  candidate: optional(isString),
+  sdpMid: optional(isString),
+  sdpMLineIndex: optional(isInteger({ min: 0 })),
+  reason: optional(isString),
+});
+export type SignalEnvelope = ReturnType<typeof signalEnvelope>;
+
+export const signalEnvelope = isObject({
+  type: isString,
+  message: signalMessageShape,
+});
+
+/**
+ * A payload this side deliberately does not interpret.
+ *
+ * Remote-input messages pass through the renderer on their way from a peer to
+ * the main process, which is the only place entitled to judge them. Naming
+ * their fields here would put the input vocabulary in the unprivileged surface
+ * for no benefit: the guard decodes and validates them, and refuses anything it
+ * does not recognise (ADR-0006).
+ */
+const isOpaquePayload: Validator<Record<string, unknown>> = (value, path = '') => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new ValidationError(path, 'expected object');
+  }
+  return value as Record<string, unknown>;
+};
+
+/** The shared desktop as the renderer sees it, plus any transition notice. */
+export const shareStateResponse = isObject({
+  share: optional(
+    isObject({
+      id: isString,
+      presenterMembershipId: isString,
+      presenterName: optional(isString),
+      sourceId: optional(isString),
+      allowDrawing: isBoolean,
+      allowPointer: isBoolean,
+      allowKeyboard: isBoolean,
+    }),
+  ),
+  notice: optional(
+    isObject({
+      kind: isEnum(['takeover', 'ask-to-share'] as const),
+      text: isString,
+      membershipId: optional(isString),
+      atMs: isFiniteNumber,
+    }),
+  ),
+});
+export type ShareStateResponse = ReturnType<typeof shareStateResponse>;
+
+const controlScope = isEnum(['pointer', 'keyboard'] as const);
+
+/** What this machine is sharing, and who has been stopped by name. */
+export const remoteControlStateResponse = isObject({
+  allowed: isObject({ pointer: isBoolean, keyboard: isBoolean }),
+  stopped: isArrayOf(
+    isObject({ membershipId: isString, scopes: isArrayOf(controlScope, { max: 2 }) }),
+    { max: 64 },
+  ),
+  anyoneHasControl: isBoolean,
+  /** The emergency-revoke accelerator, when the OS gave us one. */
+  shortcut: optional(isString),
+});
+export type RemoteControlStateResponse = ReturnType<typeof remoteControlStateResponse>;
+
+/**
+ * Which shape the window should take (see main/window-modes.ts).
+ *
+ * A name, never bounds. The renderer knows things main cannot - whether the
+ * picker is open, whether a peer's video has actually arrived - so it chooses
+ * the mode; main decides what that means in pixels. Handing the renderer real
+ * coordinates for an always-on-top window would be handing it a way to place
+ * content precisely over OS chrome.
+ */
+export const uiModeShape = isObject({
+  mode: isEnum(['home', 'compact', 'picker', 'viewer'] as const),
+});
+export type UiModeResponse = ReturnType<typeof uiModeShape>;
+
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
   'capture:sources': channel(isVoid, captureSourcesResponse),
@@ -260,6 +367,29 @@ export const ipcChannels = {
   'requests:accept': channel(requestIdRequest, isVoid),
   'requests:decline': channel(requestIdRequest, isVoid),
   'requests:cancel': channel(requestIdRequest, isVoid),
+  'signal:send': channel(signalEnvelope, isBoolean),
+  'share:current': channel(isVoid, shareStateResponse),
+  'share:start': channel(isObject({ sourceId: isString }), shareStateResponse),
+  'share:stop': channel(isVoid, shareStateResponse),
+  'share:ask': channel(isVoid, shareStateResponse),
+  'control:state': channel(isVoid, remoteControlStateResponse),
+  'control:allow': channel(
+    isObject({ scope: controlScope, allowed: isBoolean }),
+    remoteControlStateResponse,
+  ),
+  'control:stop': channel(isObject({ membershipId: isString }), remoteControlStateResponse),
+  'control:resume': channel(isObject({ membershipId: isString }), remoteControlStateResponse),
+  'control:stopAll': channel(isVoid, remoteControlStateResponse),
+  /**
+   * Offers one message a peer sent us. The renderer carries it; the main
+   * process decides whether it becomes an OS event, and answers with what
+   * happened - never with anything about the message itself.
+   */
+  'input:offer': channel(
+    isObject({ fromMembershipId: isString, message: isOpaquePayload }),
+    isObject({ injected: isBoolean, reason: optional(isString) }),
+  ),
+  'ui:mode': channel(uiModeShape, uiModeShape),
 } as const;
 
 /**
@@ -270,6 +400,13 @@ export const ipcChannels = {
  */
 export const ipcEvents = {
   'realtime:state': realtimeStateResponse,
+  'signal:received': signalEnvelope,
+  'share:changed': shareStateResponse,
+  'control:changed': remoteControlStateResponse,
+  /** A control decision the main process wants sent to the peers. */
+  'control:send': isOpaquePayload,
+  /** The mode actually applied, when it differs from what was asked for. */
+  'ui:mode': uiModeShape,
   'people:changed': peopleResponse,
   'layup:changed': layupStateResponse,
   'requests:changed': requestsResponse,

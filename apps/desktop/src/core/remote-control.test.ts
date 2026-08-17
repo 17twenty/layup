@@ -36,13 +36,13 @@ function click(membershipId = GUEST) {
   };
 }
 
+const from = (membershipId: string) => ({ membershipId, channel: CHANNEL_INPUT });
+
 beforeEach(() => {
   presenting = true;
   seq = 0;
   broadcast = [];
   released = [];
-  // The switch lives in the controller; the guard reads it. That is the wiring
-  // the application uses, so it is the wiring under test.
   guard = createInputGuard({
     localMembershipId: PRESENTER,
     isPresenting: () => presenting,
@@ -59,87 +59,81 @@ beforeEach(() => {
   });
 });
 
-describe('presenter remote-control grants', () => {
-  it('offers nothing until the presenter switches it on', () => {
+describe('sharing control of your own machine', () => {
+  it('shares nothing until the presenter says so', () => {
     expect(control.state().allowed).toEqual({ pointer: false, keyboard: false });
-    // Remote control is never the default state of somebody's machine.
-    expect(control.grant(GUEST, 'pointer')).toBeUndefined();
-    expect(guard.accept(click(), { membershipId: GUEST, channel: CHANNEL_INPUT })).toMatchObject({
-      allowed: false,
-    });
+    expect(control.state().anyoneHasControl).toBe(false);
+    expect(guard.accept(click(), from(GUEST))).toMatchObject({ allowed: false });
   });
 
-  it('lets the presenter enable control and grant one participant', () => {
+  it('shares with the room, not with a list of people', () => {
     control.setAllowed('pointer', true);
-    const record = control.grant(GUEST, 'pointer');
 
-    expect(record?.membershipId).toBe(GUEST);
-    expect(control.state().grants).toEqual([{ membershipId: GUEST, scopes: ['pointer'] }]);
+    // Everybody in the layup, without anybody being named.
+    expect(guard.accept(click(GUEST), from(GUEST))).toMatchObject({ allowed: true });
+    expect(guard.accept(click(OTHER), from(OTHER))).toMatchObject({ allowed: true });
     expect(control.state().anyoneHasControl).toBe(true);
-    expect(guard.accept(click(), { membershipId: GUEST, channel: CHANNEL_INPUT })).toMatchObject({
-      allowed: true,
-    });
 
-    // The grant is announced so the guest's own UI knows.
-    expect(broadcast.at(-1)).toMatchObject({
-      type: TYPE_CONTROL_GRANT,
-      targetMembershipId: GUEST,
-      scope: 'pointer',
-    });
+    // The announcement carries no target, for the same reason.
+    const message = broadcast.at(-1) as { type: string; targetMembershipId?: string; scope?: string };
+    expect(message).toMatchObject({ type: TYPE_CONTROL_GRANT, scope: 'pointer' });
+    expect(message.targetMembershipId).toBeUndefined();
 
-    // Pointer control is not keyboard control.
-    expect(control.grant(GUEST, 'keyboard')).toBeUndefined();
+    // The mouse says nothing about the keyboard.
+    expect(control.isAllowed('keyboard')).toBe(false);
   });
 
-  it('revokes one participant without touching the others', () => {
+  it('stops one person without stopping the room', () => {
     control.setAllowed('pointer', true);
-    control.grant(GUEST, 'pointer');
-    control.grant(OTHER, 'pointer');
+    control.stop(GUEST);
 
-    expect(control.revoke(GUEST)).toBe(1);
-    expect(control.state().grants).toEqual([{ membershipId: OTHER, scopes: ['pointer'] }]);
-    expect(guard.accept(click(GUEST), { membershipId: GUEST, channel: CHANNEL_INPUT })).toMatchObject({
-      allowed: false,
-      reason: 'no-grant',
-    });
-    expect(guard.accept(click(OTHER), { membershipId: OTHER, channel: CHANNEL_INPUT })).toMatchObject({
-      allowed: true,
-    });
-
-    // And whatever they were holding is let go.
+    expect(guard.accept(click(GUEST), from(GUEST))).toMatchObject({ allowed: false, reason: 'stopped' });
+    expect(guard.accept(click(OTHER), from(OTHER))).toMatchObject({ allowed: true });
     expect(released).toContain(GUEST);
     expect(broadcast.at(-1)).toMatchObject({ type: TYPE_CONTROL_REVOKE, targetMembershipId: GUEST });
+    expect(control.state().stopped).toEqual([
+      { membershipId: GUEST, scopes: ['keyboard', 'pointer'] },
+    ]);
+
+    control.resume(GUEST);
+    expect(guard.accept(click(GUEST), from(GUEST))).toMatchObject({ allowed: true });
+    expect(control.state().stopped).toEqual([]);
   });
 
-  it('withdraws every grant the moment control is switched off', () => {
+  it('takes effect the moment a switch goes off', () => {
     control.setAllowed('pointer', true);
     control.setAllowed('keyboard', true);
-    control.grant(GUEST, 'pointer');
-    control.grant(GUEST, 'keyboard');
-    control.grant(OTHER, 'pointer');
-
     control.setAllowed('pointer', false);
 
-    // Immediately, locally, before anybody is told.
-    expect(control.state().grants).toEqual([{ membershipId: GUEST, scopes: ['keyboard'] }]);
-    expect(guard.accept(click(), { membershipId: GUEST, channel: CHANNEL_INPUT })).toMatchObject({
-      allowed: false,
-    });
+    // Locally first, before anybody is told.
+    expect(guard.accept(click(), from(GUEST))).toMatchObject({ allowed: false, reason: 'scope-off' });
     expect(broadcast.at(-1)).toMatchObject({ type: TYPE_CONTROL_REVOKE, scope: 'pointer' });
-    // Anything held goes too - a switch that leaves a button down is not off.
     expect(released.at(-1)).toBeUndefined();
+    // Keyboard is untouched: they are separate answers.
+    expect(control.isAllowed('keyboard')).toBe(true);
   });
 
-  it('revokes everybody in one step', () => {
+  it('forgets individual stops when sharing is switched off', () => {
+    control.setAllowed('pointer', true);
+    control.stop(GUEST);
+    control.setAllowed('pointer', false);
+    control.setAllowed('pointer', true);
+
+    // A stop meant "not you, while everyone else can". It should not quietly
+    // outlive the sharing it was an exception to.
+    expect(control.state().stopped).toEqual([]);
+    expect(guard.accept(click(), from(GUEST))).toMatchObject({ allowed: true });
+  });
+
+  it('stops everything in one step', () => {
     control.setAllowed('pointer', true);
     control.setAllowed('keyboard', true);
-    control.grant(GUEST, 'pointer');
-    control.grant(OTHER, 'keyboard');
 
-    expect(control.revokeAll()).toBe(2);
-    expect(control.state().grants).toEqual([]);
-    expect(control.state().anyoneHasControl).toBe(false);
-    // An untargeted revoke: everyone, at once.
+    expect(control.stopAll()).toBe(2);
+    expect(control.state()).toMatchObject({
+      allowed: { pointer: false, keyboard: false },
+      anyoneHasControl: false,
+    });
     expect(broadcast.at(-1)).toEqual({
       type: TYPE_CONTROL_REVOKE,
       v: INPUT_PROTOCOL_VERSION,
@@ -148,27 +142,23 @@ describe('presenter remote-control grants', () => {
     });
   });
 
-  it('needs no creator or moderator authority', () => {
-    // Nothing in this module knows what a creator is: the only question asked
-    // is whether this is my screen (ADR-0005).
-    control.setAllowed('pointer', true);
-    expect(control.grant(GUEST, 'pointer')).toBeDefined();
-
+  it('needs no creator or moderator authority, only a screen of your own', () => {
+    // Nothing here knows what a creator is: the only question is whether this
+    // is my screen (ADR-0005).
     presenting = false;
-    expect(control.grant(OTHER, 'pointer')).toBeUndefined();
+    control.setAllowed('pointer', true);
+    expect(control.isAllowed('pointer')).toBe(false);
   });
 
-  it('tells the interface whenever control changes', () => {
+  it('tells the interface whenever the mode changes', () => {
     const seen: boolean[] = [];
     const unsubscribe = control.subscribe((state) => seen.push(state.anyoneHasControl));
 
     control.setAllowed('pointer', true);
-    control.grant(GUEST, 'pointer');
-    control.revokeAll();
+    control.stopAll();
     unsubscribe();
-    control.grant(GUEST, 'pointer');
+    control.setAllowed('pointer', true);
 
-    // on, granted, revoked - and nothing after unsubscribing.
-    expect(seen).toEqual([false, true, false]);
+    expect(seen).toEqual([true, false]);
   });
 });

@@ -34,6 +34,12 @@ export interface LayupSupervisorOptions {
 
 export interface LayupSupervisor {
   state(): LayupState;
+  /**
+   * Asks the control plane which layup this desktop is already in, and adopts
+   * it. Called at startup: an application that forgets where you are invites
+   * you to create a second layup, which scatters the people you were with.
+   */
+  restore(): Promise<LayupState>;
   /** Adopts a layup this desktop entered through some other path (an accepted
    *  invitation), so local state matches the server immediately. */
   adopt(layup: Layup, membershipId: string, media?: LayupState['media']): LayupState;
@@ -111,6 +117,28 @@ export function createLayupSupervisor(options: LayupSupervisorOptions): LayupSup
         membershipId: result.yourMembershipId,
       });
       publish({ ...derive(result.layup, result.yourMembershipId), ...(result.media ? { media: result.media } : {}) });
+      return state;
+    },
+
+    async restore() {
+      try {
+        const current = await client.currentLayup();
+        if (!current) return state;
+        log.info('rejoined the layup this desktop was already in', {
+          layupId: current.layup.id,
+          membershipId: current.yourMembershipId,
+        });
+        publish({
+          ...derive(current.layup, current.yourMembershipId),
+          ...(current.media ? { media: current.media } : {}),
+        });
+      } catch (error) {
+        // A control plane that cannot answer must not stop the app starting;
+        // the person can still create or join something.
+        log.warn('could not restore the current layup', {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
       return state;
     },
 
