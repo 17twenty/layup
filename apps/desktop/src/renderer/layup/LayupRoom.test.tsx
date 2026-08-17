@@ -85,6 +85,7 @@ const room = {
     keyUp: vi.fn(),
   },
   targetDisplayId: 'screen:1:0',
+  diagnostics: {} as Record<string, unknown>,
 };
 
 vi.mock('./useLayupRoom', () => ({ useLayupRoom: () => room }));

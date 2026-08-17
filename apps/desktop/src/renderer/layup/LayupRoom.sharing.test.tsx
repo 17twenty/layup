@@ -56,6 +56,7 @@ const room = {
     keyUp: vi.fn(),
   },
   targetDisplayId: undefined,
+  diagnostics: {} as Record<string, unknown>,
 };
 
 vi.mock('./useLayupRoom', () => ({ useLayupRoom: () => room }));

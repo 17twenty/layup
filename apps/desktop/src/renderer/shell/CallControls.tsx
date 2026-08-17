@@ -1,3 +1,6 @@
+import type { RouteDiagnostics } from '../../core/ice-diagnostics';
+import { ConnectionReadout } from '../layup/ConnectionReadout';
+
 /**
  * The bar along the bottom of a call.
  *
@@ -7,6 +10,11 @@
  *
  * Share is the accented one - it is why the application exists - and Leave is
  * the only red thing in the window.
+ *
+ * The connection chip rides along here too - it is the discoverable entrance
+ * to the same readout the call surface's right-click menu opens (route,
+ * candidate types, resolution, framerate). A laggy call is otherwise a mystery:
+ * relayed, on a bad link, or the encoder, and nobody testing it can tell which.
  */
 export interface CallControlsProps {
   microphoneEnabled: boolean;
@@ -17,6 +25,12 @@ export interface CallControlsProps {
   onShare: () => void;
   onStopSharing: () => void;
   onLeave: () => void;
+  /** This call's route, RTT and candidate types, or undefined before the first sample lands. */
+  diagnostics?: RouteDiagnostics;
+  /** The incoming video track, for resolution and framerate. */
+  diagnosticsVideoTrack?: MediaStreamTrack;
+  diagnosticsExpanded: boolean;
+  onToggleDiagnostics: () => void;
 }
 
 export function CallControls({
@@ -28,9 +42,20 @@ export function CallControls({
   onShare,
   onStopSharing,
   onLeave,
+  diagnostics,
+  diagnosticsVideoTrack,
+  diagnosticsExpanded,
+  onToggleDiagnostics,
 }: CallControlsProps) {
   return (
     <footer className="callbar no-drag" aria-label="Call controls">
+      <ConnectionReadout
+        {...(diagnostics ? { diagnostics } : {})}
+        {...(diagnosticsVideoTrack ? { videoTrack: diagnosticsVideoTrack } : {})}
+        expanded={diagnosticsExpanded}
+        onToggle={onToggleDiagnostics}
+      />
+
       <button
         type="button"
         className="callbar__button"

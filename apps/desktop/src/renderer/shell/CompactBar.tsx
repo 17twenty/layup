@@ -1,4 +1,6 @@
+import { useCallback, useState } from 'react';
 import type { AvState } from '../../core/av';
+import type { RouteDiagnostics } from '../../core/ice-diagnostics';
 import type { RemoteMedia } from '../../core/session';
 import { FaceTiles } from '../layup/FaceTiles';
 import { CallControls } from './CallControls';
@@ -12,6 +14,11 @@ import { CallControls } from './CallControls';
  *
  * The faces are the content, not a strip of thumbnails beside something else.
  * At any size the window is given, they take all of it.
+ *
+ * This is also "the call surface" for connection diagnostics: a chip in the
+ * bar underneath is always on screen (the discoverable entrance), and a
+ * right-click anywhere here opens "Connection details" for the same panel -
+ * because "right click menu or something" was what was actually asked for.
  */
 export interface CompactBarProps {
   local: AvState;
@@ -24,6 +31,10 @@ export interface CompactBarProps {
   onShare: () => void;
   onStopSharing: () => void;
   onLeave: () => void;
+  /** This call's route, RTT and candidate types, or undefined before the first sample lands. */
+  diagnostics?: RouteDiagnostics;
+  /** The incoming video track, for resolution and framerate. */
+  diagnosticsVideoTrack?: MediaStreamTrack;
 }
 
 export function CompactBar({
@@ -36,9 +47,26 @@ export function CompactBar({
   onShare,
   onStopSharing,
   onLeave,
+  diagnostics,
+  diagnosticsVideoTrack,
 }: CompactBarProps) {
+  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | undefined>();
+
+  const onContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    setMenuPosition({ x: event.clientX, y: event.clientY });
+  }, []);
+
+  const closeMenu = useCallback(() => setMenuPosition(undefined), []);
+
+  const openDetails = useCallback(() => {
+    setDiagnosticsExpanded(true);
+    setMenuPosition(undefined);
+  }, []);
+
   return (
-    <section className="call" aria-label="Layup" data-testid="compact-bar">
+    <section className="call" aria-label="Layup" data-testid="compact-bar" onContextMenu={onContextMenu}>
       {/* The whole area behind the faces drags the window; the controls opt
           out in CSS. */}
       <div className="call__stage drag">
@@ -61,7 +89,46 @@ export function CompactBar({
         onShare={onShare}
         onStopSharing={onStopSharing}
         onLeave={onLeave}
+        {...(diagnostics ? { diagnostics } : {})}
+        {...(diagnosticsVideoTrack ? { diagnosticsVideoTrack } : {})}
+        diagnosticsExpanded={diagnosticsExpanded}
+        onToggleDiagnostics={() => setDiagnosticsExpanded((value) => !value)}
       />
+
+      {/* The reporter asked for right-click. This is it: one item, over the
+          call, that opens the same panel the chip does. */}
+      {menuPosition ? (
+        <div
+          className="context-menu-scrim"
+          data-testid="connection-menu-scrim"
+          onClick={closeMenu}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            closeMenu();
+          }}
+        >
+          <ul
+            className="context-menu"
+            role="menu"
+            aria-label="Call surface"
+            data-testid="connection-menu"
+            style={{ left: menuPosition.x, top: menuPosition.y }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <li role="none">
+              <button
+                type="button"
+                role="menuitem"
+                className="context-menu__item"
+                onClick={openDetails}
+                data-testid="connection-details-menu-item"
+              >
+                Connection details
+              </button>
+            </li>
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }

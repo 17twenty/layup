@@ -7,7 +7,12 @@ import { createCursorReceiver, type RemoteCursor } from '../../core/cursor-recei
 import { createCursorSender } from '../../core/cursor-sender';
 import { createInputSender, type InputSender } from '../../core/input-sender';
 import { createSession, type RemoteMedia, type Session } from '../../core/session';
+import type { RouteDiagnostics } from '../../core/ice-diagnostics';
 import type { LayupStateResponse, ShareStateResponse } from '../../shared/ipc';
+
+/** How often the route is re-read. Fast enough that "is it still relayed?"
+ * has an answer within a couple of seconds, not so fast it costs anything. */
+const DIAGNOSTICS_POLL_MS = 2000;
 
 /**
  * The live half of a layup, in the renderer.
@@ -41,6 +46,13 @@ export interface LayupRoom {
   input?: InputSender;
   /** What to aim actions at: the presenter's shared capture source. */
   targetDisplayId?: string;
+  /**
+   * Route, candidate types and RTT per peer, refreshed every
+   * {@link DIAGNOSTICS_POLL_MS}. Empty until the first sample lands, and
+   * again once the session is gone - the readout shows "Connecting…" for
+   * that gap rather than stale numbers.
+   */
+  diagnostics: Record<string, RouteDiagnostics>;
 }
 
 export interface UseLayupRoomOptions {
@@ -53,6 +65,7 @@ export interface UseLayupRoomOptions {
 export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions): LayupRoom {
   const [remotes, setRemotes] = useState<RemoteMedia[]>([]);
   const [scopes, setScopes] = useState<string[]>([]);
+  const [diagnostics, setDiagnostics] = useState<Record<string, RouteDiagnostics>>({});
   const [av, setAv] = useState<AvState>({ cameraEnabled: false, microphoneEnabled: false, muted: true });
   const avRef = useRef(
     createAvController({
@@ -113,6 +126,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
 
     let cancelled = false;
     let session: Session | undefined;
+    let diagnosticsTimer: ReturnType<typeof setInterval> | undefined;
     const cleanups: Array<() => void> = [];
 
     // ICE servers and the relay policy come from the control plane, so a
@@ -133,6 +147,15 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
         });
         sessionRef.current = session;
         session.setPresenter(presenterRef.current);
+
+        // Route and RTT are read from live stats, not renegotiated - a relay
+        // can appear or clear mid-call and nothing else would tell us. Only
+        // starts once a session exists; there is nothing to poll before that.
+        diagnosticsTimer = setInterval(() => {
+          void session?.diagnostics().then((next) => {
+            if (!cancelled) setDiagnostics(next);
+          });
+        }, DIAGNOSTICS_POLL_MS);
 
         cleanups.push(
           window.layup.signal.onReceived(({ type, message }) => {
@@ -174,6 +197,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
 
     return () => {
       cancelled = true;
+      if (diagnosticsTimer !== undefined) clearInterval(diagnosticsTimer);
       for (const cleanup of cleanups) cleanup();
       cursorSenderRef.current?.stop();
       cursorSenderRef.current = undefined;
@@ -183,6 +207,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       sessionRef.current = undefined;
       setRemotes([]);
       setScopes([]);
+      setDiagnostics({});
     };
   }, [layupId, membershipId]);
 
@@ -272,9 +297,10 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       identify: (id: string) => identityBook.current.identify(id),
       moveCursor,
       scopes,
+      diagnostics,
       ...(inputSenderRef.current ? { input: inputSenderRef.current } : {}),
       ...(sharedSourceId ? { targetDisplayId: sharedSourceId } : {}),
     }),
-    [remotes, av, setCamera, setMicrophone, scopes, moveCursor, sharedSourceId],
+    [remotes, av, setCamera, setMicrophone, scopes, moveCursor, sharedSourceId, diagnostics],
   );
 }

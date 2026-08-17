@@ -894,6 +894,132 @@ body {
   color: #ff4d64;
 }
 
+/* ---- The connection readout: what a laggy call is actually doing ---- */
+
+/* Pinned to the left of the bar; the auto margin absorbs the space the
+   `justify-content: space-evenly` above would otherwise put around it, so the
+   four call buttons stay evenly spaced among themselves. */
+.connection-readout {
+  position: relative;
+  margin-right: auto;
+}
+
+.connection-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #1b1f28;
+  border: 1px solid #23262e;
+  border-radius: 999px;
+  color: #cfd6e4;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.connection-chip:hover {
+  background: #23262e;
+}
+
+.connection-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38d39f;
+}
+
+.connection-chip__rtt {
+  color: #8b93a3;
+}
+
+/* Relayed is not an error, but it explains the latency - and a tester needs
+   to notice it without opening the panel. */
+.connection-chip--relay {
+  border-color: #e0b452;
+}
+
+.connection-chip--relay .connection-chip__dot {
+  background: #e0b452;
+}
+
+.connection-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 25;
+  width: 220px;
+  padding: 10px 12px;
+  background: #161a21;
+  border: 1px solid #23262e;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  font-size: 11px;
+}
+
+.connection-panel dl {
+  margin: 0;
+}
+
+.connection-panel__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.connection-panel__row dt {
+  color: #8b93a3;
+}
+
+.connection-panel__row dd {
+  margin: 0;
+  color: #cfd6e4;
+  text-align: right;
+}
+
+.connection-panel__relay-note {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #23262e;
+  color: #e0b452;
+}
+
+/* The right-click entrance: a scrim to catch the outside click, one item. */
+.context-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.context-menu {
+  position: fixed;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #161a21;
+  border: 1px solid #23262e;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+}
+
+.context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #cfd6e4;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu__item:hover {
+  background: #23262e;
+}
+
 /* Smaller tiles, in a row, under a shared screen. */
 .faces--compact {
   gap: 6px;

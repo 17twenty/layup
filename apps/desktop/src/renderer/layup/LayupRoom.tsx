@@ -42,6 +42,12 @@ const emptyControl: RemoteControlStateResponse = {
   anyoneHasControl: false,
 };
 
+/** A stream's first video track, tolerating stand-ins that are not real
+ * MediaStreams - tests carry `{}` where a stream would be. */
+function firstVideoTrack(stream: MediaStream | undefined): MediaStreamTrack | undefined {
+  return typeof stream?.getVideoTracks === 'function' ? stream.getVideoTracks()[0] : undefined;
+}
+
 export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
   const [share, setShare] = useState<ShareStateResponse>(emptyShare);
   const [control, setControl] = useState<RemoteControlStateResponse>(emptyControl);
@@ -216,6 +222,19 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
       displayName: participant.displayName ?? 'Someone',
     }));
 
+  // PLAN-1 is 1:1, so there is normally exactly one entry - keyed by the
+  // other participant when known, falling back to whichever peer answered
+  // rather than showing nothing while that lines up.
+  const primaryDiagnostics =
+    (others[0] && room.diagnostics[others[0].membershipId]) ?? Object.values(room.diagnostics)[0];
+
+  // Whichever incoming video is actually on screen: the shared desktop when
+  // there is one to watch, otherwise a camera - resolution and framerate
+  // describe what the tester is looking at, not a track that never rendered.
+  const incomingVideoTrack =
+    room.remotes.map((remote) => firstVideoTrack(remote.screen)).find((track): track is MediaStreamTrack => Boolean(track)) ??
+    room.remotes.map((remote) => firstVideoTrack(remote.camera)).find((track): track is MediaStreamTrack => Boolean(track));
+
   const errorLine = error ? (
     <p className="room__error" role="alert" data-testid="room-error">
       {error}
@@ -288,6 +307,8 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
         onShare={() => setPickerOpen(true)}
         onStopSharing={() => void stopSharing()}
         onLeave={() => onLeave?.()}
+        {...(primaryDiagnostics ? { diagnostics: primaryDiagnostics } : {})}
+        {...(incomingVideoTrack ? { diagnosticsVideoTrack: incomingVideoTrack } : {})}
       />
 
       {base === 'viewer' ? (
