@@ -18,6 +18,7 @@
  * the TURN server differs.
  */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,13 +27,17 @@ import { resolveToken } from './identity.mjs';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const desktop = join(repoRoot, 'apps', 'desktop');
 const domain = process.env.LAYUP_DEPLOY_DOMAIN || 'layup.blah.au';
+// protocol/VERSION is the single source of truth (README), the same way
+// remote-health.mjs beside this reads it. A literal here would drift silently
+// the day the version moves.
+const PROTOCOL_VERSION = readFileSync(join(repoRoot, 'protocol', 'VERSION'), 'utf8').trim();
 
 // X-Layup-Dev-User is no longer accepted from off-host, so /api/turn needs a
 // real token: LAYUP_TOKEN if set, otherwise one registered here and now with
 // LAYUP_JOIN_CODE (test/network/identity.mjs).
 const token = await resolveToken({
   domain,
-  protocolVersion: 1,
+  protocolVersion: PROTOCOL_VERSION,
   displayName: 'turn-remote harness',
 }).catch((error) => {
   console.error(error.message);
@@ -41,7 +46,7 @@ const token = await resolveToken({
 const authHeaders = { Authorization: `Bearer ${token}` };
 
 const response = await fetch(`https://${domain}/api/turn`, {
-  headers: { 'X-Layup-Protocol-Version': '1', ...authHeaders },
+  headers: { 'X-Layup-Protocol-Version': PROTOCOL_VERSION, ...authHeaders },
 });
 if (!response.ok) {
   console.error(`GET /api/turn returned ${response.status}`);
