@@ -16,7 +16,9 @@ import { createControlSupervisor, DEFAULT_CONTROL_URL, DEFAULT_DEV_USER } from '
 import { createLogger, newCorrelationId } from './logging';
 import { createRealtimeSupervisor } from './realtime';
 import { createPeopleStore, TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE } from '../core/people-store';
-import { createControlClient } from '../core/control-client';
+import { createControlClient, type ControlClient } from '../core/control-client';
+import { createConfigStore, type DesktopConfig } from './config';
+import { registerWithServer } from './server';
 import { createLayupSupervisor } from './layups';
 import { createRequestsSupervisor } from './requests';
 import { createAttentionController } from './attention';
@@ -44,17 +46,70 @@ const log = createLogger({
   base: { component: 'desktop-main', appSessionId: newCorrelationId() },
 });
 
-const controlUrl = process.env.LAYUP_CONTROL_URL || DEFAULT_CONTROL_URL;
 const devUser = process.env.LAYUP_DEV_USER || DEFAULT_DEV_USER;
 
-const controlClient = createControlClient({ baseUrl: controlUrl, devUser });
-
-const control = createControlSupervisor({
-  baseUrl: controlUrl,
-  devUser,
-  client: controlClient,
-  log: log.with({ component: 'control-client' }),
+/**
+ * The server this desktop belongs to, and the token that proves who we are.
+ *
+ * It lives beside the application data, is written 0600 and is never logged.
+ * Without it there is no server to ask anything of, and the window shows the
+ * add-a-server screen instead of a directory (SPEC.md §2.1).
+ */
+const configStore = createConfigStore({
+  path: path.join(app.getPath('userData'), 'config.json'),
 });
+
+let config: DesktopConfig | undefined = configStore.read();
+
+/**
+ * Where the control plane is right now.
+ *
+ * A stored server wins: it is the one somebody deliberately joined. Without
+ * one, LAYUP_CONTROL_URL and the local default keep the development loop
+ * working with no config file at all.
+ */
+function serverUrl(): string {
+  return config?.serverUrl ?? process.env.LAYUP_CONTROL_URL ?? DEFAULT_CONTROL_URL;
+}
+
+function controlClientOptions() {
+  return {
+    baseUrl: serverUrl(),
+    devUser,
+    ...(config ? { token: config.token } : {}),
+  };
+}
+
+/**
+ * The control client, replaceable underneath everything that holds it.
+ *
+ * Adding a server changes the address, and the address is fixed when a client
+ * is built - so a new client is built and the supervisors keep the handle they
+ * were given rather than being rewired one by one.
+ */
+let liveControlClient = createControlClient(controlClientOptions());
+
+const controlClient = new Proxy({} as ControlClient, {
+  get: (_target, property) => {
+    const value = Reflect.get(liveControlClient as unknown as object, property) as unknown;
+    return typeof value === 'function' ? value.bind(liveControlClient) : value;
+  },
+}) as ControlClient;
+
+/**
+ * Connectivity and identity, rebuilt when the server changes: it caches a
+ * resolved identity, and that identity belonged to the previous server.
+ */
+function buildControlSupervisor() {
+  return createControlSupervisor({
+    baseUrl: serverUrl(),
+    devUser,
+    client: controlClient,
+    log: log.with({ component: 'control-client' }),
+  });
+}
+
+let control = buildControlSupervisor();
 
 /**
  * The application window. Overlays - the share border, and anything like it -
@@ -69,7 +124,9 @@ function broadcast(event: EventName, payload: unknown) {
 }
 
 const realtime = createRealtimeSupervisor({
-  baseUrl: controlUrl,
+  // Read at every connect, so adding a server moves the socket to it.
+  baseUrl: () => serverUrl(),
+  token: () => config?.token,
   devUser,
   log: log.with({ component: 'realtime' }),
   onState: (state) => {
@@ -322,6 +379,29 @@ for (const type of ['signal.offer', 'signal.answer', 'signal.candidate', 'signal
   });
 }
 
+/** What the renderer is told about the server. Never the token. */
+function serverState() {
+  return {
+    configured: config !== undefined,
+    ...(config ? { serverUrl: config.serverUrl, displayName: config.displayName } : {}),
+  };
+}
+
+/**
+ * Points this desktop at whatever the config now says.
+ *
+ * The control client is rebuilt because its address is fixed at construction;
+ * the realtime socket is stopped and started because it reads the address when
+ * it connects. Everything downstream keeps the handles it was given.
+ */
+function applyServerConfig() {
+  realtime.stop();
+  liveControlClient = createControlClient(controlClientOptions());
+  control = buildControlSupervisor();
+  realtime.start();
+  broadcast('server:changed', serverState());
+}
+
 function buildHandlers(): Handlers {
   return {
     'app:info': () => ({
@@ -329,6 +409,35 @@ function buildHandlers(): Handlers {
       protocolVersion: PROTOCOL_VERSION,
       platform: process.platform as 'darwin' | 'win32' | 'linux',
     }),
+    'server:state': () => serverState(),
+    'server:add': async (input) => {
+      const outcome = await registerWithServer({
+        serverUrl: input.serverUrl,
+        code: input.code,
+        displayName: input.displayName,
+      });
+      if (!outcome.ok) {
+        // The server's own sentence, unchanged: it is the one that tells
+        // somebody whether to fix the code or the address.
+        log.warn('could not add server', { reason: outcome.message });
+        return { ok: false, message: outcome.message };
+      }
+      configStore.write(outcome.config);
+      config = outcome.config;
+      // Logged without the token, on purpose.
+      log.info('server added', { serverUrl: config.serverUrl, userId: config.userId });
+      applyServerConfig();
+      // The directory is only worth restoring once there is a server to ask.
+      void layups.restore();
+      return { ok: true };
+    },
+    'server:forget': () => {
+      configStore.clear();
+      config = undefined;
+      log.info('server forgotten');
+      applyServerConfig();
+      return serverState();
+    },
     'capture:sources': () => capture.listSources().then((sources) => ({ sources })),
     'capture:permission': () => permissions.capture(),
     'capture:openSettings': () => permissions.openCaptureSettings(),

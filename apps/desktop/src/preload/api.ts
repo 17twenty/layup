@@ -59,6 +59,21 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
     app: {
       info: () => invoke('app:info', undefined),
     },
+    server: {
+      /** Whether a server has been added, and which one. Never the token. */
+      state: () => invoke('server:state', undefined),
+      /**
+       * Joins a server with its join code. The token it returns is written by
+       * the privileged side and never comes back across this bridge.
+       */
+      add: (input: { serverUrl: string; code: string; displayName: string }) =>
+        invoke('server:add', input),
+      /** Forgets the server and the token that went with it. */
+      forget: () => invoke('server:forget', undefined),
+      /** Subscribe to server changes. Returns unsubscribe. */
+      onChanged: (handler: (state: EventPayload<'server:changed'>) => void) =>
+        subscribe('server:changed', handler),
+    },
     capture: {
       /** Screens and windows that could be shared. */
       sources: () => invoke('capture:sources', undefined),

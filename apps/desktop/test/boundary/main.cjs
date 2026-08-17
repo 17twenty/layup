@@ -19,6 +19,9 @@ const failures = [];
 app.whenReady().then(async () => {
   registerIpcHandlers(ipcMain, {
     'app:info': () => ({ appVersion: '0.1.0-test', protocolVersion: 1, platform: process.platform }),
+    'server:state': () => ({ configured: false }),
+    'server:add': () => ({ ok: false, message: 'the boundary harness registers nobody' }),
+    'server:forget': () => ({ configured: false }),
     'capture:sources': () => ({ sources: [] }),
     'capture:permission': () => ({
       status: 'granted',
@@ -129,6 +132,7 @@ app.whenReady().then(async () => {
       'protocolVersion',
       'realtime',
       'requests',
+      'server',
       'share',
       'signal',
       'ui',

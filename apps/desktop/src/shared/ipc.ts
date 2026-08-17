@@ -337,6 +337,40 @@ export type RemoteControlStateResponse = ReturnType<typeof remoteControlStateRes
  * coordinates for an always-on-top window would be handing it a way to place
  * content precisely over OS chrome.
  */
+/**
+ * Which server this desktop belongs to, as far as the config on disk says.
+ *
+ * The token never appears here. The renderer needs to know whether a server
+ * has been added and what to call it - never how to prove it is us.
+ */
+export const serverStateResponse = isObject({
+  configured: isBoolean,
+  serverUrl: optional(isString),
+  displayName: optional(isString),
+});
+export type ServerStateResponse = ReturnType<typeof serverStateResponse>;
+
+/** What somebody types on the first-run screen: an address, a code, a name. */
+export const addServerRequest = isObject({
+  serverUrl: isString,
+  code: isString,
+  displayName: isString,
+});
+export type AddServerRequest = ReturnType<typeof addServerRequest>;
+
+/**
+ * The answer to "add this server".
+ *
+ * A refusal carries the server's own sentence, because "that join code is not
+ * valid for this server" sends somebody back to the code, and a generic
+ * failure sends them to us.
+ */
+export const addServerResponse = isObject({
+  ok: isBoolean,
+  message: optional(isString),
+});
+export type AddServerResponse = ReturnType<typeof addServerResponse>;
+
 export const uiModeShape = isObject({
   mode: isEnum(['home', 'compact', 'picker', 'viewer'] as const),
 });
@@ -344,6 +378,9 @@ export type UiModeResponse = ReturnType<typeof uiModeShape>;
 
 export const ipcChannels = {
   'app:info': channel(isVoid, appInfoResponse),
+  'server:state': channel(isVoid, serverStateResponse),
+  'server:add': channel(addServerRequest, addServerResponse),
+  'server:forget': channel(isVoid, serverStateResponse),
   'capture:sources': channel(isVoid, captureSourcesResponse),
   'capture:permission': channel(isVoid, capturePermissionResponse),
   'capture:openSettings': channel(isVoid, isBoolean),
@@ -399,6 +436,8 @@ export const ipcChannels = {
  */
 export const ipcEvents = {
   'realtime:state': realtimeStateResponse,
+  /** The configured server changed: added, or forgotten. */
+  'server:changed': serverStateResponse,
   'signal:received': signalEnvelope,
   'share:changed': shareStateResponse,
   'control:changed': remoteControlStateResponse,

@@ -31,6 +31,9 @@ const idleControl = {
 
 const goodHandlers: Handlers = {
   'app:info': () => ({ appVersion: '0.1.0', protocolVersion: 1, platform: 'darwin' }),
+  'server:state': () => ({ configured: false }),
+  'server:add': () => ({ ok: false, message: 'no server in this fixture' }),
+  'server:forget': () => ({ configured: false }),
   'capture:sources': () => ({ sources: [] }),
   'capture:permission': () => ({
     status: 'granted' as const,
@@ -105,6 +108,9 @@ describe('main IPC boundary', () => {
     registerIpcHandlers(ipc.target, goodHandlers);
     expect([...ipc.registered.keys()]).toEqual([
       'app:info',
+      'server:state',
+      'server:add',
+      'server:forget',
       'capture:sources',
       'capture:permission',
       'capture:openSettings',

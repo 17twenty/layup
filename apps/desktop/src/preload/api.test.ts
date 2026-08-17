@@ -17,6 +17,7 @@ describe('preload bridge surface', () => {
       'protocolVersion',
       'realtime',
       'requests',
+      'server',
       'share',
       'signal',
       'ui',

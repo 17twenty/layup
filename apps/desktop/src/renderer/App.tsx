@@ -9,7 +9,8 @@ import { LayupRoom } from './layup/LayupRoom';
 import { useWindowMode } from './shell/useWindowMode';
 import { HappeningNow } from './layup/HappeningNow';
 import { Invitations } from './requests/Invitations';
-import type { IdentityResponse, LayupStateResponse } from '../shared/ipc';
+import { AddServer } from './onboarding/AddServer';
+import type { IdentityResponse, LayupStateResponse, ServerStateResponse } from '../shared/ipc';
 
 /**
  * People are the home screen (SPEC.md §2.1). Connection and identity detail is
@@ -18,6 +19,28 @@ import type { IdentityResponse, LayupStateResponse } from '../shared/ipc';
 export function App() {
   const [identity, setIdentity] = useState<IdentityResponse | undefined>();
   const [layup, setLayup] = useState<LayupStateResponse | undefined>();
+  // Undefined until the privileged side answers: unknown is not "no server".
+  const [server, setServer] = useState<ServerStateResponse | undefined>();
+
+  // Guarded: the bridge belongs to the preload, and a window built without
+  // this channel should still show the shell rather than nothing at all.
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = window.layup.server?.onChanged((next) => {
+      if (!cancelled) setServer(next);
+    });
+    void window.layup.server
+      ?.state()
+      .then((next) => {
+        if (!cancelled) setServer(next);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +71,12 @@ export function App() {
   // The directory is a window of its own shape; in a layup the room decides,
   // because only it knows whether a screen has arrived.
   useWindowMode({ inLayup: false, pickerOpen: false, hasIncomingScreen: false });
+
+  if (server && !server.configured) {
+    // No server means no people to show and nobody to ask: adding one is the
+    // whole application until it is done.
+    return <AddServer />;
+  }
 
   if (inLayup) {
     // In a layup, the layup is the whole application. No directory, no
