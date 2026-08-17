@@ -25,10 +25,50 @@ ssh root@157.20.113.124 'bash /tmp/layup-vm/bootstrap.sh'
 
 ## The firewall
 
-`bootstrap.sh` loads `nftables.conf` via `systemctl enable --now nftables`
-every time it runs, so any edit to `nftables.conf` here takes effect on the
-next `make deploy-config`. It **will not lock out ssh**, because port 22 is
-in the allow-list in `nftables.conf`.
+`bootstrap.sh` installs `nftables.conf` and applies it with:
+
+```bash
+systemctl enable nftables
+systemctl restart nftables
+```
+
+`nftables.service` is `Type=oneshot` with `RemainAfterExit=yes`: once the
+unit is active, `start` (and therefore `enable --now`, which is `start`
+under the hood) is a no-op on an already-active unit - systemd will not
+re-run `ExecStart`, so edits to `nftables.conf` would silently never load.
+`restart` re-executes `ExecStart` unconditionally, which is what makes
+re-running `make deploy-config` after editing `nftables.conf` actually apply
+the change - the whole point of the script being idempotent. `enable` stays
+a separate, ordinary call since wiring the unit into boot is idempotent on
+its own.
+
+The firewall is applied on every run of `bootstrap.sh` (i.e. every
+`make deploy-config`), giving the box a default-drop input policy with an
+allow-list for ssh (22), ACME/redirect (80), Caddy (443), TURN (3478 tcp+udp)
+and the TURN relay range (49160-49200/udp). It **will not lock out ssh**,
+because port 22 is in the allow-list in `nftables.conf` - confirmed on the
+real box: the ssh session used to apply the ruleset survives the ruleset
+being applied, and a follow-up `ssh` call after the fact still succeeds.
+
+Proof the firewall actually blocks unpermitted traffic, run from outside the
+VM against a port not in the allow-list:
+
+```bash
+curl -sv -m 6 http://157.20.113.124:8080/
+# * Trying 157.20.113.124:8080...
+# * Connection timed out after 6005 milliseconds
+```
+
+Separately: `http://157.20.113.124:8787/healthz` (the control service's own
+port, bypassing Caddy/TLS) has never answered from outside, firewall or not
+- `LAYUP_LISTEN_ADDR=127.0.0.1:8787` binds the control service to loopback
+only, so it was never reachable off-host in the first place. Before the
+firewall was active, a request to it from outside failed instantly with
+"connection refused" (nothing listening on the public interface); with the
+firewall active it now times out instead (packets to 8787 are dropped before
+they'd even reach the point of finding no listener). Same non-result, two
+different reasons - the firewall adds defence in depth on a port that was
+never actually exposed, rather than closing a hole that existed.
 
 ## DNS
 

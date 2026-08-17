@@ -76,13 +76,15 @@ systemctl daemon-reload
 
 echo "==> firewall"
 install -m 0644 "$ASSETS/nftables.conf" /etc/nftables.conf
-# `enable` alone does not invoke ExecStart, so the ruleset never loads - and
-# on an already-enabled unit `enable` is a no-op, so edited rules would never
-# be applied either. `--now` is what actually (re)loads /etc/nftables.conf.
-# Deliberate first activation on the production box is still a decision the
-# operator makes explicitly (see README) - this line is what makes that
-# decision take effect when they do.
-systemctl enable --now nftables
+# nftables.service is Type=oneshot with RemainAfterExit=yes: once the unit is
+# active, `enable --now` (which is just `start` under the hood) is a no-op on
+# it - systemd will not re-run ExecStart on a unit already marked active, so
+# edits to nftables.conf would never actually load. `restart` re-executes
+# ExecStart unconditionally, which is what makes re-running this script after
+# editing nftables.conf actually apply the change. `enable` is separate and
+# idempotent - it only wires the unit into boot, so it stays a plain enable.
+systemctl enable nftables
+systemctl restart nftables
 
 echo "==> start"
 systemctl enable --now coturn caddy
