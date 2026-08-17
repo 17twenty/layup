@@ -142,6 +142,9 @@ deploy: deploy-build ## Ship the control service to the dev VM and restart it
 
 .PHONY: deploy-config
 deploy-config: ## Ship deploy/vm configuration and re-run bootstrap
+	# scp -r into an already-existing remote directory nests instead of
+	# overwriting, so a stale bootstrap.sh would silently keep running.
+	ssh $(LAYUP_DEPLOY_HOST) 'rm -rf /tmp/layup-vm'
 	scp -r deploy/vm $(LAYUP_DEPLOY_HOST):/tmp/layup-vm
 	ssh $(LAYUP_DEPLOY_HOST) 'bash /tmp/layup-vm/bootstrap.sh'
 

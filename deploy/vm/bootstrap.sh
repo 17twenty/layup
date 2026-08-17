@@ -13,6 +13,19 @@ if [ ! -f /etc/layup/control.env ]; then
   exit 1
 fi
 
+echo "==> dns preflight"
+# apt hangs rather than failing loudly if the resolver is unreachable - seen
+# in practice when this VM's only nameserver (Tailscale MagicDNS) was down.
+# Fail fast with the exact remedy instead of leaving the operator to debug a
+# fifteen-minute stall with no signal. We do not reconfigure DNS ourselves:
+# the resolver is the operator's to manage, not bootstrap's.
+if ! getent hosts deb.debian.org >/dev/null 2>&1; then
+  echo "FATAL: cannot resolve deb.debian.org - DNS is broken on this VM." >&2
+  echo "Remedy: resolvectl dns eth0 1.1.1.1 8.8.8.8" >&2
+  echo "Note: that remedy does not survive a reboot - see deploy/vm/README.md." >&2
+  exit 1
+fi
+
 echo "==> packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -41,6 +54,16 @@ fi
 sed "s|^static-auth-secret=.*|static-auth-secret=${TURN_SECRET}|" \
   "$ASSETS/turnserver.conf" > /etc/turnserver.conf
 chmod 0640 /etc/turnserver.conf
+# Debian's coturn.service runs turnserver as the `turnserver` user (not
+# root); it must be able to read the config holding its own shared secret.
+chown root:turnserver /etc/turnserver.conf
+# Same story for the log file: turnserver has no write access to /var/log
+# itself, so it cannot create the file on first launch. Pre-create it so
+# opening it for append/write does not require directory permissions.
+# `touch` rather than `install` so a re-run does not truncate history.
+touch /var/log/turnserver.log
+chown turnserver:turnserver /var/log/turnserver.log
+chmod 0640 /var/log/turnserver.log
 # Debian ships coturn disabled until this is set.
 sed -i 's/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
 
@@ -53,7 +76,13 @@ systemctl daemon-reload
 
 echo "==> firewall"
 install -m 0644 "$ASSETS/nftables.conf" /etc/nftables.conf
-systemctl enable nftables
+# `enable` alone does not invoke ExecStart, so the ruleset never loads - and
+# on an already-enabled unit `enable` is a no-op, so edited rules would never
+# be applied either. `--now` is what actually (re)loads /etc/nftables.conf.
+# Deliberate first activation on the production box is still a decision the
+# operator makes explicitly (see README) - this line is what makes that
+# decision take effect when they do.
+systemctl enable --now nftables
 
 echo "==> start"
 systemctl enable --now coturn caddy

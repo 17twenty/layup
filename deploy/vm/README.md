@@ -25,6 +25,24 @@ ssh root@157.20.113.124 'bash /tmp/layup-vm/bootstrap.sh'
 
 ## The firewall
 
-The firewall is applied by `systemctl start nftables` (which `bootstrap.sh`
-enables) and **will not lock out ssh**, because port 22 is in the allow-list
-in `nftables.conf`.
+`bootstrap.sh` loads `nftables.conf` via `systemctl enable --now nftables`
+every time it runs, so any edit to `nftables.conf` here takes effect on the
+next `make deploy-config`. It **will not lock out ssh**, because port 22 is
+in the allow-list in `nftables.conf`.
+
+## DNS
+
+`bootstrap.sh` checks it can resolve `deb.debian.org` before touching apt,
+and fails fast with a remedy if not - this VM's resolver has been observed
+unreachable (its only configured nameserver was Tailscale MagicDNS, on a box
+without `tailscale` installed), and without the check `apt-get` just hangs.
+The remedy it prints:
+
+```bash
+resolvectl dns eth0 1.1.1.1 8.8.8.8
+```
+
+**This does not survive a reboot.** It is a live override of
+`systemd-resolved`, not a change to any file `bootstrap.sh` manages - if the
+VM reboots and DNS breaks again, run it by hand before re-running
+`bootstrap.sh`.
