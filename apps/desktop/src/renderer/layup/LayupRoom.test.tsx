@@ -60,6 +60,14 @@ const sharingPeer = {
   connection: { connected: true },
 };
 
+/** A peer whose camera has arrived: these tiles are where the audio lives. */
+const karlOnCamera = {
+  membershipId: KARL,
+  displayName: 'Karl',
+  camera: {} as MediaStream,
+  connection: { connected: true },
+};
+
 const room = {
   remotes: [] as unknown[],
   av: { cameraEnabled: true, microphoneEnabled: true, muted: false },
@@ -80,14 +88,16 @@ const room = {
 };
 
 vi.mock('./useLayupRoom', () => ({ useLayupRoom: () => room }));
-vi.mock('../capture/useLocalCapture', () => ({
-  useLocalCapture: () => ({
-    sources: [{ id: 'screen:1:0', name: 'Display 1', kind: 'screen' }],
-    refresh: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
-  }),
+
+// One stub object, not a fresh one per render: a hook that hands back new
+// function identities every render restarts every effect that depends on them.
+const capture = vi.hoisted(() => ({
+  sources: [{ id: 'screen:1:0', name: 'Display 1', kind: 'screen' }],
+  refresh: vi.fn(),
+  start: vi.fn(),
+  stop: vi.fn(),
 }));
+vi.mock('../capture/useLocalCapture', () => ({ useLocalCapture: () => capture }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -247,5 +257,44 @@ describe('the live layup', () => {
 
     await userEvent.click(screen.getByTestId('stop-all'));
     expect(api.stopAll).toHaveBeenCalled();
+  });
+});
+
+/**
+ * The media elements are the call. A remote <video> is unmuted - it *is* the
+ * audio output - so anything that unmounts one drops the other person's voice
+ * mid-sentence. Every one of these asserts the *same element instance*
+ * survives: a remount leaves a node in the document while restarting the
+ * stream, which would pass a weaker test and still be the bug.
+ */
+describe('the media never stops', () => {
+  it('keeps the faces and the shared screen mounted while the picker is open', async () => {
+    room.remotes = [{ ...karlOnCamera, screen: {} as MediaStream }];
+    render(<LayupRoom layup={layup} />);
+
+    const face = (await screen.findByTestId(`face-${KARL}`)).querySelector('video');
+    const shared = screen.getByTestId('shared-screen');
+    expect(face).toBeTruthy();
+
+    await userEvent.click(screen.getByTestId('share-screen'));
+    await screen.findByTestId('cancel-picker');
+
+    expect(screen.queryByTestId(`face-${KARL}`)?.querySelector('video')).toBe(face);
+    expect(screen.queryByTestId('shared-screen')).toBe(shared);
+  });
+
+  it('keeps the faces mounted when somebody starts sharing', async () => {
+    room.remotes = [karlOnCamera];
+    const view = render(<LayupRoom layup={layup} />);
+    const face = (await screen.findByTestId(`face-${KARL}`)).querySelector('video');
+    expect(face).toBeTruthy();
+
+    // Karl's screen arrives: the window grows, but nobody's camera or
+    // microphone restarts because of it.
+    room.remotes = [{ ...karlOnCamera, screen: {} as MediaStream }];
+    view.rerender(<LayupRoom layup={layup} />);
+    await screen.findByTestId('room-surface');
+
+    expect(screen.queryByTestId(`face-${KARL}`)?.querySelector('video')).toBe(face);
   });
 });

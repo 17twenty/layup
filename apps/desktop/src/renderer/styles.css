@@ -545,10 +545,52 @@ body {
   font-size: 12px;
 }
 
-/* The live layup: shared screen, cursors and the control surfaces */
+/* The live layup: shared screen, cursors and the control surfaces.
+
+   One column, top to bottom, for the whole life of the layup. What the modes
+   change is what is in it and what is over it - never whether it is there,
+   because taking it down takes the cameras and the microphones with it. */
 .room {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The call takes whatever the rest of the room leaves it. */
+.room .call {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Watching a screen is what the window grew for, so the screen takes the room
+   and the faces step down to a strip under it. */
+.room--viewer {
+  padding: 28px 12px 12px;
+}
+
+.room--viewer .room__surface {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.room--viewer .call {
+  flex: 0 0 auto;
+  height: auto;
+  background: transparent;
+}
+
+.room--viewer .call__stage {
+  padding: 0;
+}
+
+.room--viewer .faces--stage {
+  grid-auto-flow: column;
+  grid-auto-columns: 104px;
+  height: 68px;
 }
 
 .room__surface {
@@ -821,12 +863,19 @@ body {
   gap: 4px;
 }
 
-/* The picker sheet: the window grows for exactly as long as this is open. */
-.room--picker {
+/* The picker sheet: the window grows for exactly as long as this is open, and
+   the sheet is laid *over* the call rather than put in its place. Choosing a
+   window is not a reason to hang up on somebody. */
+.room__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
-  align-content: start;
   padding: 28px 12px 12px;
+  background: rgb(11 13 17 / 97%);
+  overflow: auto;
 }
 
 .room__sheet-header {
