@@ -21,6 +21,9 @@ mac:
       arch: [universal]
   hardenedRuntime: true
   gatekeeperAssess: false
+  # Reads APPLE_API_KEY (path to the .p8), APPLE_API_KEY_ID and
+  # APPLE_API_ISSUER from the environment. Never commit any of them.
+  notarize: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   # Signed with the same identity as the app, so TCC attributes the helper to

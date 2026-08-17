@@ -49,6 +49,14 @@ build-helper: ## Build the input helper as a universal macOS binary
 package: build-helper ## Build the macOS app, unsigned
 	npm run package --workspace apps/desktop
 
+.PHONY: release
+release: build-helper ## Build, sign and notarise the macOS app
+	@test -n "$$APPLE_API_KEY" || (echo "set APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER" && exit 1)
+	npm run package --workspace apps/desktop
+	@# electron-builder staples the .app, then builds the DMG around it, leaving
+	@# the DMG itself unsigned and ticketless. The DMG is what gets downloaded.
+	bash scripts/notarize-dmg.sh apps/desktop/release/Layup-*-universal.dmg
+
 .PHONY: typecheck
 typecheck: ## Typecheck TypeScript workspaces
 	npm run typecheck
