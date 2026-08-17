@@ -19,6 +19,7 @@ import { createPeopleStore, TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE } from 
 import { createControlClient, type ControlClient } from '../core/control-client';
 import { createConfigStore, type DesktopConfig } from './config';
 import { registerWithServer } from './server';
+import { parseJoinLink } from './deep-link';
 import { createLayupSupervisor } from './layups';
 import { createRequestsSupervisor } from './requests';
 import { createAttentionController } from './attention';
@@ -604,4 +605,22 @@ app.on('will-quit', () => shareBorder.dispose());
 // No renderer may ever attach a webview or spawn an unrestricted window.
 app.on('web-contents-created', (_event, contents) => {
   contents.on('will-attach-webview', (event) => event.preventDefault());
+});
+
+/**
+ * The join link. Registering `layup://` makes a link from the join page
+ * (deploy/vm/public/join/index.html) open this app directly; macOS delivers
+ * it as `open-url` rather than through argv, which is the only route this
+ * handles for now (ADR: Windows/Linux argv parsing is future work, not part
+ * of this dogfood).
+ *
+ * A link that fails to parse - wrong scheme, no code, or a non-https server -
+ * is silently ignored rather than surfaced as an error nobody caused.
+ */
+app.setAsDefaultProtocolClient('layup');
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  const link = parseJoinLink(url);
+  if (link) broadcast('server:prefill', link);
 });

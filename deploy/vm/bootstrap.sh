@@ -80,6 +80,14 @@ chmod 0640 /var/log/turnserver.log
 # Debian ships coturn disabled until this is set.
 sed -i 's/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
 
+echo "==> public assets"
+# The join page and, eventually, the downloadable app (plan 03). A plain
+# recursive copy: nothing here is templated, so the join code never has to
+# live in this repository (see deploy/vm/public/join/index.html).
+if [ -d "$ASSETS/public" ]; then
+  cp -r "$ASSETS/public/." /srv/layup/public/
+fi
+
 echo "==> caddy"
 install -m 0644 "$ASSETS/Caddyfile" /etc/caddy/Caddyfile
 

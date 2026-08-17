@@ -159,3 +159,18 @@ deploy-status: ## Show service state on the dev VM
 .PHONY: deploy-logs
 deploy-logs: ## Tail the control service log on the dev VM
 	ssh $(LAYUP_DEPLOY_HOST) 'journalctl -u layup-control -n 100 -f'
+
+.PHONY: reset-identities
+reset-identities: ## DESTRUCTIVE: wipe every identity on the dev VM - logs EVERYBODY out
+	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	@echo "!! DESTRUCTIVE"
+	@echo "!! This deletes EVERY registered identity on $(LAYUP_DEPLOY_DOMAIN)"
+	@echo "!! and restarts layup-control. It logs EVERYBODY out - every"
+	@echo "!! desktop's token stops working, and re-registering (Add a"
+	@echo "!! server, same join code) is the only way back in."
+	@echo "!!"
+	@echo "!! Only run this immediately before a fresh pairing session, with"
+	@echo "!! nobody depending on the server staying up right now."
+	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	ssh $(LAYUP_DEPLOY_HOST) 'rm -f /var/lib/layup/identities.json && systemctl restart layup-control'
+	@echo "identities wiped; layup-control restarted with an empty directory"

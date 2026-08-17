@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { normaliseServerUrl } from '../../core/server-url';
 
 /**
@@ -23,6 +23,19 @@ export function AddServer({ onAdded }: AddServerProps = {}) {
   const [displayName, setDisplayName] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [message, setMessage] = useState<string | undefined>();
+  const nameInput = useRef<HTMLInputElement>(null);
+
+  // A join link fills in where and how, but never who: the name stays for
+  // the person to type, and the field they land on is that one.
+  useEffect(
+    () =>
+      window.layup.server.onPrefill((link) => {
+        setServerUrl(link.serverUrl);
+        setCode(link.code);
+        nameInput.current?.focus();
+      }),
+    [],
+  );
 
   async function connect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,6 +101,7 @@ export function AddServer({ onAdded }: AddServerProps = {}) {
             placeholder="Nick"
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
+            ref={nameInput}
           />
 
           <button type="submit" className="onboarding__connect" disabled={connecting}>

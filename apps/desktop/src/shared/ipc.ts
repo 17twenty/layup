@@ -371,6 +371,18 @@ export const addServerResponse = isObject({
 });
 export type AddServerResponse = ReturnType<typeof addServerResponse>;
 
+/**
+ * What a `layup://join` link hands the Add-server screen: everything but the
+ * name, which stays for the person to type (see main/deep-link.ts). Never a
+ * token - a join link carries a join code, the same thing printed on the join
+ * page, not a credential.
+ */
+export const serverPrefillPayload = isObject({
+  serverUrl: isString,
+  code: isString,
+});
+export type ServerPrefillPayload = ReturnType<typeof serverPrefillPayload>;
+
 export const uiModeShape = isObject({
   mode: isEnum(['home', 'compact', 'picker', 'viewer'] as const),
 });
@@ -438,6 +450,8 @@ export const ipcEvents = {
   'realtime:state': realtimeStateResponse,
   /** The configured server changed: added, or forgotten. */
   'server:changed': serverStateResponse,
+  /** A join link arrived: fill the Add-server form with it. */
+  'server:prefill': serverPrefillPayload,
   'signal:received': signalEnvelope,
   'share:changed': shareStateResponse,
   'control:changed': remoteControlStateResponse,

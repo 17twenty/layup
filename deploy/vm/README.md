@@ -94,3 +94,29 @@ resolvectl dns eth0 1.1.1.1 8.8.8.8
 `systemd-resolved`, not a change to any file `bootstrap.sh` manages - if the
 VM reboots and DNS breaks again, run it by hand before re-running
 `bootstrap.sh`.
+
+## Resetting identities before a real pairing session
+
+**`make reset-identities` is destructive: it logs everybody out.** It deletes
+`/var/lib/layup/identities.json` on the VM and restarts `layup-control`, which
+throws away every registered identity and every token issued for it. Nobody
+who was registered can do anything until they re-register with the join code
+- there is no partial or per-user version of this.
+
+It exists because every run of the network harnesses
+(`test/network/remote-health.mjs`, `test/network/turn-remote.mjs`) registers a
+fresh throwaway identity of its own ("remote-health harness", "turn-remote
+harness", ...). Those harnesses run often during development, presence fans
+out over the same `directory.Users()` the People grid reads
+(`services/control/internal/presencefeed/feed.go`), so harness junk
+accumulates in the directory and shows up next to real people.
+
+Run it once, immediately before a real two-person session, so the People grid
+starts empty and only the two people actually pairing appear in it:
+
+```bash
+make reset-identities
+# then both people register fresh: Add a server -> layup.blah.au -> the join code
+```
+
+Do not run it while anyone is mid-session - it ends their session too.

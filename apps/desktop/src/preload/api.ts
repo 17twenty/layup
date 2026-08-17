@@ -73,6 +73,9 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       /** Subscribe to server changes. Returns unsubscribe. */
       onChanged: (handler: (state: EventPayload<'server:changed'>) => void) =>
         subscribe('server:changed', handler),
+      /** Subscribe to a join link arriving. Returns unsubscribe. */
+      onPrefill: (handler: (link: EventPayload<'server:prefill'>) => void) =>
+        subscribe('server:prefill', handler),
     },
     capture: {
       /** Screens and windows that could be shared. */

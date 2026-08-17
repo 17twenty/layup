@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AddServer } from './AddServer';
 
-function bridge(add: ReturnType<typeof vi.fn>) {
+function bridge(add: ReturnType<typeof vi.fn>, onPrefill: ReturnType<typeof vi.fn> = vi.fn(() => () => {})) {
   Object.defineProperty(window, 'layup', {
-    value: { server: { add, state: vi.fn(), forget: vi.fn(), onChanged: vi.fn(() => () => {}) } },
+    value: { server: { add, state: vi.fn(), forget: vi.fn(), onChanged: vi.fn(() => () => {}), onPrefill } },
     configurable: true,
     writable: true,
   });
@@ -97,5 +97,22 @@ describe('adding a server', () => {
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('server:add rejected');
+  });
+
+  it('fills in the server and code from a join link, leaving the name for the person', () => {
+    let deliver: ((link: { serverUrl: string; code: string }) => void) | undefined;
+    const onPrefill = vi.fn((handler: (link: { serverUrl: string; code: string }) => void) => {
+      deliver = handler;
+      return () => {};
+    });
+    bridge(vi.fn(), onPrefill);
+    render(<AddServer />);
+
+    act(() => deliver?.({ serverUrl: 'https://layup.blah.au', code: 'LAYUP-C9C76D' }));
+
+    expect(screen.getByLabelText('Server')).toHaveValue('https://layup.blah.au');
+    expect(screen.getByLabelText('Join code')).toHaveValue('LAYUP-C9C76D');
+    expect(screen.getByLabelText('Your name')).toHaveValue('');
+    expect(screen.getByLabelText('Your name')).toHaveFocus();
   });
 });
