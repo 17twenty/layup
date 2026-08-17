@@ -29,6 +29,13 @@ if (!existsSync(manifestPath)) {
 const releaseDir = dirname(manifestPath);
 const lines = readFileSync(manifestPath, 'utf8').split('\n');
 const changes = [];
+// Anything pushed here stops the write: a manifest that references an
+// artifact nobody can find, or that is missing the field electron-updater
+// actually checks, is not "close enough" - it is exactly the silent failure
+// this script exists to prevent (a wrong hash reads to a user as "nothing
+// happens"). Better to leave the file as electron-builder wrote it and fail
+// the build than to publish something that looks fine and is not.
+const problems = [];
 
 async function sha512(file) {
   const hash = createHash('sha512');
@@ -44,7 +51,10 @@ async function restampEntry(start) {
   if (!match) return;
   const url = match[2];
   const file = join(releaseDir, url);
-  if (!existsSync(file)) return;
+  if (!existsSync(file)) {
+    problems.push(`${url}: named in files: but not found in ${releaseDir}`);
+    return;
+  }
 
   const digest = await sha512(file);
   const size = statSync(file).size;
@@ -80,19 +90,31 @@ for (let i = 0; i < lines.length; i += 1) {
  * value here that can actually stop an update.
  */
 const pathLine = lines.find((line) => /^path:\s*/.test(line));
-if (pathLine) {
+if (!pathLine) {
+  // No `path:` line means no idea what electron-updater will even fetch -
+  // this is not a manifest restamp-feed can finish, silently or otherwise.
+  problems.push('no top-level "path:" line found - malformed manifest');
+} else {
   const url = pathLine.replace(/^path:\s*/, '').trim();
   const file = join(releaseDir, url);
-  if (existsSync(file)) {
+  if (!existsSync(file)) {
+    problems.push(`${url}: named by path: but not found in ${releaseDir}`);
+  } else {
     const digest = await sha512(file);
     const top = lines.findIndex((line) => /^sha512:\s*/.test(line));
-    if (top >= 0) {
+    if (top < 0) {
+      problems.push('no top-level "sha512:" line found - malformed manifest');
+    } else {
       if (lines[top] !== `sha512: ${digest}`) changes.push(`path (${url}) sha512`);
       lines[top] = `sha512: ${digest}`;
     }
-  } else {
-    console.error(`warning: ${url} named by path: is not in ${releaseDir}`);
   }
+}
+
+if (problems.length > 0) {
+  console.error(`${manifestPath}: refusing to write - ${problems.length} problem(s):`);
+  for (const problem of problems) console.error(` - ${problem}`);
+  process.exit(1);
 }
 
 writeFileSync(manifestPath, lines.join('\n'));

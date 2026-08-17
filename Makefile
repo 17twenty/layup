@@ -102,6 +102,10 @@ bench: ## Run every benchmark scenario and write result JSON
 test-bench: ## Unit-test the benchmark harness itself
 	node --test test/latency/harness.test.mjs
 
+.PHONY: test-restamp-feed
+test-restamp-feed: ## Unit-test the release-feed restamping script
+	node --test scripts/restamp-feed.test.mjs
+
 .PHONY: test-e2e
 test-e2e: ## End-to-end tests against a real control service (wire contract only)
 	node --test test/e2e/*.test.mjs
@@ -124,10 +128,10 @@ fmt-check: ## Fail if any Go file needs gofmt
 	if [ -n "$$unformatted" ]; then echo "gofmt needed for:"; echo "$$unformatted"; exit 1; fi
 
 .PHONY: verify
-verify: check test-bench test-smoke test-e2e test-boundary test-webrtc ## check + every real-boundary proof (add test-turn for coturn)
+verify: check test-bench test-restamp-feed test-smoke test-e2e test-boundary test-webrtc ## check + every real-boundary proof (add test-turn for coturn)
 
 .PHONY: ci
-ci: validate-tasks fmt-check check test-bench ## Everything the fast CI jobs run, locally
+ci: validate-tasks fmt-check check test-bench test-restamp-feed ## Everything the fast CI jobs run, locally
 
 .PHONY: check
 check: typecheck lint test build ## Full local gate: typecheck, lint, test, build
