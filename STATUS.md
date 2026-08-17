@@ -89,6 +89,9 @@ because it is rewritten in PLAN-1.5.
 | A remote participant can drive an editor | `make test-e2e` | `test/e2e/remote-editor.test.mjs` |
 | One shared desktop, taken or asked for | `make test-e2e` | `test/e2e/screen-takeover.test.mjs` |
 | A layup outlives its screen | `npm test` | `src/core/session-continuity.test.ts` |
+| The window is small unless there is a reason | `npm test` | `src/main/window-modes.test.ts`, `src/renderer/shell/mode.test.ts` |
+| A shared layup survives both validators | `npm test` | `src/core/layup-shape.test.ts` |
+| One person, one layup, restored on restart | `make test-go` | `internal/domain/current_layup_test.go` |
 
 ## Blocked
 
@@ -124,6 +127,60 @@ Options:
   c) Defer both to the PLAN-1 gate and accept that Phase D closes without
      network evidence - not recommended: SPEC §16 budgets would go unverified.
 ```
+
+## Outside the plan: the desktop was wired up and reshaped (2026-08-17)
+
+Nick asked for the application to be made usable by hand, and then reviewed it
+live. That work is **user-directed and outside the PLAN-1 task order** - no task
+was marked done for it, and it lands ahead of P1-0603, which is still blocked on
+the two-machine decision below. It is recorded here so the gate sees it.
+
+What landed:
+
+- **The desktop is assembled.** The renderer now runs a real layup: peer
+  connections, cursors, faces, the shared screen, and remote input forwarded to
+  the privileged process. New IPC (`signal:*`, `share:*`, `control:*`,
+  `input:offer`, `ui:mode`), all validated both ways, with the boundary test
+  updated. The renderer carries messages; `main/remote-session.ts` decides.
+- **A Pop/Screenhero window shape.** Small floating call window by default,
+  growing only to choose a screen or to watch one, and shrinking back. Geometry
+  policy is in `main/window-modes.ts`; the renderer sends a mode *name*, never
+  bounds, because a renderer that could place an always-on-top window precisely
+  could place content over OS chrome.
+- **A border around the shared display** (`main/share-border.ts`), which is what
+  makes it safe for the window itself to get out of the way while presenting.
+
+Three deviations that need a human decision before the gate:
+
+1. **Remote control is a mode, not per-participant grants.** SPEC §12 says
+   grants "must remain per-participant capable" and §5 reads as though the
+   interface hands them out by name. The interface is now two switches - Mouse
+   and Keyboard, shared with the layup - because several people acting at once,
+   funnelled through one host mouse and keyboard, is what the feature is *for*,
+   not a risk to be administered. The guard is still per-participant capable:
+   anybody can be stopped by name. **Either SPEC §5's framing moves, or this
+   does.**
+2. **A person is in one layup at a time.** Joining or creating one now leaves
+   the other, as a real leave. SPEC does not say this outright; it was decided
+   after two desktops ended up in different layups with no way back, because
+   the join button disappears once you are a member. Recorded as a product
+   decision, not a reading of the contract.
+3. **PLAN-1.5 supersedes some of this anyway.** P15-0113 rewrites the
+   end-to-end flow, so the assembly above should be treated as a working
+   prototype of that shape rather than its final form.
+
+A real defect found only by using it: the desktop's layup validators did not
+know the server's `activeShare` field, and unknown properties are rejected
+rather than ignored. **From the moment anybody shared a screen, every layup
+state update was silently discarded and leaving the layup failed outright.**
+Fixed in both validators, with a regression test that keeps the strictness for
+genuinely unknown fields.
+
+Still owed on the interface, none of it blocking: view toggles (grid / sidebar /
+tiny pill), a presence row so a camera-off participant is not invisible, whether
+the call bar should fade when the pointer leaves, and whether the in-app control
+banner should stay red and assertive now that shared control is the normal
+state.
 
 ## Known issues / decisions needed
 
