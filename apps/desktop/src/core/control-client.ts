@@ -338,6 +338,8 @@ export interface ControlClient {
   apiGet<T>(path: string): Promise<T>;
   /** Versioned API command. Throws ControlRequestError on a non-2xx response. */
   apiPost<T>(path: string, body?: unknown): Promise<T>;
+  /** Versioned API deletion. Throws ControlRequestError on a non-2xx response. */
+  apiDelete<T>(path: string): Promise<T>;
   /** Who the control plane thinks this desktop is. */
   me(): Promise<MeSnapshot>;
   /** The people in this organisation. */
@@ -363,6 +365,14 @@ export interface ControlClient {
   turnCredentials(): Promise<IceConfiguration>;
   /** Mints an opaque invitation link for a layup you are in. */
   createLink(layupId: string): Promise<InvitationLink>;
+  /**
+   * Takes a layup's link out of circulation.
+   *
+   * The answer to "I pasted that in the wrong channel". Nobody new can join
+   * with it from that moment; everybody already inside stays inside, because
+   * revoking a link is not a way to remove a person.
+   */
+  revokeLink(layupId: string): Promise<void>;
   /** Joins a layup using an invitation link token. */
   joinByLink(token: string): Promise<MembershipResult>;
   /** Sends an invitation or knock. */
@@ -588,10 +598,16 @@ export function createControlClient(options: ControlClientOptions): ControlClien
       return invitationLinkShape(envelope.payload, 'layup.link');
     },
 
+    async revokeLink(layupId: string): Promise<void> {
+      await this.apiDelete(`/api/layups/${encodeURIComponent(layupId)}/link`);
+    },
+
     async joinByLink(token: string): Promise<MembershipResult> {
-      const envelope = await this.apiPost<{ payload?: unknown }>(
-        `/api/links/${encodeURIComponent(token)}/join`,
-      );
+      // In the body, never in the path. Caddy's access-log filter redacts
+      // query strings but not paths, so a token in the URL would land in
+      // cleartext in the log on every redemption - and a log is exactly the
+      // place a working key to somebody's call must not be.
+      const envelope = await this.apiPost<{ payload?: unknown }>('/api/links/join', { token });
       return membershipResultShape(envelope.payload, 'layup.joined');
     },
 
@@ -625,6 +641,23 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         const code = extractErrorCode(body);
         throw new ControlRequestError(
           describeFailure('GET', path, response.status, body),
+          response.status,
+          code,
+        );
+      }
+      return (await response.json()) as T;
+    },
+
+    async apiDelete<T>(path: string): Promise<T> {
+      const response = await withTimeout(`${baseUrl}${path}`, {
+        method: 'DELETE',
+        headers: apiHeaders(),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => undefined);
+        const code = extractErrorCode(body);
+        throw new ControlRequestError(
+          describeFailure('DELETE', path, response.status, body),
           response.status,
           code,
         );

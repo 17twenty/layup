@@ -184,3 +184,86 @@ describe('control client identity', () => {
     expect(headers.get('authorization')).toBeNull();
   });
 });
+
+/**
+ * A link is a key to somebody's call, so where it travels matters as much as
+ * what it opens. Nothing here may put one in a URL: Caddy's access-log filter
+ * redacts query strings but not paths, and the server moved redemption into
+ * the request body for exactly that reason (`httpapi/links.go`).
+ */
+describe('invitation links', () => {
+  it('mints one for a layup you are in', async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const client = createControlClient({
+      baseUrl: 'https://layup.blah.au',
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method });
+        return jsonResponse({
+          v: 1,
+          type: 'layup.link',
+          payload: { token: 'tok_abc', expiresAt: '2026-08-18T09:00:00Z' },
+        });
+      },
+    });
+
+    const link = await client.createLink('lay_abc12345');
+
+    expect(link.token).toBe('tok_abc');
+    expect(calls[0]).toEqual({
+      url: 'https://layup.blah.au/api/layups/lay_abc12345/link',
+      method: 'POST',
+    });
+  });
+
+  it('takes one back out of circulation', async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const client = createControlClient({
+      baseUrl: 'https://layup.blah.au',
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method });
+        return jsonResponse({ v: 1, type: 'layup.link.revoked', payload: { layupId: 'lay_abc12345' } });
+      },
+    });
+
+    await client.revokeLink('lay_abc12345');
+
+    expect(calls[0]).toEqual({
+      url: 'https://layup.blah.au/api/layups/lay_abc12345/link',
+      method: 'DELETE',
+    });
+  });
+
+  it('redeems one from the request body, never from the path', async () => {
+    const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
+    const client = createControlClient({
+      baseUrl: 'https://layup.blah.au',
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method, body: init?.body });
+        return jsonResponse({
+          v: 1,
+          type: 'layup.joined',
+          payload: {
+            layup: {
+              id: 'lay_abc12345',
+              organisationId: 'org_devlayup',
+              visibility: 'LINK',
+              active: true,
+              createdAt: '2026-08-17T09:00:00Z',
+              hasCreatorAuthority: false,
+              participants: [],
+            },
+            yourMembershipId: 'mem_1',
+          },
+        });
+      },
+    });
+
+    await client.joinByLink('tok_abc');
+
+    expect(calls[0]?.url).toBe('https://layup.blah.au/api/links/join');
+    expect(calls[0]?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0]?.body))).toEqual({ token: 'tok_abc' });
+    // The thing that must never be true: the token in the URL.
+    expect(calls[0]?.url).not.toContain('tok_abc');
+  });
+});

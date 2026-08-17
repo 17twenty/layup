@@ -35,6 +35,15 @@ export interface CallControlsProps {
   onShare: () => void;
   onStopSharing: () => void;
   onLeave: () => void;
+  /**
+   * Hands out a URL for this call and copies it. Absent means this surface
+   * cannot invite anybody - there is no button rather than a dead one.
+   */
+  onInvite?: () => void;
+  /** Takes that URL back. Shown only while there is a live one to take back. */
+  onRevokeInvite?: () => void;
+  /** True once a link has been handed out and not yet revoked. */
+  hasInviteLink?: boolean;
   /** This call's route, RTT and candidate types, or undefined before the first sample lands. */
   diagnostics?: RouteDiagnostics;
   /** The incoming video track, for resolution and framerate. */
@@ -63,6 +72,9 @@ export function CallControls({
   onShare,
   onStopSharing,
   onLeave,
+  onInvite,
+  onRevokeInvite,
+  hasInviteLink = false,
   diagnostics,
   diagnosticsVideoTrack,
   diagnosticsExpanded,
@@ -157,6 +169,35 @@ export function CallControls({
         ) : null}
       </div>
 
+      {/* Inviting somebody who has no Layup and no account. It sits next to
+          Share because it is the same kind of act - opening this call to one
+          more person - and because "I'll send you a link" is said mid-call,
+          not from a settings screen. */}
+      {onInvite ? (
+        <div className="callbar__group">
+          <button
+            type="button"
+            className="callbar__button"
+            onClick={onInvite}
+            data-testid="invite-by-link"
+          >
+            <LinkIcon />
+            <span>{hasInviteLink ? 'Copy link' : 'Invite'}</span>
+          </button>
+          {hasInviteLink && onRevokeInvite ? (
+            <button
+              type="button"
+              className="callbar__caret"
+              onClick={onRevokeInvite}
+              aria-label="Stop this invitation link working"
+              data-testid="revoke-invite-link"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {presenting ? (
         <button
           type="button"
@@ -220,6 +261,20 @@ function CameraIcon({ off }: { off: boolean }) {
       <rect x="3" y="6" width="12" height="12" rx="2" fill="currentColor" />
       <path d="M16 11l5-3v8l-5-3z" fill="currentColor" />
       {off ? <path d="M4 3l16 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /> : null}
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M9.5 14.5 14.5 9.5M10 6.5l1.8-1.8a4 4 0 1 1 5.7 5.7L15.6 12M14 17.5l-1.8 1.8a4 4 0 1 1-5.7-5.7L8.4 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

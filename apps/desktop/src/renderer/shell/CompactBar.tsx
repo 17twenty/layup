@@ -32,6 +32,10 @@ export interface CompactBarProps {
   onShare: () => void;
   onStopSharing: () => void;
   onLeave: () => void;
+  /** Hands out a URL for this call, and takes it back. See CallControls. */
+  onInvite?: () => void;
+  onRevokeInvite?: () => void;
+  hasInviteLink?: boolean;
   /** This call's route, RTT and candidate types, or undefined before the first sample lands. */
   diagnostics?: RouteDiagnostics;
   /** The incoming video track, for resolution and framerate. */
@@ -56,6 +60,9 @@ export function CompactBar({
   onShare,
   onStopSharing,
   onLeave,
+  onInvite,
+  onRevokeInvite,
+  hasInviteLink,
   diagnostics,
   diagnosticsVideoTrack,
   devices,
@@ -104,6 +111,9 @@ export function CompactBar({
         onShare={onShare}
         onStopSharing={onStopSharing}
         onLeave={onLeave}
+        {...(onInvite ? { onInvite } : {})}
+        {...(onRevokeInvite ? { onRevokeInvite } : {})}
+        {...(hasInviteLink === undefined ? {} : { hasInviteLink })}
         {...(diagnostics ? { diagnostics } : {})}
         {...(diagnosticsVideoTrack ? { diagnosticsVideoTrack } : {})}
         diagnosticsExpanded={diagnosticsExpanded}

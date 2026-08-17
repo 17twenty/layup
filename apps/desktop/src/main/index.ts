@@ -20,6 +20,7 @@ import { createLogger, newCorrelationId } from './logging';
 import { createRealtimeSupervisor } from './realtime';
 import { createPeopleStore, TYPE_PRESENCE_SNAPSHOT, TYPE_PRESENCE_UPDATE } from '../core/people-store';
 import { createControlClient, type ControlClient } from '../core/control-client';
+import { inviteUrl } from '../core/server-url';
 import { createConfigStore, type DesktopConfig } from './config';
 import { createPreferencesStore, type DesktopPreferences } from './preferences';
 import { registerWithServer } from './server';
@@ -509,10 +510,18 @@ function buildHandlers(): Handlers {
     'layup:leave': () => layups.leave(),
     'layup:open': () => controlClient.openLayups(),
     'ice:config': () => ice.configuration(),
-    'layup:link': () => {
+    'layup:link': async () => {
       const current = layups.state().layup;
       if (!current) throw new Error('you are not in a layup');
-      return controlClient.createLink(current.id);
+      const link = await controlClient.createLink(current.id);
+      // The token becomes a URL here and nowhere else, so there is one place
+      // that decides it goes in the fragment (core/server-url.ts).
+      return { url: inviteUrl(serverUrl(), link.token) };
+    },
+    'layup:revokeLink': async () => {
+      const current = layups.state().layup;
+      if (!current) throw new Error('you are not in a layup');
+      await controlClient.revokeLink(current.id);
     },
     'layup:joinLink': async (input) => {
       const result = await controlClient.joinByLink(input.token);

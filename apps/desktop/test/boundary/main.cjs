@@ -9,97 +9,139 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
 
 const distMainDir = path.join(__dirname, '..', '..', 'dist', 'main', 'main');
+const distSharedDir = path.join(__dirname, '..', '..', 'dist', 'main', 'shared');
 const { secureWebPreferences } = require(path.join(distMainDir, 'window.js'));
 const { registerIpcHandlers } = require(path.join(distMainDir, 'ipc.js'));
+const { channelNames } = require(path.join(distSharedDir, 'ipc.js'));
 
 app.disableHardwareAcceleration();
 
 const failures = [];
 
-app.whenReady().then(async () => {
-  registerIpcHandlers(ipcMain, {
-    'app:info': () => ({ appVersion: '0.1.0-test', protocolVersion: 1, platform: process.platform }),
-    'server:state': () => ({ configured: false }),
-    'server:add': () => ({ ok: false, message: 'the boundary harness registers nobody' }),
-    'server:forget': () => ({ configured: false }),
-    'capture:sources': () => ({ sources: [] }),
-    'capture:permission': () => ({
+/** Nothing is shared and nobody holds anything - the whole of this harness. */
+const idleControl = { allowed: { pointer: false, keyboard: false }, stopped: [], anyoneHasControl: false };
+
+/**
+ * Every channel shared/ipc.ts declares, answered here.
+ *
+ * registerIpcHandlers registers a channel with no handler quite happily - it
+ * only fails when somebody invokes it - so until now a channel could be added
+ * to the surface and never be proved to cross this boundary at all. Eleven of
+ * them had been, including input:offer. The check below closes that: an
+ * unlisted channel fails the harness. Add the channel here; never delete the
+ * check to make it green.
+ */
+const handlers = {
+  'app:info': () => ({ appVersion: '0.1.0-test', protocolVersion: 1, platform: process.platform }),
+  'server:state': () => ({ configured: false }),
+  'server:add': () => ({ ok: false, message: 'the boundary harness registers nobody' }),
+  'server:forget': () => ({ configured: false }),
+  'capture:sources': () => ({ sources: [] }),
+  'capture:permission': () => ({
+    status: 'granted',
+    canCapture: true,
+    guidance: '',
+    canOpenSettings: true,
+    platform: process.platform,
+  }),
+  'capture:openSettings': () => true,
+  // All four, exactly as the real service reports them. The harness proves
+  // the channels exist and that the renderer cannot reach past them - it
+  // grants nothing and opens nothing.
+  'permissions:all': () => {
+    const granted = {
       status: 'granted',
-      canCapture: true,
+      ok: true,
       guidance: '',
-      canOpenSettings: true,
-      platform: process.platform,
-    }),
-    'capture:openSettings': () => true,
-    // All four, exactly as the real service reports them. The harness proves
-    // the channels exist and that the renderer cannot reach past them - it
-    // grants nothing and opens nothing.
-    'permissions:all': () => {
-      const granted = {
-        status: 'granted',
-        ok: true,
-        guidance: '',
-        canOpenSettings: process.platform === 'darwin',
-        canRequest: false,
-      };
-      return {
-        camera: granted,
-        microphone: granted,
-        screen: granted,
-        accessibility: granted,
-      };
-    },
-    'permissions:request': () => false,
-    'permissions:openSettings': () => false,
-    'control:status': () => ({
-      status: 'unreachable',
-      baseUrl: 'http://127.0.0.1:8787',
-      clientProtocolVersion: 1,
-      detail: 'boundary harness does not run a control service',
-      checkedAtMs: 0,
-    }),
-    'control:remote': () => ({ helperRunning: false, pointer: false, keyboard: false }),
-    'identity:current': () => ({ devUser: 'nick', resolved: false, detail: 'no control service' }),
-    'realtime:status': () => ({ status: 'idle', attempt: 0 }),
-    'people:list': () => ({ people: [] }),
-    'layup:current': () => ({ youAreCreatorMembership: false }),
-    'layup:create': () => ({ youAreCreatorMembership: false }),
-    'layup:join': () => ({ youAreCreatorMembership: false }),
-    'layup:leave': () => ({ youAreCreatorMembership: false }),
-    'layup:open': () => ({ layups: [] }),
-    'ice:config': () => ({ iceServers: [], expiresAt: '2026-08-14T09:00:00Z', forceRelay: false }),
-    'layup:link': () => ({ token: 'tok', expiresAt: '2026-08-14T09:00:00Z' }),
-    'layup:joinLink': () => ({ youAreCreatorMembership: false }),
-    'requests:list': () => ({ incoming: [], outgoing: [] }),
-    'requests:invite': () => ({
-      id: 'jrq_devaaaaab',
-      type: 'INVITE_USER_TO_NEW_LAYUP',
-      state: 'PENDING',
-      fromUserId: 'usr_devnickx',
-      fromName: 'Nick',
-      createdAt: '2026-08-13T09:00:00Z',
-      expiresAt: '2026-08-13T09:01:00Z',
-    }),
-    'requests:knock': () => ({
-      id: 'jrq_devaaaaac',
-      type: 'KNOCK_TO_JOIN',
-      state: 'PENDING',
-      fromUserId: 'usr_devkarlx',
-      fromName: 'Karl',
-      createdAt: '2026-08-13T09:00:00Z',
-      expiresAt: '2026-08-13T09:01:00Z',
-    }),
-    'requests:accept': () => undefined,
-    'requests:decline': () => undefined,
-    'requests:cancel': () => undefined,
-    'ui:mode': () => ({ mode: 'home' }),
-    'update:state': () => ({ status: 'idle' }),
-    // The harness installs nothing; it only proves the channel exists and that
-    // the renderer cannot reach past it.
-    'update:install': () => false,
-    'preferences:get': () => ({ soundsMuted: false }),
-    'preferences:set': (input) => input,
-  });
+      canOpenSettings: process.platform === 'darwin',
+      canRequest: false,
+    };
+    return {
+      camera: granted,
+      microphone: granted,
+      screen: granted,
+      accessibility: granted,
+    };
+  },
+  'permissions:request': () => false,
+  'permissions:openSettings': () => false,
+  'control:status': () => ({
+    status: 'unreachable',
+    baseUrl: 'http://127.0.0.1:8787',
+    clientProtocolVersion: 1,
+    detail: 'boundary harness does not run a control service',
+    checkedAtMs: 0,
+  }),
+  'control:remote': () => ({ helperRunning: false, pointer: false, keyboard: false }),
+  'identity:current': () => ({ devUser: 'nick', resolved: false, detail: 'no control service' }),
+  'realtime:status': () => ({ status: 'idle', attempt: 0 }),
+  'people:list': () => ({ people: [] }),
+  'layup:current': () => ({ youAreCreatorMembership: false }),
+  'layup:create': () => ({ youAreCreatorMembership: false }),
+  'layup:join': () => ({ youAreCreatorMembership: false }),
+  'layup:leave': () => ({ youAreCreatorMembership: false }),
+  'layup:open': () => ({ layups: [] }),
+  'ice:config': () => ({ iceServers: [], expiresAt: '2026-08-14T09:00:00Z', forceRelay: false }),
+  'layup:link': () => ({ url: 'https://layup.blah.au/j/#tok' }),
+'layup:revokeLink': () => undefined,
+  'layup:joinLink': () => ({ youAreCreatorMembership: false }),
+  'requests:list': () => ({ incoming: [], outgoing: [] }),
+  'requests:invite': () => ({
+    id: 'jrq_devaaaaab',
+    type: 'INVITE_USER_TO_NEW_LAYUP',
+    state: 'PENDING',
+    fromUserId: 'usr_devnickx',
+    fromName: 'Nick',
+    createdAt: '2026-08-13T09:00:00Z',
+    expiresAt: '2026-08-13T09:01:00Z',
+  }),
+  'requests:knock': () => ({
+    id: 'jrq_devaaaaac',
+    type: 'KNOCK_TO_JOIN',
+    state: 'PENDING',
+    fromUserId: 'usr_devkarlx',
+    fromName: 'Karl',
+    createdAt: '2026-08-13T09:00:00Z',
+    expiresAt: '2026-08-13T09:01:00Z',
+  }),
+  'requests:accept': () => undefined,
+  'requests:decline': () => undefined,
+  'requests:cancel': () => undefined,
+  'ui:mode': () => ({ mode: 'home' }),
+  'update:state': () => ({ status: 'idle' }),
+  // The harness installs nothing; it only proves the channel exists and that
+  // the renderer cannot reach past it.
+  'update:install': () => false,
+  'signal:send': () => true,
+  'share:current': () => ({}),
+  'share:start': () => ({}),
+  'share:stop': () => ({}),
+  'share:ask': () => ({}),
+  // The harness holds no grants and injects nothing: every answer here is
+  // the shape of a refusal, which is what an empty room actually says.
+  'control:state': () => idleControl,
+  'control:allow': () => idleControl,
+  'control:stop': () => idleControl,
+  'control:resume': () => idleControl,
+  'control:stopAll': () => idleControl,
+  'input:offer': () => ({ injected: false, reason: 'not-in-a-layup' }),
+  'preferences:get': () => ({ soundsMuted: false }),
+  'preferences:set': (input) => input,
+};
+
+app.whenReady().then(async () => {
+  for (const name of channelNames) {
+    if (typeof handlers[name] !== 'function') {
+      failures.push(`channel ${name} is declared in shared/ipc.ts but unlisted here`);
+    }
+  }
+  for (const name of Object.keys(handlers)) {
+    if (!channelNames.includes(name)) {
+      failures.push(`channel ${name} is listed here but not declared in shared/ipc.ts`);
+    }
+  }
+
+  registerIpcHandlers(ipcMain, handlers);
 
   const win = new BrowserWindow({
     show: false,

@@ -55,6 +55,11 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
   const [control, setControl] = useState<RemoteControlStateResponse>(emptyControl);
   const [error, setError] = useState<string | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The live invitation URL, once somebody has asked for one. `revoked` is
+  // kept separately because "there is no link" and "the link you sent no
+  // longer works" are different things to be told.
+  const [inviteLink, setInviteLink] = useState<string | undefined>();
+  const [inviteRevoked, setInviteRevoked] = useState(false);
   // Only Accessibility is read here, and only while presenting: it is the one
   // whose absence makes the switches below a lie.
   const [permissions, setPermissions] = useState<PermissionsResponse | undefined>();
@@ -131,6 +136,29 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
       await run(() => window.layup.share.start(sourceId));
     },
     [capture, run],
+  );
+
+  // One press, mid-conversation: mint the link, put it on the clipboard, and
+  // show it - because a copy you cannot see is a copy you cannot trust.
+  const invite = useCallback(
+    () =>
+      run(async () => {
+        const { url } = await window.layup.layup.link();
+        await navigator.clipboard?.writeText(url);
+        setInviteRevoked(false);
+        setInviteLink(url);
+      }),
+    [run],
+  );
+
+  const revokeInvite = useCallback(
+    () =>
+      run(async () => {
+        await window.layup.layup.revokeLink();
+        setInviteLink(undefined);
+        setInviteRevoked(true);
+      }),
+    [run],
   );
 
   const stopSharing = useCallback(async () => {
@@ -296,6 +324,21 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
         onStopAll={() => void run(() => window.layup.control.stopAll())}
       />
 
+      {/* Shown, not just copied: somebody about to paste a key to their call
+          into a chat window deserves to see exactly what it is. */}
+      {inviteLink ? (
+        <p className="room__notice" role="status">
+          Link copied. Anyone with it can join as a guest:{' '}
+          <code data-testid="invite-link">{inviteLink}</code>
+        </p>
+      ) : null}
+
+      {inviteRevoked ? (
+        <p className="room__notice" role="status" data-testid="invite-revoked">
+          That link no longer works. Everybody already here stays.
+        </p>
+      ) : null}
+
       {share.notice ? (
         <p className="room__notice" role="status" data-testid="share-notice">
           {share.notice.text}
@@ -350,6 +393,9 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
         onShare={() => setPickerOpen(true)}
         onStopSharing={() => void stopSharing()}
         onLeave={() => onLeave?.()}
+        onInvite={() => void invite()}
+        onRevokeInvite={() => void revokeInvite()}
+        hasInviteLink={Boolean(inviteLink)}
         {...(primaryDiagnostics ? { diagnostics: primaryDiagnostics } : {})}
         {...(incomingVideoTrack ? { diagnosticsVideoTrack: incomingVideoTrack } : {})}
         devices={room.devices}

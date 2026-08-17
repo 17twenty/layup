@@ -486,7 +486,15 @@ export const ipcChannels = {
   'layup:leave': channel(isVoid, layupStateResponse),
   'layup:open': channel(isVoid, openLayupsResponse),
   'ice:config': channel(isVoid, iceConfigResponse),
-  'layup:link': channel(isVoid, isObject({ token: isString, expiresAt: isString })),
+  /**
+   * The URL to hand somebody, ready to paste. Never the raw token: the only
+   * correct shape for it is the fragment form the web client reads
+   * (`core/server-url.ts`), and building that in the renderer would be a
+   * second place to get it wrong.
+   */
+  'layup:link': channel(isVoid, isObject({ url: isString })),
+  /** Takes the layup's link out of circulation. Nobody already in is removed. */
+  'layup:revokeLink': channel(isVoid, isVoid),
   'layup:joinLink': channel(isObject({ token: isString }), layupStateResponse),
   'requests:list': channel(isVoid, requestsResponse),
   'requests:invite': channel(inviteRequest, joinRequestShape),

@@ -53,7 +53,12 @@ const api = {
   stopShare: vi.fn(async () => ({}) as ShareStateResponse),
   ask: vi.fn(async () => ({}) as ShareStateResponse),
   offer: vi.fn(async () => ({ injected: true })),
+  link: vi.fn(async () => ({ url: 'https://layup.blah.au/j/#tok_abc' })),
+  revokeLink: vi.fn(async () => undefined),
 };
+
+/** The clipboard, as the room reaches for it. jsdom has none. */
+const writeText = vi.fn(async () => undefined);
 
 // The live half is exercised on its own; here it is replaced so the wiring is
 // what is under test.
@@ -194,7 +199,13 @@ beforeEach(() => {
       ice: { config: async () => ({ iceServers: [], forceRelay: false }) },
       ui: { setMode: async (mode: string) => ({ mode }), onMode: () => () => {} },
       signal: { send: async () => true, onReceived: () => () => {} },
+      layup: { link: api.link, revokeLink: api.revokeLink },
     },
+  });
+
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
   });
 });
 
@@ -443,5 +454,50 @@ describe('remote control the OS will not allow', () => {
 
     await waitFor(() => expect(screen.getByTestId('allow-pointer')).toBeInTheDocument());
     expect(screen.queryByTestId('control-accessibility')).toBeNull();
+  });
+});
+
+/**
+ * Inviting someone who has no Layup and no account, from inside the call.
+ *
+ * The whole point is that it is one press while the conversation is happening:
+ * "I'll send you a link" has to be a link, not an installer.
+ */
+describe('inviting by link', () => {
+  it('mints a link, copies it, and shows the fragment form', async () => {
+    render(<LayupRoom layup={layup} />);
+
+    await userEvent.click(screen.getByTestId('invite-by-link'));
+
+    await waitFor(() => expect(api.link).toHaveBeenCalled());
+    // The token lives in the fragment, which is never sent to any server.
+    expect(writeText).toHaveBeenCalledWith('https://layup.blah.au/j/#tok_abc');
+    expect(await screen.findByTestId('invite-link')).toHaveTextContent(
+      'https://layup.blah.au/j/#tok_abc',
+    );
+  });
+
+  it('takes the link back, and stops showing one', async () => {
+    render(<LayupRoom layup={layup} />);
+    await userEvent.click(screen.getByTestId('invite-by-link'));
+    await screen.findByTestId('invite-link');
+
+    await userEvent.click(screen.getByTestId('revoke-invite-link'));
+
+    await waitFor(() => expect(api.revokeLink).toHaveBeenCalled());
+    expect(screen.queryByTestId('invite-link')).toBeNull();
+    // Said out loud: a revoked link that looks identical to a live one is how
+    // somebody re-sends the dead one.
+    expect(screen.getByTestId('invite-revoked')).toBeInTheDocument();
+  });
+
+  it('says so when the control plane refuses', async () => {
+    api.link.mockRejectedValueOnce(new Error('you are not in this layup'));
+    render(<LayupRoom layup={layup} />);
+
+    await userEvent.click(screen.getByTestId('invite-by-link'));
+
+    expect(await screen.findByTestId('room-error')).toHaveTextContent('you are not in this layup');
+    expect(writeText).not.toHaveBeenCalled();
   });
 });

@@ -71,7 +71,8 @@ const goodHandlers: Handlers = {
   'layup:leave': () => ({ youAreCreatorMembership: false }),
   'layup:open': () => ({ layups: [] }),
   'ice:config': () => ({ iceServers: [], expiresAt: '2026-08-14T09:00:00Z', forceRelay: false }),
-  'layup:link': () => ({ token: 'tok', expiresAt: '2026-08-14T09:00:00Z' }),
+  'layup:link': () => ({ url: 'https://layup.blah.au/j/#tok' }),
+  'layup:revokeLink': () => undefined,
   'layup:joinLink': () => ({ youAreCreatorMembership: false }),
   'requests:list': () => ({ incoming: [], outgoing: [] }),
   'requests:invite': () => ({
@@ -150,6 +151,7 @@ describe('main IPC boundary', () => {
       'layup:open',
       'ice:config',
       'layup:link',
+      'layup:revokeLink',
       'layup:joinLink',
       'requests:list',
       'requests:invite',
