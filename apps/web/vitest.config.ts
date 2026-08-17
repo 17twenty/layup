@@ -15,7 +15,10 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'node',
+    // The guest client is a browser application: its screens are the thing
+    // being tested, so the DOM is not optional here.
+    environment: 'jsdom',
+    setupFiles: ['./vitest.setup.ts'],
     globals: true,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: ['**/node_modules/**', '**/dist/**'],
