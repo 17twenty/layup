@@ -9,9 +9,11 @@ import {
   systemPreferences,
 } from 'electron';
 import * as path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { PROTOCOL_VERSION } from '@layup/protocol';
 import { registerIpcHandlers, type Handlers } from './ipc';
 import type { EventName } from '../shared/ipc';
+import { resolveBuildInfo, type BuildInfo } from '../shared/build-info';
 import { createControlSupervisor, DEFAULT_CONTROL_URL, DEFAULT_DEV_USER } from './control';
 import { createLogger, newCorrelationId } from './logging';
 import { createRealtimeSupervisor } from './realtime';
@@ -561,8 +563,33 @@ function createMainWindow(): BrowserWindow {
   return windows.set(window);
 }
 
+/**
+ * Which build this is, from the main process's point of view.
+ *
+ * The renderer gets its stamp from Vite `define`; tsc has no such mechanism,
+ * so electron-builder writes it into the packaged package.json instead (see
+ * the `package` script). A development run has neither and honestly says `dev`.
+ */
+function mainBuildInfo(): BuildInfo {
+  let stamped: { layupCommit?: unknown; layupBuiltAt?: unknown } = {};
+  try {
+    stamped = JSON.parse(readFileSync(path.join(app.getAppPath(), 'package.json'), 'utf8'));
+  } catch {
+    // An unreadable package.json is not a reason not to start.
+  }
+  return resolveBuildInfo({
+    version: app.getVersion(),
+    commit: stamped.layupCommit,
+    builtAt: stamped.layupBuiltAt,
+  });
+}
+
 app.whenReady().then(() => {
+  const build = mainBuildInfo();
   log.info('desktop starting', {
+    version: build.version,
+    commit: build.commit,
+    builtAt: build.builtAt,
     protocolVersion: PROTOCOL_VERSION,
     platform: process.platform,
     electron: process.versions.electron,

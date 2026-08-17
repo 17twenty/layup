@@ -75,6 +75,17 @@ describe('bootstrap shell', () => {
     expect(screen.queryByText(/new meeting/i)).toBeNull();
   });
 
+  it('says which build this is, in a string somebody can read back to us', async () => {
+    bridge(Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }));
+
+    render(<App />);
+
+    // v0.2.0 (abc1234) - never "vundefined", never "(undefined)".
+    const meta = await screen.findByText(/protocol v\d+/);
+    expect(meta.textContent).toMatch(/^v\d+\.\d+\.\d+\S* \(([0-9a-f]{7,40}|dev)\) · protocol v\d+$/);
+    expect(meta.textContent).not.toMatch(/undefined/);
+  });
+
   it('shows nothing but the add-server screen when no server has been added', async () => {
     bridge(Promise.resolve({ configured: false }));
 

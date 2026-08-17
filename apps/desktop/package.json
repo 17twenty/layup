@@ -1,6 +1,6 @@
 {
   "name": "@layup/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Layup Electron desktop client.",
   "main": "dist/main/main/index.js",
@@ -11,7 +11,7 @@
     "build:preload": "vite build --config vite.preload.config.ts",
     "build:renderer": "vite build",
     "start": "npm run build && electron .",
-    "package": "npm run build && electron-builder --mac --universal",
+    "package": "npm run build && electron-builder --mac --universal -c.extraMetadata.layupCommit=\"$(git rev-parse --short HEAD 2>/dev/null || echo dev)\" -c.extraMetadata.layupBuiltAt=\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.preload.json && tsc -p tsconfig.web.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",

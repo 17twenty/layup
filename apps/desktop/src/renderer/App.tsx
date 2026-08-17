@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PROTOCOL_VERSION } from '@layup/protocol';
+import { BUILD_INFO } from '../shared/build-info';
 import { ControlStatus } from './ControlStatus';
 import { Identity } from './Identity';
 import { RealtimeStatus } from './RealtimeStatus';
@@ -139,7 +140,10 @@ export function App() {
         <Identity />
         <ControlStatus />
         <RealtimeStatus />
-        <p className="meta">protocol v{PROTOCOL_VERSION}</p>
+        <p className="meta">
+          {/* The one string a tester reads back to us when something is wrong. */}
+          v{BUILD_INFO.version} ({BUILD_INFO.commit}) · protocol v{PROTOCOL_VERSION}
+        </p>
       </footer>
     </div>
   );
