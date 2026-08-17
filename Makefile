@@ -157,7 +157,7 @@ LAYUP_DEPLOY_DOMAIN ?= layup.blah.au
 export LAYUP_DEPLOY_DOMAIN
 
 .PHONY: publish
-publish: ## Upload the DMG, the update zip and the feed manifest to the dev VM
+publish: build-web ## Upload the web guest client, the DMG, the update zip and the feed manifest
 	@ls apps/desktop/release/*.dmg >/dev/null 2>&1 || (echo "run 'make release' first" && exit 1)
 	@# Squirrel.Mac cannot update from a DMG. No zip means a download page and
 	@# no update path, which looks identical until nobody ever gets a fix.
@@ -165,7 +165,12 @@ publish: ## Upload the DMG, the update zip and the feed manifest to the dev VM
 	@# The manifest *is* the feed. Without it nothing ever updates, and it looks
 	@# exactly like it is working.
 	@test -f apps/desktop/release/latest-mac.yml || (echo "no latest-mac.yml: check the publish block in electron-builder.yml" && exit 1)
-	ssh $(LAYUP_DEPLOY_HOST) 'install -d -m 0755 /srv/layup/public/download'
+	ssh $(LAYUP_DEPLOY_HOST) 'install -d -m 0755 /srv/layup/public/download /srv/layup/public/j'
+	@# The web guest client. Uploaded first: a link somebody already holds
+	@# should start working before the download page mentions a new build.
+	@# --delete so a bundle's old hashed assets do not accumulate for ever;
+	@# scp cannot express that. bootstrap.sh installs rsync on the VM for this.
+	rsync -a --delete apps/web/dist/ $(LAYUP_DEPLOY_HOST):/srv/layup/public/j/
 	@# Under their own versioned names, because latest-mac.yml names them.
 	scp apps/desktop/release/*.dmg apps/desktop/release/*-mac.zip $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
 	@# Blockmaps make an update a delta instead of a full download. Their
@@ -177,6 +182,7 @@ publish: ## Upload the DMG, the update zip and the feed manifest to the dev VM
 	@# release, which is the only thing it is safe for it to describe.
 	scp apps/desktop/release/latest-mac.yml $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/latest-mac.yml
 	@echo "https://$(LAYUP_DEPLOY_DOMAIN)/download/Layup.dmg"
+	@echo "guest client: https://$(LAYUP_DEPLOY_DOMAIN)/j/"
 	@echo "feed: https://$(LAYUP_DEPLOY_DOMAIN)/download/latest-mac.yml"
 	@curl -fsS https://$(LAYUP_DEPLOY_DOMAIN)/download/latest-mac.yml | head -3
 

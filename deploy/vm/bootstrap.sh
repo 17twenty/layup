@@ -32,7 +32,11 @@ apt-get update -qq
 # Caddy comes straight from Debian bookworm's own repos - no third-party
 # repository needed. The packaged 2.6.2-5 has automatic HTTPS/ACME and the
 # `handle` directive, which is everything Caddyfile here uses.
-apt-get install -y -qq coturn nftables caddy
+# rsync is here for `make publish`: uploading the web guest client with
+# --delete is what stops a bundle's old hashed assets accumulating for ever,
+# and scp cannot express that. Debian does not install it by default - the
+# first publish failed with "rsync: command not found" on the remote side.
+apt-get install -y -qq coturn nftables caddy rsync
 
 echo "==> service account and directories"
 id -u layup >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin layup
@@ -87,6 +91,12 @@ echo "==> public assets"
 if [ -d "$ASSETS/public" ]; then
   cp -r "$ASSETS/public/." /srv/layup/public/
 fi
+# Where the web guest client lands. `make publish` uploads the built bundle
+# here; creating it now means Caddy's /j/* handler has a directory to serve
+# from on a fresh VM instead of answering 404 for a link somebody has already
+# been sent.
+install -d -m 0755 /srv/layup/public/j
+install -d -m 0755 /srv/layup/public/download
 
 echo "==> caddy"
 install -m 0644 "$ASSETS/Caddyfile" /etc/caddy/Caddyfile

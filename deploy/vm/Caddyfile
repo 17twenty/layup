@@ -11,6 +11,21 @@ layup.blah.au {
 		reverse_proxy 127.0.0.1:8787
 	}
 
+	# The web guest client. A single-page app: /j/ and /j/#<token> are the
+	# same document, and the token never leaves the browser because a fragment
+	# is not part of an HTTP request at all. try_files falls back to its own
+	# index.html so a deep path inside /j/ is the app rather than a 404, and
+	# never falls back past /j/ into the download page.
+	# A named matcher, not two arguments to `handle`: `handle` takes exactly
+	# one matcher, and `handle /j /j/*` is a parse error that stops Caddy
+	# starting at all.
+	@guest path /j /j/*
+	handle @guest {
+		root * /srv/layup/public
+		try_files {path} /j/index.html
+		file_server
+	}
+
 	# The join page and the downloadable app. Populated in plan 03; an empty
 	# directory here is correct, not a placeholder.
 	handle {

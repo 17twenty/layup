@@ -25,6 +25,12 @@ import react from '@vitejs/plugin-react';
  * anyone would have guessed.
  */
 export default defineConfig({
+  // Served from https://<server>/j/, so every asset URL has to be written
+  // relative to that prefix at build time. With the default '/' the bundle
+  // would ask for /assets/... - which is the download page's directory, not
+  // this app's - and the join page would load as a blank white rectangle
+  // with two 404s in the console.
+  base: '/j/',
   plugins: [react()],
   resolve: {
     alias: {
