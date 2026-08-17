@@ -101,6 +101,16 @@ const participantShape = isObject({
   joinedAt: isString,
   leftAt: optional(isString),
   isCreatorMembership: isBoolean,
+  /**
+   * Whether this membership is a browser visitor who arrived by link.
+   *
+   * The server marks it (`ParticipantDTO.isGuest`) and the renderer needs it:
+   * the wire carries membership ids and nothing else, so this is the only way
+   * the drawing guard can tell a guest's stroke from a member's. Missing it
+   * here was not merely a gap - unknown properties are rejected, so every
+   * layup state update carrying it was silently dropped in the preload.
+   */
+  isGuest: optional(isBoolean),
 });
 
 const layupShape = isObject({

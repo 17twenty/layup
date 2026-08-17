@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { decodeInput, isControlMessage, type ControlMessage } from '@layup/protocol';
-import { CHANNEL_CURSOR, CHANNEL_INPUT } from '../../core/data-channels';
+import {
+  createStrokeAssembler,
+  decodeInput,
+  isControlMessage,
+  type AssembledStroke,
+  type ControlMessage,
+} from '@layup/protocol';
+import { createAnnotationGuard } from '../../core/annotation-guard';
+import { CHANNEL_ANNOTATION, CHANNEL_CURSOR, CHANNEL_INPUT } from '../../core/data-channels';
 import { createAvController, type AvState } from '../../core/av';
 import { includesDevice, listDevices, NO_DEVICES, type DeviceList } from '../../core/devices';
 import { createCursorIdentityBook } from '../../core/cursor-identity';
@@ -50,6 +57,15 @@ export interface LayupRoom {
   setSpeaker(deviceId?: string): void;
   /** Interpolated cursors to draw, sampled per animation frame. */
   sampleCursors: () => RemoteCursor[];
+  /**
+   * Strokes drawn over the shared screen by the people in the layup.
+   *
+   * Never by a guest: drawing from a guest membership is dropped as it
+   * arrives (`core/annotation-guard.ts`), so nothing they send ever reaches
+   * this list. The browser client not opening the channel is the polite half;
+   * this is the half that holds when the client is modified.
+   */
+  strokes: AssembledStroke[];
   /** Colour and label for a membership, stable for the life of the layup. */
   identify(membershipId: string): { colour: string; label: string };
   /** Reports where our pointer is over the shared surface, normalised. */
@@ -82,6 +98,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
   const [diagnostics, setDiagnostics] = useState<Record<string, RouteDiagnostics>>({});
   const [av, setAv] = useState<AvState>({ cameraEnabled: false, microphoneEnabled: false, muted: true });
   const [devices, setDevices] = useState<DeviceList>(NO_DEVICES);
+  const [strokes, setStrokes] = useState<AssembledStroke[]>([]);
   const sessionRef = useRef<Session | undefined>(undefined);
   const avRef = useRef(
     createAvController({
@@ -99,6 +116,14 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
   const presenterRef = useRef<string | undefined>(undefined);
   const wiredPeers = useRef(new Set<string>());
   const identityBook = useRef(createCursorIdentityBook());
+  const strokesRef = useRef(createStrokeAssembler());
+  // Guest memberships, as the control plane last described them. Held in a ref
+  // so the guard reads it live: a guest who arrives mid-call is a guest from
+  // the moment the roster says so, without anything being rebuilt.
+  const guestsRef = useRef(new Set<string>());
+  const annotationGuard = useRef(
+    createAnnotationGuard({ isGuestMembership: (id) => guestsRef.current.has(id) }),
+  );
 
   const membershipId = layup?.membershipId;
   const layupId = layup?.layup?.id;
@@ -119,6 +144,19 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       } catch {
         // A peer sending nonsense must not break the overlay for everyone.
       }
+    });
+
+    // Drawing. Judged on arrival against the roster this machine was given,
+    // never against what the message claims about itself - the sending client
+    // is not what decides whether a guest draws (`core/annotation-guard.ts`).
+    channels.on(CHANNEL_ANNOTATION, (message, channel) => {
+      const decision = annotationGuard.current.accept(message, {
+        membershipId: peerMembershipId,
+        channel,
+      });
+      if (!decision.accepted) return;
+      strokesRef.current.apply(decision.message);
+      setStrokes(strokesRef.current.strokes());
     });
 
     channels.on(CHANNEL_INPUT, (message) => {
@@ -224,9 +262,11 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       wiredPeers.current.clear();
       session?.close('leaving the layup');
       sessionRef.current = undefined;
+      strokesRef.current.clear();
       setRemotes([]);
       setScopes([]);
       setDiagnostics({});
+      setStrokes([]);
     };
   }, [layupId, membershipId]);
 
@@ -239,6 +279,17 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
 
   // Connect to everybody else. Perfect negotiation settles who offers, so both
   // sides doing this is not a race.
+  // Who is a guest, from every layup state update. This is the only place the
+  // renderer can learn it - the data channels carry membership ids and nothing
+  // else - and it is read live by the drawing guard.
+  useEffect(() => {
+    const guests = guestsRef.current;
+    guests.clear();
+    for (const participant of participants ?? []) {
+      if (participant.isGuest) guests.add(participant.membershipId);
+    }
+  }, [participants]);
+
   useEffect(() => {
     const session = sessionRef.current;
     if (!session || !participants) return;
@@ -252,6 +303,8 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       session.disconnect(gone, 'they left the layup');
       wiredPeers.current.delete(gone);
       receiverRef.current.remove(gone);
+      strokesRef.current.clear(gone);
+      setStrokes(strokesRef.current.strokes());
     }
   }, [participants, membershipId, remotes.length, wire]);
 
@@ -358,6 +411,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       setCameraDevice,
       setSpeaker,
       sampleCursors: () => receiverRef.current.sample(),
+      strokes,
       identify: (id: string) => identityBook.current.identify(id),
       moveCursor,
       scopes,
@@ -376,6 +430,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       setCameraDevice,
       setSpeaker,
       scopes,
+      strokes,
       moveCursor,
       sharedSourceId,
       diagnostics,

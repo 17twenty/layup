@@ -11,6 +11,7 @@ import { CompactBar } from '../shell/CompactBar';
 import { nextMode } from '../shell/mode';
 import { useWindowMode } from '../shell/useWindowMode';
 import { CursorOverlay } from './CursorOverlay';
+import { DrawingOverlay } from './DrawingOverlay';
 import { RemoteControlIndicator } from './RemoteControlIndicator';
 import { RemoteControlPanel } from './RemoteControlPanel';
 import { SharedScreen } from './SharedScreen';
@@ -323,7 +324,15 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
             remotes={room.remotes}
             {...(capture.stream ? { localScreen: capture.stream } : {})}
             {...(room.av.speakerId ? { speakerId: room.av.speakerId } : {})}
-            overlay={<CursorOverlay sample={room.sampleCursors} identify={room.identify} />}
+            overlay={
+              <>
+                {/* Strokes first, cursors over them: a pointer belongs on top
+                    of what it drew. Nothing a guest sends is in either - both
+                    are judged on arrival (core/annotation-guard.ts). */}
+                <DrawingOverlay strokes={room.strokes} identify={room.identify} />
+                <CursorOverlay sample={room.sampleCursors} identify={room.identify} />
+              </>
+            }
           />
         </div>
       ) : null}

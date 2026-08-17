@@ -92,6 +92,7 @@ const room = {
   setCameraDevice: vi.fn(),
   setSpeaker: vi.fn(),
   sampleCursors: () => [],
+  strokes: [],
   identify: () => ({ colour: '#fff', label: '' }),
   moveCursor: vi.fn(),
   scopes: [] as string[],
