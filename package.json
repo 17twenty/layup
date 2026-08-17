@@ -10,7 +10,8 @@
   },
   "workspaces": [
     "protocol/ts",
-    "apps/desktop"
+    "apps/desktop",
+    "apps/web"
   ],
   "scripts": {
     "build:protocol": "npm run build --workspace protocol/ts",

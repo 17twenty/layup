@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    /**
+     * No "node" here, and no @types/node in this workspace's own
+     * package.json. This is still the browser tsconfig `core/` has to
+     * compile under - but on its own it does NOT catch a Node import: npm
+     * hoists `apps/desktop`'s @types/node to the repo root `node_modules`,
+     * where `tsc` run from here can still find it. Verified (Task 7 step 4):
+     * `tsc -p tsconfig.json --noEmit` stays clean even with a live
+     * `import { readFileSync } from 'node:fs'` in `core/`. The guard that
+     * actually fails the build lives in vite.config.ts, at the bundler.
+     */
+    "types": ["vite/client", "vitest/globals"],
+    "paths": {
+      "@core/*": ["../desktop/src/core/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "vitest.config.ts"]
+}
