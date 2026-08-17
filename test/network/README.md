@@ -23,6 +23,13 @@ verifiable continuously rather than once by hand:
 |---|---|
 | `forcedRelayWithTurn` | A forced-relay session connects *through* coturn, and diagnostics report `route: "relay"`, `relayed: true` with `relay` candidates at both ends. |
 
+`make test-turn-remote` is the deployed counterpart: instead of a container it
+fetches credentials from the *deployed* control service's `GET /api/turn` and
+relays through the coturn actually running on the dev VM, proving the control
+service and coturn agree about the shared secret. It needs `make deploy` (and
+`make deploy-config`, for coturn itself) to have already put a working control
+plane and coturn on the box.
+
 > Chromium ignores a TURN server on a loopback address - it gathers no relay
 > candidates and fails silently. The runner therefore starts coturn advertising
 > this machine's interface address and dials that, which is why the test works

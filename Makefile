@@ -95,6 +95,10 @@ test-webrtc: ## Prove real WebRTC connectivity in an Electron window
 test-turn: ## Prove forced relay through a real coturn (needs Docker)
 	node test/network/turn-relay.mjs
 
+.PHONY: test-turn-remote
+test-turn-remote: ## Prove forced relay through the deployed coturn (needs make deploy first)
+	node test/network/turn-remote.mjs
+
 .PHONY: fmt-check
 fmt-check: ## Fail if any Go file needs gofmt
 	@unformatted="$$(gofmt -l $(GO_MODULES))"; \
