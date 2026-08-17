@@ -9,6 +9,7 @@ import { PeopleGrid } from './people/PeopleGrid';
 import { LayupPanel } from './layup/LayupPanel';
 import { LayupRoom } from './layup/LayupRoom';
 import { useWindowMode } from './shell/useWindowMode';
+import { TitleBar } from './shell/TitleBar';
 import { HappeningNow } from './layup/HappeningNow';
 import { Invitations } from './requests/Invitations';
 import { AddServer } from './onboarding/AddServer';
@@ -80,32 +81,27 @@ export function App() {
   // because only it knows whether a screen has arrived.
   useWindowMode({ inLayup: false, pickerOpen: false, hasIncomingScreen: false });
 
-  if (!server) {
+  // Whichever view this render shows, `<TitleBar />` below is with it always -
+  // the drag strip behind the traffic lights is the shell's to give, not any
+  // one view's to remember (task 11).
+  const view = !server ? (
     // The first paint, before the privileged side has said whether there is a
     // server. Showing the directory here would flash a screen this desktop may
     // have no right to and fire requests at a control plane that is not there.
-    return <div className="shell shell--waiting" aria-busy="true" />;
-  }
-
-  if (!server.configured) {
+    <div className="shell shell--waiting" aria-busy="true" />
+  ) : !server.configured ? (
     // No server means no people to show and nobody to ask: adding one is the
     // whole application until it is done.
-    return <AddServer />;
-  }
-
-  if (inLayup) {
+    <AddServer />
+  ) : inLayup ? (
     // In a layup, the layup is the whole application. No directory, no
     // Happening Now, no header: those are for deciding who to be with, and
     // that decision is made.
-    return (
-      <div className="shell shell--layup">
-        <Invitations currentLayupId={layup?.layup?.id} />
-        <LayupRoom layup={layup!} onLeave={() => void window.layup.layup.leave()} />
-      </div>
-    );
-  }
-
-  return (
+    <div className="shell shell--layup">
+      <Invitations currentLayupId={layup?.layup?.id} />
+      <LayupRoom layup={layup!} onLeave={() => void window.layup.layup.leave()} />
+    </div>
+  ) : (
     <div className="shell">
       <header className="shell__header drag">
         <h1>Layup</h1>
@@ -148,5 +144,12 @@ export function App() {
         </p>
       </footer>
     </div>
+  );
+
+  return (
+    <>
+      <TitleBar />
+      {view}
+    </>
   );
 }

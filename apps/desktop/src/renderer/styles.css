@@ -771,6 +771,40 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* The strip behind the traffic lights (trafficLightPosition {x:12,y:12} in
+   main/index.ts), present in every view because it is rendered once by the
+   shell (TitleBar.tsx) rather than by whichever view happens to be on
+   screen. Tall enough that the lights - and their hit-test area - sit
+   entirely inside it. */
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+}
+
+.titlebar__mute {
+  background: none;
+  border: none;
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.titlebar__mute:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .shell--layup {
   display: flex;
   flex-direction: column;

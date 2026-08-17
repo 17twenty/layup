@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { App } from './App';
-import type { UpdateStateResponse } from '../shared/ipc';
+import type { LayupStateResponse, UpdateStateResponse } from '../shared/ipc';
+
+// The room's own wiring (media, signalling, remote control) is exercised in
+// LayupRoom.test.tsx. Here App is under test - specifically, that it renders
+// the shell's title bar around every view, including the room - so the room
+// is stood in for by something that needs none of that machinery.
+vi.mock('./layup/LayupRoom', () => ({
+  LayupRoom: () => <div data-testid="room">stub room</div>,
+}));
 
 /**
  * The bridge, with a server answer that can be held open.
@@ -13,7 +21,7 @@ import type { UpdateStateResponse } from '../shared/ipc';
 function bridge(serverState: Promise<unknown>) {
   const people = { list: vi.fn(async () => ({ people: [] })), onChanged: vi.fn(() => () => {}) };
   const layup = {
-    current: vi.fn(async () => ({ youAreCreatorMembership: false })),
+    current: vi.fn(async (): Promise<LayupStateResponse> => ({ youAreCreatorMembership: false })),
     create: vi.fn(),
     join: vi.fn(),
     leave: vi.fn(),
@@ -62,6 +70,13 @@ function bridge(serverState: Promise<unknown>) {
     realtime: {
       status: vi.fn(async () => ({ status: 'idle', attempt: 0 })),
       onState: vi.fn(() => () => {}),
+    },
+    preferences: {
+      get: vi.fn(async () => ({ soundsMuted: false })),
+      set: vi.fn(async (next: { soundsMuted: boolean }) => next),
+    },
+    attention: {
+      onAlert: vi.fn(() => () => {}),
     },
   };
   Object.defineProperty(window, 'layup', { value, configurable: true, writable: true });
@@ -133,5 +148,67 @@ describe('bootstrap shell', () => {
     expect(api.control.status).not.toHaveBeenCalled();
     expect(api.realtime.status).not.toHaveBeenCalled();
     expect(api.requests.list).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The strip behind the traffic lights (task 11): rendered once by the shell,
+ * above whichever view is on screen, so a new screen cannot forget it.
+ */
+describe('the title bar drag strip', () => {
+  it('is present before the server answer has arrived', () => {
+    bridge(new Promise(() => {}));
+
+    render(<App />);
+
+    const titlebar = screen.getByTestId('titlebar');
+    expect(titlebar).toHaveClass('drag');
+  });
+
+  it('is present on the add-server screen, which has no header of its own', async () => {
+    bridge(Promise.resolve({ configured: false }));
+
+    render(<App />);
+
+    await screen.findByRole('heading', { level: 1 });
+    const titlebar = screen.getByTestId('titlebar');
+    expect(titlebar).toHaveClass('drag');
+    // Its own interactive control opts out, or it becomes unclickable.
+    expect(screen.getByTestId('mute-toggle')).toHaveClass('no-drag');
+  });
+
+  it('is present on the home/People screen', async () => {
+    bridge(Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }));
+
+    render(<App />);
+
+    await screen.findByRole('region', { name: 'People' });
+    expect(screen.getByTestId('titlebar')).toHaveClass('drag');
+    expect(screen.getByTestId('mute-toggle')).toHaveClass('no-drag');
+  });
+
+  it('is present in the layup room, which renders no shell header at all', async () => {
+    const api = bridge(
+      Promise.resolve({ configured: true, serverUrl: 'https://layup.example', displayName: 'Nick' }),
+    );
+    api.layup.current.mockResolvedValue({
+      youAreCreatorMembership: true,
+      layup: {
+        id: 'lay_1',
+        organisationId: 'org_1',
+        visibility: 'PRIVATE',
+        active: true,
+        createdAt: '2026-08-17T00:00:00Z',
+        hasCreatorAuthority: true,
+        participants: [],
+      },
+      membershipId: 'mem_1',
+    });
+
+    render(<App />);
+
+    await screen.findByTestId('room');
+    expect(screen.getByTestId('titlebar')).toHaveClass('drag');
+    expect(screen.queryByRole('heading', { level: 1, name: 'Layup' })).toBeNull();
   });
 });
