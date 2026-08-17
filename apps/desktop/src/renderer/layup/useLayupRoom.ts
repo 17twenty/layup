@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decodeInput, isControlMessage, type ControlMessage } from '@layup/protocol';
 import { CHANNEL_CURSOR, CHANNEL_INPUT } from '../../core/data-channels';
 import { createAvController, type AvState } from '../../core/av';
+import { includesDevice, listDevices, NO_DEVICES, type DeviceList } from '../../core/devices';
 import { createCursorIdentityBook } from '../../core/cursor-identity';
 import { createCursorReceiver, type RemoteCursor } from '../../core/cursor-receiver';
 import { createCursorSender } from '../../core/cursor-sender';
@@ -34,6 +35,19 @@ export interface LayupRoom {
   av: AvState;
   setCamera(enabled: boolean): void;
   setMicrophone(enabled: boolean): void;
+  /** The microphones, cameras and speakers this machine has. */
+  devices: DeviceList;
+  /** Re-reads the device list - worth doing whenever it is about to be shown. */
+  refreshDevices(): void;
+  /**
+   * Changes which device is captured, mid-call. The new track is swapped into
+   * the sender that is already there (`replaceTrack`), so no offer is created
+   * and nothing on screen remounts. `undefined` means the system default.
+   */
+  setMicrophoneDevice(deviceId?: string): void;
+  setCameraDevice(deviceId?: string): void;
+  /** Chooses the output device. Applied to the media elements via setSinkId. */
+  setSpeaker(deviceId?: string): void;
   /** Interpolated cursors to draw, sampled per animation frame. */
   sampleCursors: () => RemoteCursor[];
   /** Colour and label for a membership, stable for the life of the layup. */
@@ -67,13 +81,18 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
   const [scopes, setScopes] = useState<string[]>([]);
   const [diagnostics, setDiagnostics] = useState<Record<string, RouteDiagnostics>>({});
   const [av, setAv] = useState<AvState>({ cameraEnabled: false, microphoneEnabled: false, muted: true });
+  const [devices, setDevices] = useState<DeviceList>(NO_DEVICES);
+  const sessionRef = useRef<Session | undefined>(undefined);
   const avRef = useRef(
     createAvController({
       getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
       onChange: (next) => setAv({ ...next }),
+      // A device change goes to the sender that is already publishing that
+      // kind. Never a new track, never a new offer: a renegotiation mid-call
+      // is what took the media elements - and the audio - down before.
+      onTrackReplaced: (track) => void sessionRef.current?.replaceCameraTrack(track),
     }),
   );
-  const sessionRef = useRef<Session | undefined>(undefined);
   const receiverRef = useRef(createCursorReceiver());
   const cursorSenderRef = useRef<ReturnType<typeof createCursorSender> | undefined>(undefined);
   const inputSenderRef = useRef<InputSender | undefined>(undefined);
@@ -273,6 +292,37 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
     else session.unpublishScreen();
   }, [localScreen, remotes.length]);
 
+  const refreshDevices = useCallback(async () => {
+    const next = await listDevices();
+    setDevices(next);
+    return next;
+  }, []);
+
+  // Devices come and go mid-call - a headset is unplugged, a dock is pulled.
+  // A chosen device that has gone would leave a dead track publishing silence,
+  // so the default takes over instead.
+  useEffect(() => {
+    const media = typeof navigator === 'undefined' ? undefined : navigator.mediaDevices;
+    void refreshDevices();
+    if (!media?.addEventListener) return;
+
+    const onDeviceChange = () => {
+      void refreshDevices().then((next) => {
+        const state = avRef.current.state();
+        if (!includesDevice(next.microphones, state.microphoneId)) {
+          void avRef.current.setMicrophoneDevice(undefined);
+        }
+        if (!includesDevice(next.cameras, state.cameraId)) {
+          void avRef.current.setCameraDevice(undefined);
+        }
+        if (!includesDevice(next.speakers, state.speakerId)) avRef.current.setSpeaker(undefined);
+      });
+    };
+
+    media.addEventListener('devicechange', onDeviceChange);
+    return () => media.removeEventListener('devicechange', onDeviceChange);
+  }, [refreshDevices]);
+
   const moveCursor = useCallback(
     (input: { x: number; y: number; width: number; height: number }) => {
       if (!sharedSourceId) return;
@@ -286,6 +336,15 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
     (enabled: boolean) => void avRef.current.setMicrophone(enabled),
     [],
   );
+  const setMicrophoneDevice = useCallback(
+    (deviceId?: string) => void avRef.current.setMicrophoneDevice(deviceId),
+    [],
+  );
+  const setCameraDevice = useCallback(
+    (deviceId?: string) => void avRef.current.setCameraDevice(deviceId),
+    [],
+  );
+  const setSpeaker = useCallback((deviceId?: string) => void avRef.current.setSpeaker(deviceId), []);
 
   return useMemo(
     () => ({
@@ -293,6 +352,11 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       av,
       setCamera,
       setMicrophone,
+      devices,
+      refreshDevices: () => void refreshDevices(),
+      setMicrophoneDevice,
+      setCameraDevice,
+      setSpeaker,
       sampleCursors: () => receiverRef.current.sample(),
       identify: (id: string) => identityBook.current.identify(id),
       moveCursor,
@@ -301,6 +365,20 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       ...(inputSenderRef.current ? { input: inputSenderRef.current } : {}),
       ...(sharedSourceId ? { targetDisplayId: sharedSourceId } : {}),
     }),
-    [remotes, av, setCamera, setMicrophone, scopes, moveCursor, sharedSourceId, diagnostics],
+    [
+      remotes,
+      av,
+      setCamera,
+      setMicrophone,
+      devices,
+      refreshDevices,
+      setMicrophoneDevice,
+      setCameraDevice,
+      setSpeaker,
+      scopes,
+      moveCursor,
+      sharedSourceId,
+      diagnostics,
+    ],
   );
 }

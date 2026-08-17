@@ -67,6 +67,14 @@ export interface Session {
   /** Publishes camera and microphone to every peer. */
   publishCamera(stream: MediaStream): void;
   /**
+   * Swaps one published camera or microphone track for another, in place.
+   *
+   * This is how changing a device works: the sender already publishing that
+   * kind takes the new track, so the transceiver, the m-line and the SDP are
+   * all untouched and nothing renegotiates.
+   */
+  replaceCameraTrack(track: MediaStreamTrack): Promise<void>;
+  /**
    * Who the control plane says is presenting. Incoming video is classified as
    * the shared desktop only for that membership, so the domain decides what a
    * screen is - not a guess about track order (ADR-0007).
@@ -94,7 +102,10 @@ export function createSession(options: SessionOptions): Session {
   // One sender per peer, so re-sharing replaces the track instead of adding a
   // second one - exactly one shared desktop exists per layup (ADR-0007).
   const screenSenders = new Map<string, RTCRtpSender>();
-  const cameraSenders = new Map<string, RTCRtpSender[]>();
+  // Kept with the kind they were created for: a sender's own `track` is null
+  // while it is being swapped, and matching by index breaks the moment the
+  // stream's track order changes under a device switch.
+  const cameraSenders = new Map<string, Array<{ kind: string; sender: RTCRtpSender }>>();
   let localScreen: MediaStream | undefined;
   let localCamera: MediaStream | undefined;
   let presenterMembershipId: string | undefined;
@@ -181,13 +192,17 @@ export function createSession(options: SessionOptions): Session {
   function attachCamera(entry: SessionPeer, stream: MediaStream) {
     const existing = cameraSenders.get(entry.membershipId);
     if (existing) {
-      // Replace in place: swapping devices must not renegotiate.
-      stream.getTracks().forEach((track, index) => void existing[index]?.replaceTrack(track));
+      // Replace in place, matched by kind: swapping devices must not
+      // renegotiate, and audio must never land in the video sender.
+      for (const track of stream.getTracks()) {
+        const held = existing.find((entry) => entry.kind === track.kind);
+        if (held && held.sender.track !== track) void held.sender.replaceTrack(track);
+      }
       return;
     }
     cameraSenders.set(
       entry.membershipId,
-      stream.getTracks().map((track) => entry.peer.addTrack(track, stream)),
+      stream.getTracks().map((track) => ({ kind: track.kind, sender: entry.peer.addTrack(track, stream) })),
     );
   }
 
@@ -207,6 +222,21 @@ export function createSession(options: SessionOptions): Session {
       for (const entry of peers.values()) attachCamera(entry, stream);
       log.info('publishing camera and microphone', { peers: peers.size });
       publish();
+    },
+
+    async replaceCameraTrack(track) {
+      // Only the sender already carrying this kind, and only replaceTrack.
+      // Adding one would fire negotiationneeded, and a renegotiation mid-call
+      // is what took the media elements - and the audio - down before.
+      const swaps: Array<Promise<void>> = [];
+      for (const [membershipId, held] of cameraSenders) {
+        const target = held.find((entry) => entry.kind === track.kind);
+        if (!target) continue;
+        swaps.push(target.sender.replaceTrack(track));
+        log.debug('swapped a capture track in place', { membershipId, kind: track.kind });
+      }
+      await Promise.all(swaps);
+      log.info('capture device changed without renegotiating', { kind: track.kind });
     },
 
     async handleSignal(type, message) {
@@ -253,6 +283,7 @@ export function createSession(options: SessionOptions): Session {
       entry.peer.close(reason ?? 'they left the layup');
       peers.delete(membershipId);
       screenSenders.delete(membershipId);
+      cameraSenders.delete(membershipId);
       publish();
     },
 
@@ -261,6 +292,7 @@ export function createSession(options: SessionOptions): Session {
         entry.channels.close();
         entry.peer.close(reason ?? 'leaving the layup');
         screenSenders.delete(membershipId);
+        cameraSenders.delete(membershipId);
       }
       peers.clear();
       localScreen = undefined;

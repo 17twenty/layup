@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { applySpeaker } from '../../core/devices';
 import type { RemoteMedia } from '../../core/session';
 
 /**
@@ -14,15 +15,22 @@ export interface SharedScreenProps {
   localScreen?: MediaStream;
   /** Cursor overlay, drawn over the video at its rendered size. */
   overlay?: ReactNode;
+  /** The chosen speaker, for a shared screen that carries audio with it. */
+  speakerId?: string;
 }
 
-export function SharedScreen({ remotes, localScreen, overlay }: SharedScreenProps) {
+export function SharedScreen({ remotes, localScreen, overlay, speakerId }: SharedScreenProps) {
   const presenter = remotes.find((remote) => remote.screen);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = presenter?.screen ?? null;
   }, [presenter?.screen]);
+
+  // A shared screen can carry sound; it follows the same output choice.
+  useEffect(() => {
+    void applySpeaker(videoRef.current, speakerId);
+  }, [speakerId, presenter?.screen]);
 
   if (!presenter) {
     return (

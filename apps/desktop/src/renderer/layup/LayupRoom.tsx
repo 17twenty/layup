@@ -289,6 +289,7 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
           <SharedScreen
             remotes={room.remotes}
             {...(capture.stream ? { localScreen: capture.stream } : {})}
+            {...(room.av.speakerId ? { speakerId: room.av.speakerId } : {})}
             overlay={<CursorOverlay sample={room.sampleCursors} identify={room.identify} />}
           />
         </div>
@@ -309,6 +310,11 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
         onLeave={() => onLeave?.()}
         {...(primaryDiagnostics ? { diagnostics: primaryDiagnostics } : {})}
         {...(incomingVideoTrack ? { diagnosticsVideoTrack: incomingVideoTrack } : {})}
+        devices={room.devices}
+        onSelectMicrophone={room.setMicrophoneDevice}
+        onSelectCamera={room.setCameraDevice}
+        onSelectSpeaker={room.setSpeaker}
+        onOpenDevices={room.refreshDevices}
       />
 
       {base === 'viewer' ? (

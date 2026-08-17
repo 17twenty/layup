@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { AvState } from '../../core/av';
+import type { DeviceList } from '../../core/devices';
 import type { RouteDiagnostics } from '../../core/ice-diagnostics';
 import type { RemoteMedia } from '../../core/session';
 import { FaceTiles } from '../layup/FaceTiles';
@@ -35,6 +36,14 @@ export interface CompactBarProps {
   diagnostics?: RouteDiagnostics;
   /** The incoming video track, for resolution and framerate. */
   diagnosticsVideoTrack?: MediaStreamTrack;
+  /** The microphones, cameras and speakers this machine has, for the carets. */
+  devices?: DeviceList;
+  /** Change a device mid-call. These swap the track in place; they never
+   *  renegotiate, so the tiles below carry on without a flicker. */
+  onSelectMicrophone?: (deviceId: string) => void;
+  onSelectCamera?: (deviceId: string) => void;
+  onSelectSpeaker?: (deviceId: string) => void;
+  onOpenDevices?: () => void;
 }
 
 export function CompactBar({
@@ -49,6 +58,11 @@ export function CompactBar({
   onLeave,
   diagnostics,
   diagnosticsVideoTrack,
+  devices,
+  onSelectMicrophone,
+  onSelectCamera,
+  onSelectSpeaker,
+  onOpenDevices,
 }: CompactBarProps) {
   const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | undefined>();
@@ -75,6 +89,7 @@ export function CompactBar({
           local={local}
           remotes={remotes}
           {...(selfName ? { selfName } : {})}
+          {...(local.speakerId ? { speakerId: local.speakerId } : {})}
           onToggleCamera={onToggleCamera}
           onToggleMicrophone={onToggleMicrophone}
         />
@@ -93,6 +108,14 @@ export function CompactBar({
         {...(diagnosticsVideoTrack ? { diagnosticsVideoTrack } : {})}
         diagnosticsExpanded={diagnosticsExpanded}
         onToggleDiagnostics={() => setDiagnosticsExpanded((value) => !value)}
+        {...(devices ? { devices } : {})}
+        {...(local.microphoneId ? { microphoneId: local.microphoneId } : {})}
+        {...(local.cameraId ? { cameraId: local.cameraId } : {})}
+        {...(local.speakerId ? { speakerId: local.speakerId } : {})}
+        {...(onSelectMicrophone ? { onSelectMicrophone } : {})}
+        {...(onSelectCamera ? { onSelectCamera } : {})}
+        {...(onSelectSpeaker ? { onSelectSpeaker } : {})}
+        {...(onOpenDevices ? { onOpenDevices } : {})}
       />
 
       {/* The reporter asked for right-click. This is it: one item, over the

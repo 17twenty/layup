@@ -70,9 +70,22 @@ const karlOnCamera = {
 
 const room = {
   remotes: [] as unknown[],
-  av: { cameraEnabled: true, microphoneEnabled: true, muted: false },
+  av: { cameraEnabled: true, microphoneEnabled: true, muted: false } as Record<string, unknown>,
   setCamera: vi.fn(),
   setMicrophone: vi.fn(),
+  devices: {
+    microphones: [
+      { deviceId: 'mic_built_in', label: 'MacBook Microphone' },
+      { deviceId: 'mic_usb', label: 'Yeti Stereo Microphone' },
+    ],
+    cameras: [{ deviceId: 'cam_1', label: 'FaceTime HD Camera' }],
+    speakers: [{ deviceId: 'spk_1', label: 'MacBook Speakers' }],
+    labelsHidden: false,
+  },
+  refreshDevices: vi.fn(),
+  setMicrophoneDevice: vi.fn(),
+  setCameraDevice: vi.fn(),
+  setSpeaker: vi.fn(),
   sampleCursors: () => [],
   identify: () => ({ colour: '#fff', label: '' }),
   moveCursor: vi.fn(),
@@ -106,6 +119,7 @@ beforeEach(() => {
   controlState = idleControl;
   room.scopes = [];
   room.remotes = [];
+  room.av = { cameraEnabled: true, microphoneEnabled: true, muted: false };
 
   Object.defineProperty(window, 'layup', {
     configurable: true,
@@ -297,5 +311,33 @@ describe('the media never stops', () => {
     await screen.findByTestId('room-surface');
 
     expect(screen.queryByTestId(`face-${KARL}`)?.querySelector('video')).toBe(face);
+  });
+
+  it('changes the microphone from the call bar without touching the media elements', async () => {
+    room.remotes = [karlOnCamera];
+    render(<LayupRoom layup={layup} />);
+    const face = (await screen.findByTestId(`face-${KARL}`)).querySelector('video');
+
+    await userEvent.click(screen.getByTestId('choose-microphone'));
+    await userEvent.click(screen.getByTestId('device-mic_usb'));
+
+    // The switch is a replaceTrack behind this call - never a new offer, and
+    // never a new element for the audio to be lost in.
+    expect(room.setMicrophoneDevice).toHaveBeenCalledWith('mic_usb');
+    expect(screen.queryByTestId(`face-${KARL}`)?.querySelector('video')).toBe(face);
+  });
+
+  it('changes the speaker and the camera from the same bar', async () => {
+    room.remotes = [karlOnCamera];
+    render(<LayupRoom layup={layup} />);
+    await screen.findByTestId(`face-${KARL}`);
+
+    await userEvent.click(screen.getByTestId('choose-microphone'));
+    await userEvent.click(screen.getByTestId('device-spk_1'));
+    expect(room.setSpeaker).toHaveBeenCalledWith('spk_1');
+
+    await userEvent.click(screen.getByTestId('choose-camera'));
+    await userEvent.click(screen.getByTestId('device-cam_1'));
+    expect(room.setCameraDevice).toHaveBeenCalledWith('cam_1');
   });
 });

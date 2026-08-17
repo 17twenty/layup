@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { AvState } from '../../core/av';
+import { applySpeaker } from '../../core/devices';
 import type { RemoteMedia } from '../../core/session';
 
 /**
@@ -23,6 +24,12 @@ export interface FaceTilesProps {
    * `compact` is the small strip used under a shared screen.
    */
   variant?: 'roomy' | 'compact' | 'stage';
+  /**
+   * Which speaker the *remote* tiles play out of. These tiles are where the
+   * other person's voice is, so this is the output choice for the whole call.
+   * Ignored where `setSinkId` does not exist.
+   */
+  speakerId?: string;
   onToggleCamera: (enabled: boolean) => void;
   onToggleMicrophone: (enabled: boolean) => void;
 }
@@ -32,6 +39,7 @@ export function FaceTiles({
   remotes,
   selfName,
   variant = 'roomy',
+  speakerId,
   onToggleCamera,
   onToggleMicrophone,
 }: FaceTilesProps) {
@@ -79,7 +87,7 @@ export function FaceTiles({
       className="faces__tile"
       data-testid={`face-${remote.membershipId}`}
     >
-      <Video stream={remote.camera} />
+      <Video stream={remote.camera} {...(speakerId ? { speakerId } : {})} />
       <figcaption>
         <span>{remote.displayName ?? 'Someone'}</span>
         {!remote.connection.connected ? <span className="faces__state">reconnecting…</span> : null}
@@ -113,16 +121,24 @@ function Video({
   stream,
   mirrored = false,
   muted = false,
+  speakerId,
 }: {
   stream?: MediaStream;
   mirrored?: boolean;
   muted?: boolean;
+  speakerId?: string;
 }) {
   const ref = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream ?? null;
   }, [stream]);
+
+  // Output only: routing an element at another speaker touches no track and no
+  // sender, so it cannot renegotiate anything. The element itself stays put.
+  useEffect(() => {
+    void applySpeaker(ref.current, speakerId);
+  }, [speakerId, stream]);
 
   return (
     <video

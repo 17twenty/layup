@@ -128,3 +128,74 @@ describe('the connection readout, reachable in a call', () => {
     expect(screen.queryByTestId('connection-panel')).toBeNull();
   });
 });
+
+describe('choosing a device from the pill', () => {
+  const devices = {
+    microphones: [
+      { deviceId: 'mic_built_in', label: 'MacBook Microphone' },
+      { deviceId: 'mic_usb', label: 'Yeti Stereo Microphone' },
+    ],
+    cameras: [{ deviceId: 'cam_1', label: 'FaceTime HD Camera' }],
+    speakers: [{ deviceId: 'spk_1', label: 'MacBook Speakers' }],
+    labelsHidden: false,
+  };
+
+  it('has no carets when there is nothing to choose from', () => {
+    renderPill();
+    expect(screen.queryByTestId('choose-microphone')).toBeNull();
+    expect(screen.queryByTestId('choose-camera')).toBeNull();
+  });
+
+  it('offers the microphone and the speaker under one caret, and the camera under its own', async () => {
+    const onSelectMicrophone = vi.fn();
+    const onSelectSpeaker = vi.fn();
+    const onSelectCamera = vi.fn();
+    renderPill({ devices, onSelectMicrophone, onSelectSpeaker, onSelectCamera });
+
+    await userEvent.click(screen.getByTestId('choose-microphone'));
+    const menu = screen.getByTestId('choose-microphone-menu');
+    expect(within(menu).getByText('Microphone')).toBeInTheDocument();
+    expect(within(menu).getByText('Speaker')).toBeInTheDocument();
+    expect(within(menu).queryByText('Camera')).toBeNull();
+
+    await userEvent.click(screen.getByTestId('device-mic_usb'));
+    expect(onSelectMicrophone).toHaveBeenCalledWith('mic_usb');
+
+    await userEvent.click(screen.getByTestId('choose-camera'));
+    await userEvent.click(screen.getByTestId('device-cam_1'));
+    expect(onSelectCamera).toHaveBeenCalledWith('cam_1');
+  });
+
+  it('ticks whatever is in use, as the controller reports it', async () => {
+    renderPill({
+      local: { ...av, microphoneId: 'mic_usb', speakerId: 'spk_1' },
+      devices,
+      onSelectMicrophone: vi.fn(),
+      onSelectSpeaker: vi.fn(),
+    });
+
+    await userEvent.click(screen.getByTestId('choose-microphone'));
+    expect(screen.getByTestId('device-mic_usb')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('device-mic_built_in')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('device-spk_1')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('re-reads the devices when a list is opened', async () => {
+    const onOpenDevices = vi.fn();
+    renderPill({ devices, onSelectMicrophone: vi.fn(), onOpenDevices });
+
+    await userEvent.click(screen.getByTestId('choose-microphone'));
+    expect(onOpenDevices).toHaveBeenCalled();
+  });
+
+  it('asks for permission rather than listing blank rows', async () => {
+    renderPill({
+      devices: { ...devices, labelsHidden: true },
+      onSelectMicrophone: vi.fn(),
+    });
+
+    await userEvent.click(screen.getByTestId('choose-microphone'));
+    expect(screen.getByTestId('device-labels-hint')).toBeInTheDocument();
+    expect(screen.queryByTestId('device-mic_usb')).toBeNull();
+  });
+});

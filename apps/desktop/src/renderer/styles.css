@@ -894,6 +894,116 @@ body {
   color: #ff4d64;
 }
 
+/* ---- Which microphone, which camera, which speaker ---- */
+
+/* The caret sits on the button it belongs to, so "which microphone?" is asked
+   where the microphone already is, mid-call, without going anywhere. */
+.callbar__group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.callbar__caret {
+  display: grid;
+  place-items: center;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #8b93a5;
+  cursor: pointer;
+}
+
+.callbar__caret:hover,
+.callbar__caret[aria-expanded='true'] {
+  background: #1b1f28;
+  color: var(--fg);
+}
+
+.callbar__caret svg {
+  width: 12px;
+  height: 12px;
+}
+
+.device-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+/* Anchored to the scrim, which is the window: the pill is 280px at its
+   narrowest, so a menu hung off the caret itself would fall out of the
+   window. It opens upwards because the bar is at the bottom. */
+.device-menu {
+  position: absolute;
+  bottom: 46px;
+  left: 8px;
+  min-width: 220px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 6px;
+  background: #161a21;
+  border: 1px solid #23262e;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+}
+
+.device-menu__group + .device-menu__group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #23262e;
+}
+
+.device-menu__title {
+  margin: 0 0 2px;
+  padding: 0 8px;
+  color: #8b93a5;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.device-menu__item {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #cfd6e4;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.device-menu__item:hover {
+  background: #23262e;
+}
+
+.device-menu__item[aria-checked='true'] {
+  color: var(--fg);
+}
+
+.device-menu__tick {
+  color: #38d39f;
+}
+
+/* Blank labels are a permission problem, not a hardware one - say which. */
+.device-menu__hint {
+  margin: 0;
+  padding: 6px 8px;
+  color: #8b93a5;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 /* ---- The connection readout: what a laggy call is actually doing ---- */
 
 /* Pinned to the left of the bar; the auto margin absorbs the space the

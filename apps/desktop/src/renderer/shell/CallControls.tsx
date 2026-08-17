@@ -1,5 +1,8 @@
+import type { DeviceList } from '../../core/devices';
+import { NO_DEVICES } from '../../core/devices';
 import type { RouteDiagnostics } from '../../core/ice-diagnostics';
 import { ConnectionReadout } from '../layup/ConnectionReadout';
+import { DevicePicker } from './DevicePicker';
 
 /**
  * The bar along the bottom of a call.
@@ -10,6 +13,13 @@ import { ConnectionReadout } from '../layup/ConnectionReadout';
  *
  * Share is the accented one - it is why the application exists - and Leave is
  * the only red thing in the window.
+ *
+ * The microphone and the camera each carry a caret, because "which
+ * microphone?" is asked mid-call, by somebody who has just been told they
+ * cannot be heard - and choosing there swaps the track in place rather than
+ * renegotiating, so nobody's audio drops while they do it. The speaker lives
+ * under the microphone's caret: it is the same question about the same
+ * conversation.
  *
  * The connection chip rides along here too - it is the discoverable entrance
  * to the same readout the call surface's right-click menu opens (route,
@@ -31,6 +41,17 @@ export interface CallControlsProps {
   diagnosticsVideoTrack?: MediaStreamTrack;
   diagnosticsExpanded: boolean;
   onToggleDiagnostics: () => void;
+  /** What this machine has. Absent means no carets - nothing to choose from. */
+  devices?: DeviceList;
+  /** The devices in use; undefined means the system default. */
+  microphoneId?: string;
+  cameraId?: string;
+  speakerId?: string;
+  onSelectMicrophone?: (deviceId: string) => void;
+  onSelectCamera?: (deviceId: string) => void;
+  onSelectSpeaker?: (deviceId: string) => void;
+  /** Opening a list is when the devices are worth re-reading. */
+  onOpenDevices?: () => void;
 }
 
 export function CallControls({
@@ -46,6 +67,14 @@ export function CallControls({
   diagnosticsVideoTrack,
   diagnosticsExpanded,
   onToggleDiagnostics,
+  devices = NO_DEVICES,
+  microphoneId,
+  cameraId,
+  speakerId,
+  onSelectMicrophone,
+  onSelectCamera,
+  onSelectSpeaker,
+  onOpenDevices,
 }: CallControlsProps) {
   return (
     <footer className="callbar no-drag" aria-label="Call controls">
@@ -56,27 +85,77 @@ export function CallControls({
         onToggle={onToggleDiagnostics}
       />
 
-      <button
-        type="button"
-        className="callbar__button"
-        aria-pressed={!microphoneEnabled}
-        onClick={() => onToggleMicrophone(!microphoneEnabled)}
-        data-testid="toggle-microphone"
-      >
-        <MicrophoneIcon muted={!microphoneEnabled} />
-        <span>{microphoneEnabled ? 'Mute' : 'Unmute'}</span>
-      </button>
+      <div className="callbar__group">
+        <button
+          type="button"
+          className="callbar__button"
+          aria-pressed={!microphoneEnabled}
+          onClick={() => onToggleMicrophone(!microphoneEnabled)}
+          data-testid="toggle-microphone"
+        >
+          <MicrophoneIcon muted={!microphoneEnabled} />
+          <span>{microphoneEnabled ? 'Mute' : 'Unmute'}</span>
+        </button>
+        {onSelectMicrophone || onSelectSpeaker ? (
+          <DevicePicker
+            label="Choose microphone and speaker"
+            testId="choose-microphone"
+            labelsHidden={devices.labelsHidden}
+            {...(onOpenDevices ? { onOpen: onOpenDevices } : {})}
+            choices={[
+              ...(onSelectMicrophone
+                ? [
+                    {
+                      title: 'Microphone',
+                      devices: devices.microphones,
+                      ...(microphoneId ? { selectedId: microphoneId } : {}),
+                      onSelect: onSelectMicrophone,
+                    },
+                  ]
+                : []),
+              ...(onSelectSpeaker
+                ? [
+                    {
+                      title: 'Speaker',
+                      devices: devices.speakers,
+                      ...(speakerId ? { selectedId: speakerId } : {}),
+                      onSelect: onSelectSpeaker,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        ) : null}
+      </div>
 
-      <button
-        type="button"
-        className="callbar__button"
-        aria-pressed={!cameraEnabled}
-        onClick={() => onToggleCamera(!cameraEnabled)}
-        data-testid="toggle-camera"
-      >
-        <CameraIcon off={!cameraEnabled} />
-        <span>{cameraEnabled ? 'Stop video' : 'Start video'}</span>
-      </button>
+      <div className="callbar__group">
+        <button
+          type="button"
+          className="callbar__button"
+          aria-pressed={!cameraEnabled}
+          onClick={() => onToggleCamera(!cameraEnabled)}
+          data-testid="toggle-camera"
+        >
+          <CameraIcon off={!cameraEnabled} />
+          <span>{cameraEnabled ? 'Stop video' : 'Start video'}</span>
+        </button>
+        {onSelectCamera ? (
+          <DevicePicker
+            label="Choose camera"
+            testId="choose-camera"
+            labelsHidden={devices.labelsHidden}
+            {...(onOpenDevices ? { onOpen: onOpenDevices } : {})}
+            choices={[
+              {
+                title: 'Camera',
+                devices: devices.cameras,
+                ...(cameraId ? { selectedId: cameraId } : {}),
+                onSelect: onSelectCamera,
+              },
+            ]}
+          />
+        ) : null}
+      </div>
 
       {presenting ? (
         <button
