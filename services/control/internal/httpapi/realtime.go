@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -34,7 +35,7 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 	// The same authenticator as the REST routes, deliberately: the upgrade
 	// endpoint sits outside requireIdentity, and a second copy of the rules
 	// here is how one of them would get missed.
-	user, err := s.authenticate(r)
+	identity, err := s.authenticate(r)
 	if err != nil {
 		status := http.StatusUnauthorized
 		if !errors.Is(err, domain.ErrNotFound) {
@@ -43,6 +44,12 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 		s.writeAPIError(w, r, status, "unauthenticated", err.Error())
 		return
 	}
+	// A guest is allowed here, deliberately and by name: signalling is how
+	// their peer connection forms, so refusing the socket would refuse the
+	// call itself. It is the one thing outside guestMayCall's list
+	// (guest_auth.go), and what they may do once connected is narrowed below.
+	user := identity.User
+	isGuest := identity.IsGuest()
 
 	socket, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		// The desktop connects from a file:// or vite origin; the origin check
@@ -65,6 +72,15 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 		Logger:            s.log,
 		HeartbeatInterval: s.heartbeatInterval,
 		OnReady: func(conn *realtime.Conn) {
+			if isGuest {
+				// A guest gets no presence, ever: not a snapshot, and not the
+				// connect/disconnect publications that would follow. The
+				// snapshot is the sharper edge of the two - it is built from
+				// directory.Users() and would hand a stranger the whole
+				// organisation roster in one message, which is precisely what
+				// a link must never be worth.
+				return
+			}
 			// The client sees the whole picture first, then only deltas.
 			if snapshot, err := s.feed.Snapshot(serveCtx, conn.User()); err == nil {
 				conn.Send(snapshot)
@@ -75,6 +91,12 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 		},
 		OnMessage: s.handleRealtimeMessage,
 		OnClosed: func(conn *realtime.Conn) {
+			if isGuest {
+				// Nothing was published when they arrived, so there is
+				// nothing to retract. A guest is not a person the
+				// organisation is told about.
+				return
+			}
 			s.feed.UserDisconnected(serveCtx, conn.User())
 		},
 	})
@@ -84,6 +106,11 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRealtimeMessage(ctx context.Context, conn *realtime.Conn, env protocol.Envelope) error {
 	switch env.Type {
 	case TypePresenceSet:
+		if s.isGuestUser(conn.UserID()) {
+			// Presence is an organisation-wide surface. A guest neither reads
+			// it nor writes to it; signalling is all this socket is for them.
+			return fmt.Errorf("%w: a guest may not publish presence", domain.ErrForbidden)
+		}
 		var payload struct {
 			Personal string `json:"personal"`
 		}

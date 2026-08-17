@@ -22,7 +22,15 @@ const HeaderAuthorization = "Authorization"
 // Identity is the authenticated caller.
 type Identity struct {
 	User domain.User
+	// Guest is set only when the caller proved themselves with a guest token
+	// rather than a registered credential. It is nil for everyone else, which
+	// is what every existing consumer of IdentityFrom continues to see.
+	Guest *GuestSession
 }
+
+// IsGuest reports whether this caller is a browser visitor who arrived by
+// link, rather than someone this server knows.
+func (i Identity) IsGuest() bool { return i.Guest != nil }
 
 // OrganisationID is always taken from the directory entry, never from the
 // request: a client cannot talk its way into another organisation.
@@ -41,7 +49,7 @@ func IdentityFrom(ctx context.Context) (Identity, bool) {
 // every rule about who counts as authenticated to s.authenticate.
 func (s *Server) requireIdentity(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, err := s.authenticate(r)
+		identity, err := s.authenticate(r)
 		if err != nil {
 			status := http.StatusUnauthorized
 			if !errors.Is(err, domain.ErrNotFound) {
@@ -51,7 +59,16 @@ func (s *Server) requireIdentity(next http.Handler) http.Handler {
 			return
 		}
 
-		identity := Identity{User: user}
+		// A guest is authorised by allow-list, and this is the single gate:
+		// it runs before routing, so a route nobody remembered to list is
+		// refused rather than reached (guest_auth.go).
+		if identity.IsGuest() && !guestMayCall(r.Method, r.URL.Path, *identity.Guest) {
+			s.writeAPIError(w, r, http.StatusForbidden, "forbidden",
+				"a guest may not do that")
+			return
+		}
+
+		user := identity.User
 		ctx := context.WithValue(r.Context(), identityContextKey{}, identity)
 		// Correlate every log line for this request with the caller.
 		ctx = logging.WithFields(ctx,

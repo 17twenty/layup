@@ -121,16 +121,27 @@ func (s *guestStore) endLayup(layupID domain.LayupID) {
 	}
 }
 
-// displayName answers the name a guest gave, for a userID that might not
-// belong to a guest at all - a stranger's id simply is not found.
-func (s *guestStore) displayName(userID domain.UserID) (string, bool) {
+// sessionForUser answers the live session belonging to a user id, which is
+// also the only honest way to ask "is this a guest?": a guest exists exactly
+// as long as their session does, and a stranger's id simply is not found.
+func (s *guestStore) sessionForUser(userID domain.UserID) (GuestSession, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	token, ok := s.byUser[userID]
 	if !ok {
-		return "", false
+		return GuestSession{}, false
 	}
 	session, ok := s.byToken[token]
+	if !ok {
+		return GuestSession{}, false
+	}
+	return session, true
+}
+
+// displayName answers the name a guest gave, for a userID that might not
+// belong to a guest at all - a stranger's id simply is not found.
+func (s *guestStore) displayName(userID domain.UserID) (string, bool) {
+	session, ok := s.sessionForUser(userID)
 	if !ok {
 		return "", false
 	}

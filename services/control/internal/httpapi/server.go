@@ -33,6 +33,7 @@ type Server struct {
 	presence  *domain.PresenceService
 	requests  *domain.RequestService
 	links     *linkStore
+	guests    *guestStore
 	feed      *presencefeed.Feed
 	// heartbeatInterval is overridable so tests do not wait seconds.
 	heartbeatInterval time.Duration
@@ -100,6 +101,7 @@ func New(cfg config.Config, opts Options) *Server {
 		presence:          presence,
 		requests:          requests,
 		links:             newLinkStore(func() time.Time { return now() }),
+		guests:            newGuestStore(func() time.Time { return now() }),
 		heartbeatInterval: heartbeat,
 	}
 	s.feed = presencefeed.New(hub, presence, dir, log)

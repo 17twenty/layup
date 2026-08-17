@@ -78,7 +78,7 @@ func isLocalCaller(r *http.Request) bool {
 //
 // The token is never echoed into an error: an error message is a log line
 // waiting to happen.
-func (s *Server) authenticate(r *http.Request) (domain.User, error) {
+func (s *Server) authenticate(r *http.Request) (Identity, error) {
 	token := bearerToken(r)
 	if token == "" {
 		// The desktop's WebSocket client cannot set headers, so the handshake
@@ -86,15 +86,22 @@ func (s *Server) authenticate(r *http.Request) (domain.User, error) {
 		token = r.URL.Query().Get(protocol.QueryToken)
 	}
 	if token != "" {
-		resolver, ok := s.directory.(TokenResolver)
-		if !ok {
-			return domain.User{}, fmt.Errorf("%w: this server does not issue tokens", domain.ErrNotFound)
+		// Two resolvers, one decision point. A guest token is checked here,
+		// beside registered credentials, rather than in a second place that
+		// could disagree with this one about who the caller is.
+		//
+		// The registered directory is asked first: a guest token is minted by
+		// this process and cannot collide with one, and asking in this order
+		// means a guest can never shadow a member.
+		if resolver, ok := s.directory.(TokenResolver); ok {
+			if user, ok := resolver.ResolveToken(token); ok {
+				return Identity{User: user}, nil
+			}
 		}
-		user, ok := resolver.ResolveToken(token)
-		if !ok {
-			return domain.User{}, fmt.Errorf("%w: unrecognised token", domain.ErrNotFound)
+		if session, ok := s.guests.resolve(token); ok {
+			return guestIdentity(session), nil
 		}
-		return user, nil
+		return Identity{}, fmt.Errorf("%w: unrecognised token", domain.ErrNotFound)
 	}
 
 	reference := r.Header.Get(HeaderDevUser)
@@ -102,13 +109,17 @@ func (s *Server) authenticate(r *http.Request) (domain.User, error) {
 		reference = r.URL.Query().Get(protocol.QueryDevUser)
 	}
 	if reference == "" {
-		return domain.User{}, fmt.Errorf("%w: no credentials", domain.ErrNotFound)
+		return Identity{}, fmt.Errorf("%w: no credentials", domain.ErrNotFound)
 	}
 	// A declared identity is a claim with no proof behind it, so it is only
 	// ever trustworthy on a developer's own machine.
 	if s.cfg.Environment != "dev" && !isLocalCaller(r) {
-		return domain.User{}, fmt.Errorf("%w: %s is not accepted from a remote caller",
+		return Identity{}, fmt.Errorf("%w: %s is not accepted from a remote caller",
 			domain.ErrNotFound, HeaderDevUser)
 	}
-	return s.directory.Resolve(reference)
+	user, err := s.directory.Resolve(reference)
+	if err != nil {
+		return Identity{}, err
+	}
+	return Identity{User: user}, nil
 }

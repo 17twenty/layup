@@ -271,6 +271,21 @@ func (s *Server) mayEnter(view domain.LayupView, identity Identity) error {
 
 // mayObserve decides whether an identity may read a layup's detail.
 func (s *Server) mayObserve(view domain.LayupView, identity Identity) error {
+	if identity.IsGuest() {
+		// A guest is deliberately in no organisation (guest_auth.go), so the
+		// organisation comparison below would refuse them the very layup they
+		// were invited into. Their entitlement is stated separately, and it is
+		// narrower: the one layup their session names, and only while they are
+		// still in it. Nothing about any other layup is answerable to them,
+		// whatever its visibility.
+		if view.Layup.ID != identity.Guest.LayupID {
+			return domain.ErrNotFound
+		}
+		if membershipOf(view, identity.User.ID) == "" {
+			return domain.ErrNotFound
+		}
+		return nil
+	}
 	if view.Layup.OrganisationID != identity.OrganisationID() {
 		return domain.ErrNotFound
 	}
