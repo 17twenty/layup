@@ -2,6 +2,16 @@
 SHELL := /bin/bash
 
 CONTROL_DIR := services/control
+# The version being released, read from the one file that decides it. Release
+# and publish name artifacts by version rather than globbing: a stale build
+# left in release/ made `Layup-*-universal.dmg` match two files, and
+# notarize-dmg.sh dutifully signed and stapled the older one while the new
+# DMG went out unsigned. Nothing failed; the feed simply described a build
+# Gatekeeper would refuse.
+VERSION := $(shell node -p "require('./package.json').version")
+RELEASE_DIR := apps/desktop/release
+DMG := $(RELEASE_DIR)/Layup-$(VERSION)-universal.dmg
+UPDATE_ZIP := $(RELEASE_DIR)/Layup-$(VERSION)-universal-mac.zip
 # The task tooling needs PyYAML. A repo-local venv is used when present, so the
 # host python is never modified (many are externally managed).
 PYTHON := $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
@@ -59,10 +69,10 @@ release: build-helper ## Build, sign and notarise the macOS app
 	npm run package --workspace apps/desktop
 	@# electron-builder staples the .app, then builds the DMG around it, leaving
 	@# the DMG itself unsigned and ticketless. The DMG is what gets downloaded.
-	bash scripts/notarize-dmg.sh apps/desktop/release/Layup-*-universal.dmg
+	bash scripts/notarize-dmg.sh $(DMG)
 	@# Signing and stapling changed the DMG after electron-builder measured it,
 	@# so the feed now describes a file that no longer exists.
-	node scripts/restamp-feed.mjs apps/desktop/release/latest-mac.yml
+	node scripts/restamp-feed.mjs $(RELEASE_DIR)/latest-mac.yml
 
 .PHONY: typecheck
 typecheck: ## Typecheck TypeScript workspaces
@@ -158,13 +168,16 @@ export LAYUP_DEPLOY_DOMAIN
 
 .PHONY: publish
 publish: build-web ## Upload the web guest client, the DMG, the update zip and the feed manifest
-	@ls apps/desktop/release/*.dmg >/dev/null 2>&1 || (echo "run 'make release' first" && exit 1)
+	@test -f $(DMG) || (echo "no $(DMG): run 'make release' first" && exit 1)
 	@# Squirrel.Mac cannot update from a DMG. No zip means a download page and
 	@# no update path, which looks identical until nobody ever gets a fix.
-	@ls apps/desktop/release/*-mac.zip >/dev/null 2>&1 || (echo "no update zip: check mac.target in electron-builder.yml" && exit 1)
+	@test -f $(UPDATE_ZIP) || (echo "no update zip: check mac.target in electron-builder.yml" && exit 1)
 	@# The manifest *is* the feed. Without it nothing ever updates, and it looks
 	@# exactly like it is working.
-	@test -f apps/desktop/release/latest-mac.yml || (echo "no latest-mac.yml: check the publish block in electron-builder.yml" && exit 1)
+	@test -f $(RELEASE_DIR)/latest-mac.yml || (echo "no latest-mac.yml: check the publish block in electron-builder.yml" && exit 1)
+	@# The DMG people download must be the one Apple notarised. A DMG that was
+	@# never stapled looks identical here and is refused on their machine.
+	xcrun stapler validate $(DMG)
 	ssh $(LAYUP_DEPLOY_HOST) 'install -d -m 0755 /srv/layup/public/download /srv/layup/public/j'
 	@# The web guest client. Uploaded first: a link somebody already holds
 	@# should start working before the download page mentions a new build.
@@ -172,15 +185,17 @@ publish: build-web ## Upload the web guest client, the DMG, the update zip and t
 	@# scp cannot express that. bootstrap.sh installs rsync on the VM for this.
 	rsync -a --delete apps/web/dist/ $(LAYUP_DEPLOY_HOST):/srv/layup/public/j/
 	@# Under their own versioned names, because latest-mac.yml names them.
-	scp apps/desktop/release/*.dmg apps/desktop/release/*-mac.zip $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
+	@# By version, never by glob: a stale build in release/ must not ride
+	@# along, and must never become the one the feed points at.
+	scp $(DMG) $(UPDATE_ZIP) $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
 	@# Blockmaps make an update a delta instead of a full download. Their
 	@# absence only costs bandwidth, so a missing one is not a failed publish.
-	-scp apps/desktop/release/*.blockmap $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
+	-scp $(DMG).blockmap $(UPDATE_ZIP).blockmap $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
 	@# And again under the stable name the download page links to.
-	scp apps/desktop/release/*.dmg $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/Layup.dmg
+	scp $(DMG) $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/Layup.dmg
 	@# Last: until the manifest lands the feed still describes the previous
 	@# release, which is the only thing it is safe for it to describe.
-	scp apps/desktop/release/latest-mac.yml $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/latest-mac.yml
+	scp $(RELEASE_DIR)/latest-mac.yml $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/latest-mac.yml
 	@echo "https://$(LAYUP_DEPLOY_DOMAIN)/download/Layup.dmg"
 	@echo "guest client: https://$(LAYUP_DEPLOY_DOMAIN)/j/"
 	@echo "feed: https://$(LAYUP_DEPLOY_DOMAIN)/download/latest-mac.yml"

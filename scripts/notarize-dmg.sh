@@ -12,6 +12,12 @@
 # download that worked fine on the build machine.
 set -euo pipefail
 
+# Exactly one. A caller passing a glob that matched two builds would silently
+# sign the first and leave the other - the one the feed names - unsigned.
+if [ "$#" -ne 1 ]; then
+  echo "usage: notarize-dmg.sh <path-to-dmg> (got $# arguments)" >&2
+  exit 1
+fi
 DMG="${1:?usage: notarize-dmg.sh <path-to-dmg>}"
 [ -f "$DMG" ] || { echo "no such DMG: $DMG" >&2; exit 1; }
 
