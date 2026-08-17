@@ -91,10 +91,16 @@ func TestLinkTokensRevealNothing(t *testing.T) {
 		t.Fatalf("token looks too short to be unguessable: %q", link.Token)
 	}
 
-	// Two links for the same layup differ, so one leaked link can be replaced.
+	// A leaked link can still be replaced - but by revoking it first, not by
+	// minting a second one alongside it. (This assertion used to demand that
+	// two mints differ. Task 4 made a layup's link singular, so the mechanism
+	// changed; the property it protects has not.)
+	if code := call(t, s, http.MethodDelete, "/api/layups/"+created.Layup.ID+"/link", "nick", nil).Code; code != http.StatusOK {
+		t.Fatalf("revoke: %d", code)
+	}
 	other, _ := mintLink(t, s, "nick", created.Layup.ID)
 	if other.Token == link.Token {
-		t.Fatal("each link should be distinct")
+		t.Fatal("a link minted after a revocation must be a new one")
 	}
 }
 
@@ -171,5 +177,154 @@ func TestTheLinkTokenNeverAppearsInALogLine(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), forged) || strings.Contains(logs.String(), link.Token) {
 		t.Fatalf("the token appeared in the logs after a failed join:\n%s", logs.String())
+	}
+}
+
+// TestALayupHasOneLiveLinkNotAGrowingPile is what makes revocation mean
+// anything. If every request minted a new token, "revoke the link" would be a
+// promise the server could not keep: there would be no *the* link, only a
+// trail of live ones the host never sees.
+func TestALayupHasOneLiveLinkNotAGrowingPile(t *testing.T) {
+	s := testServer(t)
+	created := createLayup(t, s, "nick", "One link", "LINK")
+
+	first, code := mintLink(t, s, "nick", created.Layup.ID)
+	if code != http.StatusOK {
+		t.Fatalf("mint: %d", code)
+	}
+	second, _ := mintLink(t, s, "nick", created.Layup.ID)
+	if second.Token != first.Token {
+		t.Fatalf("asking twice must hand back the same link, got %q then %q", first.Token, second.Token)
+	}
+	if !second.ExpiresAt.Equal(first.ExpiresAt) {
+		t.Fatalf("the link's life should not restart on being read again: %v then %v",
+			first.ExpiresAt, second.ExpiresAt)
+	}
+
+	// A different member of the same layup gets the same link, not their own.
+	if rec := joinByLink(t, s, "karl", first.Token); rec.Code != http.StatusOK {
+		t.Fatalf("karl join by link: %d (%s)", rec.Code, rec.Body.String())
+	}
+	third, _ := mintLink(t, s, "karl", created.Layup.ID)
+	if third.Token != first.Token {
+		t.Fatal("a layup's link belongs to the layup, not to whoever asked for it")
+	}
+}
+
+// TestRevokingALinkRefusesNewJoinsButKeepsThePeopleInside separates the two
+// things a revocation is often confused with. It closes the door; it does not
+// empty the room.
+func TestRevokingALinkRefusesNewJoinsButKeepsThePeopleInside(t *testing.T) {
+	s := testServer(t)
+	created := createLayup(t, s, "nick", "Revocable", "LINK")
+	link, _ := mintLink(t, s, "nick", created.Layup.ID)
+
+	if rec := joinByLink(t, s, "karl", link.Token); rec.Code != http.StatusOK {
+		t.Fatalf("karl join by link: %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	rec := call(t, s, http.MethodDelete, "/api/layups/"+created.Layup.ID+"/link", "nick", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("revoke: %d (%s)", rec.Code, rec.Body.String())
+	}
+	if revoked := payloadOf[LinkRevokedDTO](t, rec); revoked.LayupID != created.Layup.ID {
+		t.Fatalf("unexpected revocation payload: %+v", revoked)
+	}
+
+	if rec := joinByLink(t, s, "emelia", link.Token); rec.Code != http.StatusGone {
+		t.Fatalf("a revoked link must not let anyone new in, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	// Karl is still where he was.
+	view := payloadOf[LayupDTO](t, call(t, s, http.MethodGet, "/api/layups/"+created.Layup.ID, "karl", nil))
+	if len(view.Participants) != 2 {
+		t.Fatalf("revoking a link must not remove anyone: %+v", view.Participants)
+	}
+
+	// Revoking again is not an error, and still says nothing about what was
+	// there: a caller cannot use it to probe.
+	if again := call(t, s, http.MethodDelete, "/api/layups/"+created.Layup.ID+"/link", "nick", nil); again.Code != http.StatusOK {
+		t.Fatalf("revoking twice should be uneventful, got %d", again.Code)
+	}
+}
+
+func TestOnlyAMemberMayRevokeALink(t *testing.T) {
+	s := testServer(t)
+	created := createLayup(t, s, "nick", "Revocable", "LINK")
+	if _, code := mintLink(t, s, "nick", created.Layup.ID); code != http.StatusOK {
+		t.Fatalf("mint: %d", code)
+	}
+
+	rec := call(t, s, http.MethodDelete, "/api/layups/"+created.Layup.ID+"/link", "karl", nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("an outsider must not revoke a link, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	// And it is still there for the people it belongs to.
+	if _, code := mintLink(t, s, "nick", created.Layup.ID); code != http.StatusOK {
+		t.Fatalf("the link should have survived: %d", code)
+	}
+}
+
+// TestEndingTheLayupKillsItsLinkAndItsGuests hooks to the event, not a clock:
+// a layup ends when its last participant leaves, and at that instant the link
+// stops opening it and every guest session it let in stops authenticating.
+// Here the last participant is the guest themselves, which is the case a
+// timer-based cleanup would most easily miss.
+func TestEndingTheLayupKillsItsLinkAndItsGuests(t *testing.T) {
+	s := testServer(t)
+	created := createLayup(t, s, "nick", "Ends with us", "LINK")
+	link, _ := mintLink(t, s, "nick", created.Layup.ID)
+	session := seatAGuest(t, s, created.Layup.ID, "Sam")
+
+	// Nick goes; the guest is still in the room, so nothing has ended yet.
+	if code := call(t, s, http.MethodPost, "/api/layups/"+created.Layup.ID+"/leave", "nick", nil).Code; code != http.StatusOK {
+		t.Fatalf("nick leave: %d", code)
+	}
+	if _, ok := s.links.resolve(link.Token); !ok {
+		t.Fatal("the link must outlive one person leaving")
+	}
+	if _, ok := s.guests.resolve(session.Token); !ok {
+		t.Fatal("the guest session must outlive one person leaving")
+	}
+
+	// Now the guest goes, and the layup goes with them.
+	if code := guestCall(t, s, http.MethodPost, "/api/layups/"+created.Layup.ID+"/leave", session.Token, nil).Code; code != http.StatusOK {
+		t.Fatalf("guest leave: %d", code)
+	}
+	if _, ok := s.links.resolve(link.Token); ok {
+		t.Fatal("a link must not outlive the layup it opens")
+	}
+	if _, ok := s.guests.resolve(session.Token); ok {
+		t.Fatal("endLayup must have been called: a guest session must not outlive its layup")
+	}
+	if rec := joinByLink(t, s, "karl", link.Token); rec.Code != http.StatusGone {
+		t.Fatalf("expected 410 from a dead link, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if rec := guestCall(t, s, http.MethodGet, "/api/turn", session.Token, nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("a dead guest token must authenticate nothing, got %d", rec.Code)
+	}
+}
+
+// TestAnExpiredLinkIsReplacedRatherThanReturned: singular does not mean
+// immortal. Once the TTL has passed, asking again mints a new one.
+func TestAnExpiredLinkIsReplacedRatherThanReturned(t *testing.T) {
+	clock := time.Unix(1700000000, 0)
+	store := newLinkStore(func() time.Time { return clock })
+
+	first, expiresAt := store.mint("lay_aaaaaaaa", "usr_devnickx", time.Hour)
+	again, _ := store.mint("lay_aaaaaaaa", "usr_devnickx", time.Hour)
+	if again != first {
+		t.Fatal("a live link is handed back, not replaced")
+	}
+
+	clock = expiresAt.Add(time.Second)
+	if _, ok := store.resolve(first); ok {
+		t.Fatal("an expired link must not resolve")
+	}
+	replacement, _ := store.mint("lay_aaaaaaaa", "usr_devnickx", time.Hour)
+	if replacement == first {
+		t.Fatal("an expired link must be replaced, not resurrected")
+	}
+	if _, ok := store.resolve(first); ok {
+		t.Fatal("the expired token must be gone from the store, not merely unusable")
 	}
 }

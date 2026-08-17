@@ -304,6 +304,16 @@ func (s *Server) mayObserve(view domain.LayupView, identity Identity) error {
 // afterLayupChange republishes everything a membership change affects: the
 // layup state to its participants, and presence/activity to the organisation.
 func (s *Server) afterLayupChange(ctx context.Context, view domain.LayupView, actor domain.User) {
+	// A layup ends when its last participant leaves (domain.LayupService.Leave),
+	// and everything that was a way *into* it must end with it: the link stops
+	// resolving, and every guest session it let in stops authenticating. This
+	// is hooked to the event rather than to a timer, so there is no window in
+	// which a link outlives the room it opened.
+	if !view.Active() {
+		s.links.revoke(view.Layup.ID)
+		s.guests.endLayup(view.Layup.ID)
+	}
+
 	env, err := protocol.NewEnvelope(TypeLayupState, s.layupDTO(view))
 	if err == nil {
 		recipients := make([]domain.UserID, 0, len(view.Participants))
