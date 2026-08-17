@@ -80,7 +80,12 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
   const startSharing = useCallback(
     async (sourceId: string) => {
       const source = capture.sources.find((entry) => entry.id === sourceId);
-      if (!source) return;
+      if (!source) {
+        // Never silently. A click that does nothing and says nothing is
+        // indistinguishable from a broken application, and was read as one.
+        setError('That screen is no longer available. Refresh the list and choose it again.');
+        return;
+      }
       setPickerOpen(false);
       await capture.start(source);
       await run(() => window.layup.share.start(sourceId));
@@ -223,7 +228,14 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
             Cancel
           </button>
         </header>
-        <CapturePicker onPicked={(source) => void startSharing(source.id)} />
+        {/* The room's capture, not a second one: the list drawn here is the
+            same list a click is resolved against. */}
+        <CapturePicker
+          sources={capture.sources}
+          refresh={capture.refresh}
+          error={capture.error}
+          onPicked={(source) => void startSharing(source.id)}
+        />
         {errorLine}
       </section>
     );
