@@ -16,17 +16,10 @@ fi
 echo "==> packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl gnupg coturn nftables
-
-if [ ! -f /etc/apt/sources.list.d/caddy-stable.list ]; then
-  echo "==> caddy repository"
-  curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
-    | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt \
-    > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -qq
-fi
-apt-get install -y -qq caddy
+# Caddy comes straight from Debian bookworm's own repos - no third-party
+# repository needed. The packaged 2.6.2-5 has automatic HTTPS/ACME and the
+# `handle` directive, which is everything Caddyfile here uses.
+apt-get install -y -qq coturn nftables caddy
 
 echo "==> service account and directories"
 id -u layup >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin layup

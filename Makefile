@@ -120,3 +120,35 @@ validate-tasks: ## Validate every task graph (PLAN-1 and PLAN-1.5)
 .PHONY: plan-status
 plan-status: ## Progress across both plans and their gates
 	$(PYTHON) scripts/ralph.py status
+
+LAYUP_DEPLOY_HOST ?= root@157.20.113.124
+LAYUP_DEPLOY_DOMAIN ?= layup.blah.au
+export LAYUP_DEPLOY_DOMAIN
+
+.PHONY: deploy-build
+deploy-build: ## Cross-compile the control service for the dev VM
+	cd $(CONTROL_DIR) && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+		go build -trimpath -o ../../dist/layup-control ./cmd/control
+
+.PHONY: deploy
+deploy: deploy-build ## Ship the control service to the dev VM and restart it
+	scp dist/layup-control $(LAYUP_DEPLOY_HOST):/usr/local/bin/layup-control.new
+	ssh $(LAYUP_DEPLOY_HOST) 'install -m 0755 /usr/local/bin/layup-control.new /usr/local/bin/layup-control \
+		&& rm -f /usr/local/bin/layup-control.new \
+		&& systemctl enable --now layup-control \
+		&& systemctl restart layup-control'
+	@echo "deployed; verifying"
+	@node test/network/remote-health.mjs
+
+.PHONY: deploy-config
+deploy-config: ## Ship deploy/vm configuration and re-run bootstrap
+	scp -r deploy/vm $(LAYUP_DEPLOY_HOST):/tmp/layup-vm
+	ssh $(LAYUP_DEPLOY_HOST) 'bash /tmp/layup-vm/bootstrap.sh'
+
+.PHONY: deploy-status
+deploy-status: ## Show service state on the dev VM
+	ssh $(LAYUP_DEPLOY_HOST) 'systemctl --no-pager --lines=0 status layup-control caddy coturn nftables || true'
+
+.PHONY: deploy-logs
+deploy-logs: ## Tail the control service log on the dev VM
+	ssh $(LAYUP_DEPLOY_HOST) 'journalctl -u layup-control -n 100 -f'
