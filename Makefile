@@ -45,6 +45,10 @@ build-go: ## Build every Go module in the workspace
 build-helper: ## Build the input helper as a universal macOS binary
 	bash native/input-helper/build.sh
 
+.PHONY: package
+package: build-helper ## Build the macOS app, unsigned
+	npm run package --workspace apps/desktop
+
 .PHONY: typecheck
 typecheck: ## Typecheck TypeScript workspaces
 	npm run typecheck

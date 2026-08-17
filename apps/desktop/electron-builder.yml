@@ -1,0 +1,40 @@
+appId: au.blah.layup
+productName: Layup
+copyright: Layup
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+
+# Placed where main/index.ts:192 already looks: process.resourcesPath.
+extraResources:
+  - from: ../../dist/helper/layup-input-helper
+    to: layup-input-helper
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [universal]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Signed with the same identity as the app, so TCC attributes the helper to
+  # the parent bundle and one Accessibility grant covers both.
+  binaries:
+    - Contents/Resources/layup-input-helper
+  extendInfo:
+    # Their absence is not a missing prompt - it is a hard crash on the first
+    # getUserMedia call.
+    NSCameraUsageDescription: Layup shows your face to the person you are pairing with.
+    NSMicrophoneUsageDescription: Layup carries your voice to the person you are pairing with.
+    # Screen Recording is granted by prompt, not entitlement, but the string is
+    # what the person reads when macOS asks.
+    NSScreenCaptureUsageDescription: Layup shares your screen with the person you are pairing with.
+
+dmg:
+  artifactName: Layup-${version}-universal.dmg
