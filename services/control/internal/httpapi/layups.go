@@ -24,6 +24,12 @@ type ParticipantDTO struct {
 	// IsCreatorMembership is true only while this membership still holds
 	// creator authority. After the creator leaves it is false for everyone.
 	IsCreatorMembership bool `json:"isCreatorMembership"`
+	// IsGuest is true for a membership held by a browser visitor who arrived
+	// by link rather than someone this server knows. The client only ever
+	// sees membership ids on the wire, never user ids, so this is the one
+	// place it can tell the two apart - input-guard.ts's refusal to ever hand
+	// a guest the mouse or keyboard depends on it.
+	IsGuest bool `json:"isGuest"`
 }
 
 // LayupDTO is the wire shape of a layup and its participants.
@@ -357,6 +363,7 @@ func (s *Server) layupDTO(view domain.LayupView) LayupDTO {
 			JoinedAt:            participant.JoinedAt,
 			LeftAt:              participant.LeftAt,
 			IsCreatorMembership: participant.IsCreatorMembership,
+			IsGuest:             s.isGuestUser(participant.UserID),
 		})
 	}
 	dto := LayupDTO{

@@ -248,3 +248,38 @@ func TestLeavingUpdatesPresenceActivity(t *testing.T) {
 		t.Fatalf("activity should be clear after leaving: %+v", after)
 	}
 }
+
+// TestAGuestParticipantIsMarkedInTheLayupDTO gives the desktop client a way to
+// tell a guest's membership from an ordinary one when all it otherwise has is
+// a membership id. input-guard.ts's "a guest is never handed the mouse"
+// refusal depends on this: the client sees membership ids on the wire, never
+// user ids, so the server has to say which memberships are guests.
+func TestAGuestParticipantIsMarkedInTheLayupDTO(t *testing.T) {
+	s := testServer(t)
+	created := createLayup(t, s, "nick", "Guest call", "LINK")
+	session := seatAGuest(t, s, created.Layup.ID, "Sam")
+
+	rec := call(t, s, http.MethodGet, "/api/layups/"+created.Layup.ID, "nick", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get layup: %d (%s)", rec.Code, rec.Body.String())
+	}
+	view := payloadOf[LayupDTO](t, rec)
+
+	var sawGuest, sawMember bool
+	for _, participant := range view.Participants {
+		if participant.MembershipID == string(session.MembershipID) {
+			sawGuest = true
+			if !participant.IsGuest {
+				t.Fatalf("the guest's own participant entry must say so: %+v", participant)
+			}
+		} else {
+			sawMember = true
+			if participant.IsGuest {
+				t.Fatalf("a registered member must not be marked a guest: %+v", participant)
+			}
+		}
+	}
+	if !sawGuest || !sawMember {
+		t.Fatalf("expected both a guest and a member in the participant list: %+v", view.Participants)
+	}
+}

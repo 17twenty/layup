@@ -1,10 +1,14 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/layup-app/layup/protocol"
+	"github.com/layup-app/layup/services/control/internal/domain"
 	"github.com/layup-app/layup/services/control/internal/presencefeed"
 )
 
@@ -100,6 +104,47 @@ func TestDrawingToggleIsPushedToParticipants(t *testing.T) {
 	}
 	if dto.AllowDrawing {
 		t.Fatalf("participants must be told drawing is off: %+v", dto)
+	}
+}
+
+// TestAGuestCanNeverBeNamedInAControlGrant is the second, independent
+// refusal - input-guard.ts is the client-side one. The allow-list
+// (guest_auth.go) already keeps a guest from reaching this route at all in
+// production, so this test bypasses it deliberately and calls the handler
+// directly, the same way seatAGuest bypasses the join route: a single point
+// of failure for "can a stranger drive my Mac" is not acceptable, so the
+// handler itself must refuse, not merely rely on never being reached.
+//
+// The guest is seated as the *presenter* of their own share by talking to the
+// domain layer directly - what "if guest screen sharing existed" would look
+// like (SPEC.md's own "deliberately not done" list names it as a future
+// possibility). Without this refusal, nothing else in this handler stops a
+// guest presenter from switching remote mouse/keyboard control on.
+func TestAGuestCanNeverBeNamedInAControlGrant(t *testing.T) {
+	s := testServer(t)
+	created := createLayup(t, s, "nick", "Guest call", "LINK")
+	session := seatAGuest(t, s, created.Layup.ID, "Sam")
+
+	if _, err := s.layups.StartScreenShare(context.Background(), domain.StartShareInput{
+		LayupID:               domain.LayupID(created.Layup.ID),
+		PresenterMembershipID: session.MembershipID,
+		SourceID:              "screen:1:0",
+	}); err != nil {
+		t.Fatalf("seat the guest as presenter: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/layups/"+created.Layup.ID+"/share/settings",
+		strings.NewReader(`{"allowPointer": true, "allowKeyboard": true}`))
+	req.SetPathValue("id", created.Layup.ID)
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(context.WithValue(req.Context(), identityContextKey{}, guestIdentity(session)))
+	rec := httptest.NewRecorder()
+
+	s.handleShareSettings(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("a guest must never be granted control, even naming themselves as the presenter: got %d (%s)",
+			rec.Code, rec.Body.String())
 	}
 }
 

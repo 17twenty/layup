@@ -120,6 +120,11 @@ const participantShape = isObject({
   joinedAt: isString,
   leftAt: optional(isString),
   isCreatorMembership: isBoolean,
+  // Optional, not required: a fixture built before guests existed - or a
+  // server that predates them - simply has none, which is the correct
+  // reading of "not marked a guest". input-guard.ts's refusal to ever hand a
+  // guest the mouse or keyboard keys off this.
+  isGuest: optional(isBoolean),
 });
 
 const activeShareShape = isObject({

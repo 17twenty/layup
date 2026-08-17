@@ -23,6 +23,21 @@ func (s *Server) handleShareSettings(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if identity.IsGuest() {
+		// The allow-list (guest_auth.go) already keeps a guest from reaching
+		// this route at all in production - this is the second, independent
+		// refusal, and it is what actually names the rule: remote
+		// mouse/keyboard control is the one grant this service must never
+		// issue to a guest membership, so it is refused here on its own
+		// authority, not only by never being reached. Guest screen sharing is
+		// a named future possibility (see "deliberately not done" in the
+		// design doc); the day it exists, this is what keeps a guest
+		// presenter from also switching remote control on for their own
+		// screen.
+		s.writeAPIError(w, r, http.StatusForbidden, "forbidden",
+			"a guest may not control screen-share settings")
+		return
+	}
 	membershipID := membershipOf(view, identity.User.ID)
 	if membershipID == "" {
 		s.writeAPIError(w, r, http.StatusConflict, "conflict", "you are not in this layup")
