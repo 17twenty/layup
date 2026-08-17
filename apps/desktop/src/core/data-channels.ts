@@ -47,6 +47,16 @@ export interface DataChannelSet {
 
 export interface DataChannelOptions {
   createDataChannel: (label: string, init: RTCDataChannelInit) => RTCDataChannel;
+  /**
+   * Which of the three to open. All of them, unless a client has no business
+   * with one: the web guest opens cursor and input but never annotation,
+   * because a guest does not draw.
+   *
+   * The ids are negotiated and fixed, so leaving one out is safe in both
+   * directions - the other side still opens its own on the same id, and the
+   * messages it sends there simply land nowhere. Nothing shifts.
+   */
+  channels?: readonly ChannelName[];
   log?: {
     debug(message: string, fields?: Record<string, unknown>): void;
     warn(message: string, fields?: Record<string, unknown>): void;
@@ -56,19 +66,22 @@ export interface DataChannelOptions {
 const noopLog = { debug: () => {}, warn: () => {} };
 
 /**
- * Opens all three channels on a peer connection.
+ * Opens the channels on a peer connection - all three, unless asked for fewer.
  *
  * They are negotiated (fixed ids agreed on both sides), so both peers open the
  * same channels without waiting for `ondatachannel` and without an extra
- * negotiation round trip.
+ * negotiation round trip. That is also why a client may open a subset: the ids
+ * are fixed rather than assigned in order, so the ones it does open still line
+ * up with the other side's.
  */
 export function createDataChannels(options: DataChannelOptions): DataChannelSet {
   const log = options.log ?? noopLog;
   const channels = new Map<ChannelName, RTCDataChannel>();
   const handlers = new Map<ChannelName, Set<ChannelHandler>>();
   const drops = new Map<ChannelName, number>();
+  const wanted = options.channels ?? CHANNEL_NAMES;
 
-  for (const name of CHANNEL_NAMES) {
+  for (const name of wanted) {
     const channel = options.createDataChannel(name, CHANNEL_CONFIG[name]);
     channel.onmessage = (event: MessageEvent) => {
       let payload: unknown;

@@ -12,7 +12,9 @@
  * point somewhere else.
  */
 import { useState } from 'react';
+import { GuestRoom } from './GuestRoom';
 import { Join } from './Join';
+import { useGuestRoom } from './useGuestRoom';
 import { tokenFromFragment, type GuestJoinResult } from './guest-client';
 
 export interface AppProps {
@@ -27,21 +29,19 @@ export function App({ serverUrl, hash }: AppProps = {}) {
   // redeemed, and a fragment that changes underneath a live call means
   // nothing.
   const [token] = useState(() => tokenFromFragment(hash ?? window.location.hash));
+  const origin = serverUrl ?? window.location.origin;
 
-  if (joined) {
-    return (
-      <main>
-        <h1>{joined.layup.title ?? 'Layup'}</h1>
-        <p>You are in. The call itself is Task 9.</p>
-      </main>
-    );
-  }
+  // Two screens and one transition between them. The room is a separate
+  // component rather than a branch here because `useGuestRoom` opens devices
+  // and a peer connection the moment it runs, and that must not happen until
+  // somebody has actually joined.
+  if (joined) return <Room serverUrl={origin} guest={joined} />;
 
   return (
-    <Join
-      serverUrl={serverUrl ?? window.location.origin}
-      {...(token ? { token } : {})}
-      onJoined={setJoined}
-    />
+    <Join serverUrl={origin} {...(token ? { token } : {})} onJoined={setJoined} />
   );
+}
+
+function Room({ serverUrl, guest }: { serverUrl: string; guest: GuestJoinResult }) {
+  return <GuestRoom room={useGuestRoom({ serverUrl, guest })} />;
 }

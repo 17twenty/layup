@@ -31,7 +31,7 @@ class FakeChannel {
   }
 }
 
-function harness() {
+function harness(channels?: readonly (typeof CHANNEL_NAMES)[number][]) {
   const created = new Map<string, FakeChannel>();
   const set = createDataChannels({
     createDataChannel: (label, init) => {
@@ -39,6 +39,7 @@ function harness() {
       created.set(label, channel);
       return channel as unknown as RTCDataChannel;
     },
+    ...(channels ? { channels } : {}),
   });
   return { set, created };
 }
@@ -121,6 +122,22 @@ describe('semantic data channels', () => {
     channel.readyState = 'open';
     expect(h.set.send(CHANNEL_CURSOR, { x: 0.2, y: 0.2 })).toBe(true);
     expect(JSON.parse(channel.sent[0]!)).toEqual({ x: 0.2, y: 0.2 });
+  });
+
+  it('opens only the channels a client asked for', () => {
+    // The web guest: it points and it watches, but it does not draw, so the
+    // annotation channel is never opened rather than merely never used.
+    const h = harness([CHANNEL_CURSOR, CHANNEL_INPUT]);
+
+    expect([...h.created.keys()].sort()).toEqual([CHANNEL_CURSOR, CHANNEL_INPUT].sort());
+    expect(h.created.has(CHANNEL_ANNOTATION)).toBe(false);
+    // Sending on a channel that was never opened is a drop, not a throw.
+    expect(h.set.send(CHANNEL_ANNOTATION, { type: 'stroke.begin' })).toBe(false);
+    expect(h.set.isOpen(CHANNEL_ANNOTATION)).toBe(false);
+    expect(h.set.dropped(CHANNEL_ANNOTATION)).toBe(1);
+    // And the ids of the ones it did open are unchanged: they are fixed, not
+    // assigned in order, so leaving one out shifts nothing.
+    expect(h.created.get(CHANNEL_INPUT)?.init).toEqual(CHANNEL_CONFIG[CHANNEL_INPUT]);
   });
 
   it('unsubscribes and closes cleanly', () => {

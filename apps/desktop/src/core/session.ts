@@ -20,7 +20,7 @@ import {
   type SignalMessage,
 } from './peer-connection';
 import type { RouteDiagnostics } from './ice-diagnostics';
-import { createDataChannels, type DataChannelSet } from './data-channels';
+import { createDataChannels, type ChannelName, type DataChannelSet } from './data-channels';
 
 /** Everything a peer publishes to us, or we publish to them. */
 export interface RemoteMedia {
@@ -38,7 +38,8 @@ export interface SessionPeer {
   membershipId: string;
   peer: PeerConnection;
   media: RemoteMedia;
-  /** cursor-fast / annotation-fast / input-reliable for this peer (ADR-0008). */
+  /** cursor-fast / annotation-fast / input-reliable for this peer (ADR-0008),
+   *  minus any this client asked not to open. */
   channels: DataChannelSet;
 }
 
@@ -49,6 +50,11 @@ export interface SessionOptions {
   createRTCPeerConnection: (config: RTCConfiguration) => RTCPeerConnection;
   iceServers?: RTCIceServer[];
   forceRelay?: boolean;
+  /**
+   * Which data channels to open per peer. All three by default; a client with
+   * no business on one leaves it out (see `DataChannelOptions.channels`).
+   */
+  channels?: readonly ChannelName[];
   onChange?: (peers: RemoteMedia[]) => void;
   log?: {
     debug(message: string, fields?: Record<string, unknown>): void;
@@ -158,10 +164,11 @@ export function createSession(options: SessionOptions): Session {
       },
     });
 
-    // The three semantic channels are negotiated up front, so both sides have
-    // them the moment the connection opens.
+    // The semantic channels are negotiated up front, so both sides have them
+    // the moment the connection opens.
     const channels = createDataChannels({
       createDataChannel: (label, init) => peer.createDataChannel(label, init),
+      ...(options.channels ? { channels: options.channels } : {}),
       log,
     });
 
