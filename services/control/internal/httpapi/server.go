@@ -127,6 +127,9 @@ func (s *Server) routes() {
 	// Versioned but unauthenticated: how a client learns what we speak.
 	public := http.NewServeMux()
 	public.HandleFunc("GET /api/protocol", s.handleProtocolInfo)
+	// Registration is how a client gets a credential, so it cannot itself
+	// require one. The join code is the gate.
+	public.HandleFunc("POST /api/register", s.handleRegister)
 
 	// The realtime endpoint authenticates itself (handshake on the query
 	// string), so it sits beside the versioned REST routes.
