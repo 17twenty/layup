@@ -19,30 +19,36 @@ import type { IdentityResponse, LayupStateResponse, ServerStateResponse } from '
 export function App() {
   const [identity, setIdentity] = useState<IdentityResponse | undefined>();
   const [layup, setLayup] = useState<LayupStateResponse | undefined>();
-  // Undefined until the privileged side answers: unknown is not "no server".
+  // Undefined until the privileged side answers: unknown is not "no server",
+  // and it is not "a server" either. Nothing is asked of either until it is.
   const [server, setServer] = useState<ServerStateResponse | undefined>();
 
-  // Guarded: the bridge belongs to the preload, and a window built without
-  // this channel should still show the shell rather than nothing at all.
   useEffect(() => {
     let cancelled = false;
-    const unsubscribe = window.layup.server?.onChanged((next) => {
+    const unsubscribe = window.layup.server.onChanged((next) => {
       if (!cancelled) setServer(next);
     });
     void window.layup.server
-      ?.state()
+      .state()
       .then((next) => {
         if (!cancelled) setServer(next);
       })
+      // An unanswerable question leaves the window waiting rather than
+      // guessing that there is a server behind it.
       .catch(() => undefined);
 
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      unsubscribe();
     };
   }, []);
 
+  const configured = server?.configured === true;
+
   useEffect(() => {
+    // There is nobody to ask until a server has been added: asking anyway is
+    // how a first run ends up talking to a control plane that is not there.
+    if (!configured) return;
     let cancelled = false;
     void window.layup.identity
       .current()
@@ -64,7 +70,7 @@ export function App() {
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [configured]);
 
   const inLayup = Boolean(layup?.layup);
 
@@ -72,7 +78,14 @@ export function App() {
   // because only it knows whether a screen has arrived.
   useWindowMode({ inLayup: false, pickerOpen: false, hasIncomingScreen: false });
 
-  if (server && !server.configured) {
+  if (!server) {
+    // The first paint, before the privileged side has said whether there is a
+    // server. Showing the directory here would flash a screen this desktop may
+    // have no right to and fire requests at a control plane that is not there.
+    return <div className="shell shell--waiting" aria-busy="true" />;
+  }
+
+  if (!server.configured) {
     // No server means no people to show and nobody to ask: adding one is the
     // whole application until it is done.
     return <AddServer />;

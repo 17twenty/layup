@@ -9,5 +9,7 @@ export function normaliseServerUrl(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, '');
   if (trimmed === '') return '';
   // A scheme somebody typed is kept, so http://localhost:8787 still works.
+  // Whether http is allowed to *that* host is registerWithServer's rule, not
+  // this one's: normalising and permitting are different questions.
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }

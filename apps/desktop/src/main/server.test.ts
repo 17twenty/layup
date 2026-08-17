@@ -73,6 +73,50 @@ describe('adding a server', () => {
     });
   });
 
+  it('registers over http only against this machine, where nothing is on the wire', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, registered));
+    for (const serverUrl of ['http://localhost:8787', 'http://127.0.0.1:8787']) {
+      const outcome = await registerWithServer({
+        serverUrl,
+        code: 'LAYUP-C9C76D',
+        displayName: 'Nick',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      });
+      expect(outcome.ok).toBe(true);
+      expect(outcome.ok === true && outcome.config.serverUrl).toBe(serverUrl);
+    }
+  });
+
+  it('refuses http to anywhere else rather than putting the token on the wire', async () => {
+    const fetchImpl = vi.fn();
+    const outcome = await registerWithServer({
+      serverUrl: 'http://layup.example',
+      code: 'LAYUP-C9C76D',
+      displayName: 'Nick',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(outcome).toEqual({
+      ok: false,
+      message: 'layup.example must be https - a token sent over http can be read by anyone on the way',
+    });
+    // Refused before the request, so the token is never asked for at all.
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('accepts https anywhere, and a bare hostname becomes https', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, registered));
+    for (const serverUrl of ['https://layup.example', 'layup.example']) {
+      const outcome = await registerWithServer({
+        serverUrl,
+        code: 'LAYUP-C9C76D',
+        displayName: 'Nick',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      });
+      expect(outcome.ok === true && outcome.config.serverUrl).toBe('https://layup.example');
+    }
+  });
+
   it('names the host when it cannot be reached', async () => {
     const outcome = await registerWithServer({
       serverUrl: 'https://nowhere.invalid',

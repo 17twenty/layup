@@ -12,12 +12,13 @@ export interface JoinLink {
  * would point the app at an insecure server.
  *
  * The token this link is standing in for travels over `https` and nowhere
- * else (`registerWithServer` will happily dial `http://` for a developer who
- * typed it on purpose, but nobody typed this one - it arrived by link, which
- * is exactly the shape a downgrade attack takes). So unlike the Add-server
- * form, a scheme is never upgraded here: a link that names `http://`
- * explicitly is refused outright rather than silently fixed, and a bare
- * hostname goes through `normaliseServerUrl` the same way typed input does.
+ * else. `registerWithServer` allows `http://` to loopback, for the developer
+ * running a control plane on their own machine; a link never gets even that,
+ * because nobody typed it - arriving by link is exactly the shape a downgrade
+ * attack takes. So a scheme is never upgraded here: a link that names
+ * `http://` explicitly is refused outright rather than silently fixed, and a
+ * bare hostname goes through `normaliseServerUrl` the same way typed input
+ * does.
  */
 export function parseJoinLink(url: string): JoinLink | undefined {
   let parsed: URL;

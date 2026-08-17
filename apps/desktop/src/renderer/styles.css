@@ -910,3 +910,10 @@ body {
   font-size: 13px;
   margin: 14px 0 0;
 }
+
+/* The first paint, before the privileged side has said whether there is a
+   server. Empty on purpose: a spinner here would be a guess about what comes
+   next, and what comes next is decided by a file on disk. */
+.shell--waiting {
+  min-height: 100vh;
+}
