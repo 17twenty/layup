@@ -109,8 +109,11 @@ const participantShape = isObject({
    * the drawing guard can tell a guest's stroke from a member's. Missing it
    * here was not merely a gap - unknown properties are rejected, so every
    * layup state update carrying it was silently dropped in the preload.
+   *
+   * Required for the same reason it is required in `core/control-client.ts`:
+   * a security check must not soften itself because a field went missing.
    */
-  isGuest: optional(isBoolean),
+  isGuest: isBoolean,
 });
 
 const layupShape = isObject({

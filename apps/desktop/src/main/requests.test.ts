@@ -35,6 +35,7 @@ function layup(overrides: Partial<Layup> = {}): Layup {
         displayName: 'Karl',
         joinedAt: '2026-08-13T09:01:00Z',
         isCreatorMembership: false,
+        isGuest: false,
       },
     ],
     ...overrides,

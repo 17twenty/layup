@@ -30,8 +30,8 @@ const layup: LayupStateResponse = {
     hasCreatorAuthority: true,
     creatorMembershipId: ME,
     participants: [
-      { membershipId: ME, userId: 'usr_devnickx', displayName: 'Nick', joinedAt: '2026-08-14T09:00:00Z', isCreatorMembership: true },
-      { membershipId: KARL, userId: 'usr_devkarlx', displayName: 'Karl', joinedAt: '2026-08-14T09:01:00Z', isCreatorMembership: false },
+      { membershipId: ME, userId: 'usr_devnickx', displayName: 'Nick', joinedAt: '2026-08-14T09:00:00Z', isCreatorMembership: true, isGuest: false },
+      { membershipId: KARL, userId: 'usr_devkarlx', displayName: 'Karl', joinedAt: '2026-08-14T09:01:00Z', isCreatorMembership: false, isGuest: false },
     ],
   },
 };

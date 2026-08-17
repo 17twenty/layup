@@ -23,6 +23,7 @@ const inLayup: LayupStateResponse = {
         displayName: 'Nick',
         joinedAt: '2026-08-13T09:00:00Z',
         isCreatorMembership: true,
+        isGuest: false,
       },
       {
         membershipId: 'mem_join1',
@@ -30,6 +31,7 @@ const inLayup: LayupStateResponse = {
         displayName: 'Karl',
         joinedAt: '2026-08-13T09:01:00Z',
         isCreatorMembership: false,
+        isGuest: false,
       },
     ],
   },
@@ -101,7 +103,7 @@ describe('layup panel', () => {
           creatorMembershipId: undefined,
           participants: layup.participants
             .filter((p) => p.membershipId === 'mem_join1')
-            .map((p) => ({ ...p, isCreatorMembership: false })),
+            .map((p) => ({ ...p, isCreatorMembership: false, isGuest: false })),
         },
       };
       bridge.push(state);

@@ -39,6 +39,7 @@ const layup: LayupStateResponse = {
         displayName: 'Nick',
         joinedAt: '2026-08-14T09:00:00Z',
         isCreatorMembership: true,
+        isGuest: false,
       },
     ],
   },

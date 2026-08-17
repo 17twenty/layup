@@ -16,6 +16,7 @@ const layup = {
       displayName: 'Nick',
       joinedAt: '2026-08-17T09:00:00Z',
       isCreatorMembership: true,
+      isGuest: false,
     },
     {
       membershipId: 'mem_guest',

@@ -120,11 +120,21 @@ const participantShape = isObject({
   joinedAt: isString,
   leftAt: optional(isString),
   isCreatorMembership: isBoolean,
-  // Optional, not required: a fixture built before guests existed - or a
-  // server that predates them - simply has none, which is the correct
-  // reading of "not marked a guest". input-guard.ts's refusal to ever hand a
-  // guest the mouse or keyboard keys off this.
-  isGuest: optional(isBoolean),
+  /**
+   * Whether this membership is a browser visitor who arrived by link.
+   *
+   * Required, not optional, and that is the whole point. This is what
+   * `input-guard.ts` and `annotation-guard.ts` key off, and it is the only
+   * thing standing between a stranger holding a URL and somebody's mouse.
+   * Absent used to read as "not a guest" - which is exactly what a layup with
+   * no guests in it looks like, so a server that stopped sending it, or a
+   * version skew that dropped it, would have softened the refusal silently.
+   *
+   * A missing one is now a loud validation error instead: the shape already
+   * rejects a property nobody knows about, and it should be at least as
+   * strict about a missing one a security check depends on.
+   */
+  isGuest: isBoolean,
 });
 
 const activeShareShape = isObject({
