@@ -54,6 +54,13 @@ type MembershipResultDTO struct {
 	Media domain.JoinMediaDefaults `json:"media"`
 }
 
+// CurrentLayupDTO answers "which layup am I in?", with no layup being a
+// perfectly ordinary answer.
+type CurrentLayupDTO struct {
+	Layup            *LayupDTO `json:"layup,omitempty"`
+	YourMembershipID string    `json:"yourMembershipId,omitempty"`
+}
+
 type createLayupRequest struct {
 	Title      string `json:"title"`
 	Visibility string `json:"visibility"`
@@ -181,6 +188,39 @@ func (s *Server) handleLeaveLayup(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Media stops when the membership does; nothing to hand back.
+}
+
+// handleCurrentLayup answers "which layup am I in?".
+//
+// A desktop asks this the moment it starts. Without it, restarting the
+// application looks to the person like being thrown out of the room they are
+// standing in, and the obvious recovery - creating another layup - leaves two
+// of them with their colleagues scattered between.
+func (s *Server) handleCurrentLayup(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFrom(r.Context())
+	if !ok {
+		s.writeAPIError(w, r, http.StatusUnauthorized, "unauthenticated", "no identity on request")
+		return
+	}
+
+	view, membership, err := s.layups.CurrentLayupForUser(r.Context(), identity.User.ID)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	if view == nil || membership == nil {
+		// Being in no layup is an ordinary state, not an error, and the
+		// difference must be unmistakable to the client: an absent layup, not
+		// an empty-looking one.
+		s.writeEnvelope(w, r, "layup.current", CurrentLayupDTO{})
+		return
+	}
+
+	dto := s.layupDTO(*view)
+	s.writeEnvelope(w, r, "layup.current", CurrentLayupDTO{
+		Layup:            &dto,
+		YourMembershipID: string(membership.ID),
+	})
 }
 
 func (s *Server) handleGetLayup(w http.ResponseWriter, r *http.Request) {

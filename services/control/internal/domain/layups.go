@@ -101,6 +101,12 @@ func (s *LayupService) CreateLayup(ctx context.Context, in CreateLayupInput) (La
 		return LayupView{}, fmt.Errorf("%w: unknown visibility %q", ErrInvalid, in.Visibility)
 	}
 
+	// Creating a layup is also walking into it, so it ends whichever one you
+	// were in - the same rule as joining.
+	if err := s.leaveOtherLayups(ctx, in.CreatorUserID, ""); err != nil {
+		return LayupView{}, err
+	}
+
 	now := s.now()
 	membershipID := NewMembershipID(s.ids)
 	layup := Layup{
@@ -203,6 +209,14 @@ func (s *LayupService) Join(ctx context.Context, layupID LayupID, userID UserID)
 		}
 	}
 
+	// You are in one layup at a time, because a person is in one place at a
+	// time. Joining another is walking out of the first, not opening a second
+	// window onto yourself - and a membership left behind is a phantom
+	// participant nobody can talk to.
+	if err := s.leaveOtherLayups(ctx, userID, layupID); err != nil {
+		return LayupView{}, Membership{}, err
+	}
+
 	membership := Membership{
 		ID:       NewMembershipID(s.ids),
 		LayupID:  layupID,
@@ -293,6 +307,69 @@ func (s *LayupService) Membership(id MembershipID) (Membership, error) {
 // View returns the current read model of a layup.
 func (s *LayupService) View(_ context.Context, layupID LayupID) (LayupView, error) {
 	return s.view(layupID)
+}
+
+// leaveOtherLayups ends every active membership this user holds elsewhere.
+//
+// It is a real leave, with the same consequences: any share they were running
+// stops, creator privilege devolves, and a layup left empty ends.
+func (s *LayupService) leaveOtherLayups(ctx context.Context, userID UserID, keep LayupID) error {
+	memberships, err := s.repo.MembershipsForUser(userID)
+	if err != nil {
+		return err
+	}
+	for _, membership := range memberships {
+		if !membership.Active() || membership.LayupID == keep {
+			continue
+		}
+		if _, err := s.Leave(ctx, membership.ID); err != nil {
+			return err
+		}
+		s.log.InfoContext(ctx, "left a layup to join another",
+			"userId", string(userID),
+			"leftLayupId", string(membership.LayupID),
+			"joinedLayupId", string(keep),
+		)
+	}
+	return nil
+}
+
+// CurrentLayupForUser is the layup a user is in right now, if any.
+//
+// This is what a desktop asks on startup. Without it, restarting the
+// application looks to the person like being thrown out of the room they are
+// standing in - and the obvious recovery, creating another layup, leaves two.
+func (s *LayupService) CurrentLayupForUser(ctx context.Context, userID UserID) (*LayupView, *Membership, error) {
+	views, err := s.ActiveLayupsForUser(ctx, userID)
+	if err != nil || len(views) == 0 {
+		return nil, nil, err
+	}
+
+	// One at a time is the rule, but pick the newest rather than assume it:
+	// data written before the rule existed must still resolve to something.
+	best := views[0]
+	var bestMembership Membership
+	for _, view := range views {
+		for _, participant := range view.Participants {
+			if participant.UserID != userID || participant.LeftAt != nil {
+				continue
+			}
+			if bestMembership.ID == "" || participant.JoinedAt.After(bestMembership.JoinedAt) {
+				bestMembership = Membership{
+					ID:                  participant.MembershipID,
+					LayupID:             view.Layup.ID,
+					UserID:              participant.UserID,
+					JoinedAt:            participant.JoinedAt,
+					IsCreatorMembership: participant.IsCreatorMembership,
+				}
+				best = view
+			}
+		}
+	}
+	if bestMembership.ID == "" {
+		return nil, nil, nil
+	}
+	return &best, &bestMembership, nil
 }
 
 // ActiveLayupsForUser returns the layups a user is currently inside.

@@ -138,6 +138,7 @@ func (s *Server) routes() {
 	authed.HandleFunc("GET /api/directory", s.handleDirectory)
 	authed.HandleFunc("GET /api/layups", s.handleListOpenLayups)
 	authed.HandleFunc("POST /api/layups", s.handleCreateLayup)
+	authed.HandleFunc("GET /api/layups/current", s.handleCurrentLayup)
 	authed.HandleFunc("GET /api/layups/{id}", s.handleGetLayup)
 	authed.HandleFunc("POST /api/layups/{id}/join", s.handleJoinLayup)
 	authed.HandleFunc("POST /api/layups/{id}/leave", s.handleLeaveLayup)
