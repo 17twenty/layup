@@ -294,17 +294,25 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
     const session = sessionRef.current;
     if (!session || !participants) return;
     identityBook.current.sync(participants);
-    for (const participant of participants) {
-      if (participant.membershipId === membershipId) continue;
-      session.connect(participant.membershipId);
-      wire(participant.membershipId);
-    }
+    // The departed go first. Otherwise a membership the control plane has
+    // marked as left is reconnected to on this very pass and closed again on
+    // the next - which is what left a guest's tile "reconnecting…" for ever.
     for (const gone of identityBook.current.retired()) {
       session.disconnect(gone, 'they left the layup');
       wiredPeers.current.delete(gone);
       receiverRef.current.remove(gone);
       strokesRef.current.clear(gone);
       setStrokes(strokesRef.current.strokes());
+    }
+    for (const participant of participants) {
+      if (participant.membershipId === membershipId) continue;
+      // `leftAt` is the difference between somebody whose connection is
+      // struggling and somebody who is not in the room any more. Only the
+      // first is worth a connection; the second is a departure, and the tile
+      // goes with them.
+      if (participant.leftAt) continue;
+      session.connect(participant.membershipId);
+      wire(participant.membershipId);
     }
   }, [participants, membershipId, remotes.length, wire]);
 

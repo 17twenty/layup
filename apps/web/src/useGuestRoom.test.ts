@@ -295,3 +295,47 @@ describe('a guest in a call', () => {
     expect(result.current.presenterMembershipId).toBeUndefined();
   });
 });
+
+/**
+ * Closing the tab is a departure, and the room has to be told (0.3.1, item 2).
+ *
+ * A guest who walks out with nothing said leaves a membership the control
+ * plane still believes in, so every desktop in the call keeps a tile for them
+ * that says "reconnecting…" for ever. Nothing else can report this: a browser
+ * has no other moment at which to say "I am going".
+ *
+ * `pagehide` with `persisted` set is the browser freezing the page into the
+ * back/forward cache - the person can come straight back to a live call, so
+ * that one is emphatically *not* a departure.
+ */
+describe('a guest closing the tab', () => {
+  it('leaves the layup, so nobody is left with a tile for them', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    harness();
+    await peer();
+
+    window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: false }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://layup.example/api/layups/lay_1/leave');
+    expect(init.method).toBe('POST');
+    // A request from a page that is going away only arrives if it is allowed
+    // to outlive the page.
+    expect(init.keepalive).toBe(true);
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer gst_secret');
+  });
+
+  it('says nothing when the page is only being frozen', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    harness();
+    await peer();
+
+    window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+
+    // Back/forward cache: they may be back in the same call in a second.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

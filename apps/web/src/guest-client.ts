@@ -33,6 +33,49 @@ export const GUEST_JOIN_PATH = '/api/guest/join';
 /** The route a guest link lands on, for building and recognising links. */
 export const GUEST_JOIN_ROUTE = '/j/';
 
+/** Where a guest ends their own membership. One of the three things a guest
+ *  token is allowed to reach (`httpapi/guest_auth.go`'s guestMayCall). */
+export const guestLeavePath = (layupId: string) => `/api/layups/${layupId}/leave`;
+
+export interface LeaveAsGuestOptions {
+  serverUrl: string;
+  layupId: string;
+  guestToken: string;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Says "I am leaving", from a page that is already going away.
+ *
+ * This exists because nothing else can report it. A browser guest who closes
+ * the tab leaves a membership the control plane still believes in, and every
+ * desktop in the call then keeps a tile for them that says "reconnecting…" -
+ * for ever, because a reconnect that is never coming looks exactly like one
+ * that is.
+ *
+ * `keepalive` is the whole trick: a normal fetch is cancelled when the page
+ * unloads, so without it this is a request that is written and never sent. The
+ * answer is never read, deliberately - there is nobody left to show it to, and
+ * waiting would only delay the tab closing.
+ */
+export function leaveAsGuest(options: LeaveAsGuestOptions): void {
+  const doFetch = options.fetchImpl ?? globalThis.fetch;
+  const baseUrl = options.serverUrl.replace(/\/+$/, '');
+  try {
+    void doFetch(`${baseUrl}${guestLeavePath(options.layupId)}`, {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
+        Authorization: `Bearer ${options.guestToken}`,
+      },
+    }).catch(() => undefined);
+  } catch {
+    // A browser that refuses the request on the way out is not something a
+    // person who is already leaving can act on.
+  }
+}
+
 export interface GuestJoinResult {
   /** Scoped to this one layup, and to this one visitor (guest_auth.go). */
   guestToken: string;

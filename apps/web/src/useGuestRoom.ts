@@ -38,7 +38,7 @@ import {
   type SignalMessage,
 } from '@core/peer-connection';
 import { createSession, type RemoteMedia, type Session } from '@core/session';
-import type { GuestJoinResult } from './guest-client';
+import { leaveAsGuest, type GuestJoinResult } from './guest-client';
 
 /** The realtime event carrying the layup to everybody in it. */
 const TYPE_LAYUP_STATE = 'layup.state';
@@ -76,6 +76,8 @@ export interface UseGuestRoomOptions {
   createRTCPeerConnection?: (config: RTCConfiguration) => RTCPeerConnection;
   getUserMedia?: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
   socketFactory?: (url: string) => RealtimeSocket;
+  /** Injectable for tests; defaults to the page's own fetch. */
+  fetchImpl?: typeof fetch;
 }
 
 export function useGuestRoom(options: UseGuestRoomOptions): GuestRoomState {
@@ -210,6 +212,34 @@ export function useGuestRoom(options: UseGuestRoomOptions): GuestRoomState {
     // The guest token and the layup are fixed for the life of this component:
     // a new one means a new redemption, and a new call.
   }, [layupId, membershipId, serverUrl, guest.guestToken]);
+
+  /**
+   * Closing the tab, said out loud.
+   *
+   * Two halves, and both matter: `signal.bye` so the peers tear their
+   * connections down at once instead of waiting for ICE to give up, and
+   * `POST /leave` so the *control plane* stops describing this guest as
+   * somebody who is still in the room. Without the second one every desktop
+   * keeps a tile that says "reconnecting…" for the rest of the call.
+   *
+   * `persisted` means the page is being frozen into the back/forward cache
+   * rather than destroyed - they may be back in this same call in a second, so
+   * that is a reconnect and not a departure.
+   */
+  useEffect(() => {
+    const onPageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) return;
+      sessionRef.current?.close('leaving the call');
+      leaveAsGuest({
+        serverUrl,
+        layupId,
+        guestToken: guest.guestToken,
+        ...(seams.current.fetchImpl ? { fetchImpl: seams.current.fetchImpl } : {}),
+      });
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, [layupId, serverUrl, guest.guestToken]);
 
   // Who is presenting decides how incoming video is classified (ADR-0007).
   useEffect(() => {
