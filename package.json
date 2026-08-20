@@ -1,7 +1,7 @@
 {
   "name": "layup",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Layup - people-first collaboration. PLAN-1 workspace root.",
   "packageManager": "npm@11.17.0",
   "engines": {
