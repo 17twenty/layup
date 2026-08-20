@@ -144,9 +144,12 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
     () =>
       run(async () => {
         const { url } = await window.layup.layup.link();
-        await navigator.clipboard?.writeText(url);
+        // Shown before it is copied, deliberately. A clipboard write can be
+        // refused, and a refused copy must still leave a URL on screen to
+        // read out or select by hand rather than nothing at all.
         setInviteRevoked(false);
         setInviteLink(url);
+        await navigator.clipboard?.writeText(url);
       }),
     [run],
   );
