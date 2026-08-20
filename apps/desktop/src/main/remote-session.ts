@@ -33,6 +33,17 @@ import type { HelperSupervisor } from './helper-supervisor';
 import type { DisplayBounds } from '../core/pointer-mapping';
 import type { Logger } from './logging';
 
+/**
+ * As much of a participant as this module reads. Deliberately structural
+ * rather than `control-client`'s `Participant`: authority here turns on one
+ * server-set flag, and narrowing to it says so.
+ */
+export interface RosterParticipant {
+  membershipId: string;
+  /** Set by the server (`ParticipantDTO.isGuest`); absent means "not a guest". */
+  isGuest?: boolean;
+}
+
 /** The realtime event types this listens to, all screen-share lifecycle. */
 export const SHARE_EVENT_TYPES = [
   TYPE_SCREEN_STARTED,
@@ -61,6 +72,21 @@ export interface RemoteSessionOptions {
 export interface RemoteSession {
   /** Rebuilds for a new membership, or tears down when there is none. */
   setMembership(membershipId: string | undefined, layupId: string | undefined): void;
+  /**
+   * Takes the layup's roster as the control plane describes it, and keeps the
+   * set of guest memberships from it.
+   *
+   * This is the *only* way the guard can learn that a membership belongs to a
+   * browser visitor rather than to somebody with an account: the wire carries
+   * membership ids and nothing else, and no server-side handler stands between
+   * a grant and this machine - remote control is peer-to-peer end to end. So
+   * `input-guard.ts` is the whole of the refusal, and this is what makes it
+   * true of a real layup rather than only of a unit test.
+   *
+   * Fed from every layup state update, not only when the membership changes:
+   * a guest who arrives mid-call is a guest from the moment the roster says so.
+   */
+  setParticipants(participants: readonly RosterParticipant[]): void;
   /**
    * Adopts the share the control plane already knows about.
    *
@@ -99,6 +125,11 @@ export function createRemoteSession(options: RemoteSessionOptions): RemoteSessio
   let emergency: EmergencyRevoke | undefined;
   let armedShortcut: string | undefined;
   let sweeper: ReturnType<typeof setInterval> | undefined;
+  // Guest memberships, as the control plane last described them. Held out
+  // here rather than inside a guard so it survives the rebuild a new
+  // membership triggers, and so the guard reads it live: a roster that
+  // arrives after the guard was built still governs it.
+  const guests = new Set<string>();
 
   const emptyControl: RemoteControlStateResponse = {
     allowed: { pointer: false, keyboard: false },
@@ -138,6 +169,10 @@ export function createRemoteSession(options: RemoteSessionOptions): RemoteSessio
       sharedDisplayId: () => store.state().share?.sourceId,
       presenterMembershipId: () => store.state().share?.presenterMembershipId,
       allowsScope: (scope) => control?.isAllowed(scope) ?? false,
+      // Sharing the mouse with "the room" never meant sharing it with a
+      // stranger holding a link. Read on every message, so a roster update
+      // takes effect without anything being rebuilt.
+      isGuestMembership: (id) => guests.has(id),
     });
 
     control = createRemoteControl({
@@ -194,6 +229,14 @@ export function createRemoteSession(options: RemoteSessionOptions): RemoteSessio
   }
 
   return {
+    setParticipants(participants) {
+      guests.clear();
+      for (const participant of participants) {
+        if (participant.isGuest) guests.add(participant.membershipId);
+      }
+    },
+
+
     setMembership(nextMembership, nextLayup) {
       if (nextMembership === membershipId && nextLayup === layupId) return;
       membershipId = nextMembership;

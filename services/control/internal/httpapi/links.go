@@ -31,17 +31,46 @@ type linkRecord struct {
 type linkStore struct {
 	mu     sync.RWMutex
 	tokens map[string]linkRecord
-	now    func() time.Time
+	// byLayup is what makes a layup's link singular: one live token each, so
+	// asking twice hands back the same URL rather than quietly leaving an
+	// older one alive behind it. Revoking then means something - there is one
+	// thing to revoke - which is the whole reason the index exists.
+	byLayup map[domain.LayupID]string
+	now     func() time.Time
 }
 
 func newLinkStore(now func() time.Time) *linkStore {
 	if now == nil {
 		now = time.Now
 	}
-	return &linkStore{tokens: map[string]linkRecord{}, now: now}
+	return &linkStore{
+		tokens:  map[string]linkRecord{},
+		byLayup: map[domain.LayupID]string{},
+		now:     now,
+	}
 }
 
+// mint returns the layup's live link, creating one only if there is not
+// already a usable one.
+//
+// A link is a thing you hand to a person, and a person asks for it more than
+// once: from another window, after a reload, or simply because they lost the
+// message. Minting a fresh token each time would leave a trail of live keys to
+// the same room, none of which the host could see or take back.
 func (s *linkStore) mint(layup domain.LayupID, by domain.UserID, ttl time.Duration) (string, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if existing, ok := s.byLayup[layup]; ok {
+		if record, ok := s.tokens[existing]; ok && !s.now().After(record.expiresAt) {
+			return existing, record.expiresAt
+		}
+		// Expired: forget it before replacing it, so nothing is left dangling
+		// in the token map under a layup that no longer points at it.
+		delete(s.tokens, existing)
+		delete(s.byLayup, layup)
+	}
+
 	buf := make([]byte, linkTokenBytes)
 	if _, err := rand.Read(buf); err != nil {
 		panic("layup: cannot generate an invitation link: " + err.Error())
@@ -49,10 +78,24 @@ func (s *linkStore) mint(layup domain.LayupID, by domain.UserID, ttl time.Durati
 	token := base64.RawURLEncoding.EncodeToString(buf)
 	expiresAt := s.now().Add(ttl)
 
+	s.tokens[token] = linkRecord{layupID: layup, createdBy: by, expiresAt: expiresAt}
+	s.byLayup[layup] = token
+	return token, expiresAt
+}
+
+// revoke drops a layup's link. It reports whether there was one to drop, so a
+// caller can tell "revoked" from "there was nothing there" - though the
+// outside sees the same answer either way.
+func (s *linkStore) revoke(layup domain.LayupID) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.tokens[token] = linkRecord{layupID: layup, createdBy: by, expiresAt: expiresAt}
-	return token, expiresAt
+	token, ok := s.byLayup[layup]
+	if !ok {
+		return false
+	}
+	delete(s.tokens, token)
+	delete(s.byLayup, layup)
+	return true
 }
 
 // resolve looks a token up in constant time with respect to the token value.
@@ -74,6 +117,22 @@ func (s *linkStore) resolve(token string) (linkRecord, bool) {
 type LinkDTO struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// LinkRevokedDTO is the payload of DELETE /api/layups/{id}/link. It says which
+// layup, and nothing about whether a link existed: that is not information a
+// caller needs, and the answer is the same either way.
+type LinkRevokedDTO struct {
+	LayupID string `json:"layupId"`
+}
+
+// joinByLinkRequest is the body of POST /api/links/join.
+//
+// The token lives in the JSON body, never in the URL: Caddy's access-log
+// filter redacts query strings but not paths, so a token in the path would
+// land in cleartext in /var/log/caddy/layup.log on every redemption.
+type joinByLinkRequest struct {
+	Token string `json:"token"`
 }
 
 func (s *Server) handleCreateLink(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +172,41 @@ func (s *Server) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 	s.writeEnvelope(w, r, "layup.link", LinkDTO{Token: token, ExpiresAt: expiresAt})
 }
 
+// handleRevokeLink takes a layup's link out of circulation.
+//
+// It is the answer to "I put that in the wrong channel". Nobody new can join
+// with the old URL from this moment; anyone already inside stays inside,
+// because revoking a link is not a way to remove a person.
+func (s *Server) handleRevokeLink(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFrom(r.Context())
+	if !ok {
+		s.writeAPIError(w, r, http.StatusUnauthorized, "unauthenticated", "no identity on request")
+		return
+	}
+
+	layupID := domain.LayupID(r.PathValue("id"))
+	if err := layupID.Validate(); err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	view, err := s.layups.View(r.Context(), layupID)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	// Same rule as minting: only someone inside decides who may come in.
+	if membershipOf(view, identity.User.ID) == "" {
+		s.writeAPIError(w, r, http.StatusForbidden, "forbidden", "you are not in this layup")
+		return
+	}
+
+	if s.links.revoke(layupID) {
+		s.log.InfoContext(r.Context(), "invitation link revoked",
+			"layupId", string(layupID), "userId", string(identity.User.ID))
+	}
+	s.writeEnvelope(w, r, "layup.link.revoked", LinkRevokedDTO{LayupID: string(layupID)})
+}
+
 func (s *Server) handleJoinByLink(w http.ResponseWriter, r *http.Request) {
 	identity, ok := IdentityFrom(r.Context())
 	if !ok {
@@ -124,7 +218,13 @@ func (s *Server) handleJoinByLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	record, ok := s.links.resolve(r.PathValue("token"))
+	var body joinByLinkRequest
+	if err := decodeJSON(r, &body); err != nil {
+		s.writeAPIError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	record, ok := s.links.resolve(body.Token)
 	if !ok {
 		// One message for "never existed" and "no longer valid": a link is not
 		// an oracle for which layups exist.

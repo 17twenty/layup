@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { decodeInput, isControlMessage, type ControlMessage } from '@layup/protocol';
-import { CHANNEL_CURSOR, CHANNEL_INPUT } from '../../core/data-channels';
+import {
+  createStrokeAssembler,
+  decodeInput,
+  isControlMessage,
+  type AssembledStroke,
+  type ControlMessage,
+} from '@layup/protocol';
+import { createAnnotationGuard } from '../../core/annotation-guard';
+import { CHANNEL_ANNOTATION, CHANNEL_CURSOR, CHANNEL_INPUT } from '../../core/data-channels';
 import { createAvController, type AvState } from '../../core/av';
+import { includesDevice, listDevices, NO_DEVICES, type DeviceList } from '../../core/devices';
 import { createCursorIdentityBook } from '../../core/cursor-identity';
 import { createCursorReceiver, type RemoteCursor } from '../../core/cursor-receiver';
 import { createCursorSender } from '../../core/cursor-sender';
 import { createInputSender, type InputSender } from '../../core/input-sender';
 import { createSession, type RemoteMedia, type Session } from '../../core/session';
+import type { RouteDiagnostics } from '../../core/ice-diagnostics';
 import type { LayupStateResponse, ShareStateResponse } from '../../shared/ipc';
+
+/** How often the route is re-read. Fast enough that "is it still relayed?"
+ * has an answer within a couple of seconds, not so fast it costs anything. */
+const DIAGNOSTICS_POLL_MS = 2000;
 
 /**
  * The live half of a layup, in the renderer.
@@ -29,8 +42,30 @@ export interface LayupRoom {
   av: AvState;
   setCamera(enabled: boolean): void;
   setMicrophone(enabled: boolean): void;
+  /** The microphones, cameras and speakers this machine has. */
+  devices: DeviceList;
+  /** Re-reads the device list - worth doing whenever it is about to be shown. */
+  refreshDevices(): void;
+  /**
+   * Changes which device is captured, mid-call. The new track is swapped into
+   * the sender that is already there (`replaceTrack`), so no offer is created
+   * and nothing on screen remounts. `undefined` means the system default.
+   */
+  setMicrophoneDevice(deviceId?: string): void;
+  setCameraDevice(deviceId?: string): void;
+  /** Chooses the output device. Applied to the media elements via setSinkId. */
+  setSpeaker(deviceId?: string): void;
   /** Interpolated cursors to draw, sampled per animation frame. */
   sampleCursors: () => RemoteCursor[];
+  /**
+   * Strokes drawn over the shared screen by the people in the layup.
+   *
+   * Never by a guest: drawing from a guest membership is dropped as it
+   * arrives (`core/annotation-guard.ts`), so nothing they send ever reaches
+   * this list. The browser client not opening the channel is the polite half;
+   * this is the half that holds when the client is modified.
+   */
+  strokes: AssembledStroke[];
   /** Colour and label for a membership, stable for the life of the layup. */
   identify(membershipId: string): { colour: string; label: string };
   /** Reports where our pointer is over the shared surface, normalised. */
@@ -41,6 +76,13 @@ export interface LayupRoom {
   input?: InputSender;
   /** What to aim actions at: the presenter's shared capture source. */
   targetDisplayId?: string;
+  /**
+   * Route, candidate types and RTT per peer, refreshed every
+   * {@link DIAGNOSTICS_POLL_MS}. Empty until the first sample lands, and
+   * again once the session is gone - the readout shows "Connecting…" for
+   * that gap rather than stale numbers.
+   */
+  diagnostics: Record<string, RouteDiagnostics>;
 }
 
 export interface UseLayupRoomOptions {
@@ -53,20 +95,35 @@ export interface UseLayupRoomOptions {
 export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions): LayupRoom {
   const [remotes, setRemotes] = useState<RemoteMedia[]>([]);
   const [scopes, setScopes] = useState<string[]>([]);
+  const [diagnostics, setDiagnostics] = useState<Record<string, RouteDiagnostics>>({});
   const [av, setAv] = useState<AvState>({ cameraEnabled: false, microphoneEnabled: false, muted: true });
+  const [devices, setDevices] = useState<DeviceList>(NO_DEVICES);
+  const [strokes, setStrokes] = useState<AssembledStroke[]>([]);
+  const sessionRef = useRef<Session | undefined>(undefined);
   const avRef = useRef(
     createAvController({
       getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
       onChange: (next) => setAv({ ...next }),
+      // A device change goes to the sender that is already publishing that
+      // kind. Never a new track, never a new offer: a renegotiation mid-call
+      // is what took the media elements - and the audio - down before.
+      onTrackReplaced: (track) => void sessionRef.current?.replaceCameraTrack(track),
     }),
   );
-  const sessionRef = useRef<Session | undefined>(undefined);
   const receiverRef = useRef(createCursorReceiver());
   const cursorSenderRef = useRef<ReturnType<typeof createCursorSender> | undefined>(undefined);
   const inputSenderRef = useRef<InputSender | undefined>(undefined);
   const presenterRef = useRef<string | undefined>(undefined);
   const wiredPeers = useRef(new Set<string>());
   const identityBook = useRef(createCursorIdentityBook());
+  const strokesRef = useRef(createStrokeAssembler());
+  // Guest memberships, as the control plane last described them. Held in a ref
+  // so the guard reads it live: a guest who arrives mid-call is a guest from
+  // the moment the roster says so, without anything being rebuilt.
+  const guestsRef = useRef(new Set<string>());
+  const annotationGuard = useRef(
+    createAnnotationGuard({ isGuestMembership: (id) => guestsRef.current.has(id) }),
+  );
 
   const membershipId = layup?.membershipId;
   const layupId = layup?.layup?.id;
@@ -87,6 +144,19 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       } catch {
         // A peer sending nonsense must not break the overlay for everyone.
       }
+    });
+
+    // Drawing. Judged on arrival against the roster this machine was given,
+    // never against what the message claims about itself - the sending client
+    // is not what decides whether a guest draws (`core/annotation-guard.ts`).
+    channels.on(CHANNEL_ANNOTATION, (message, channel) => {
+      const decision = annotationGuard.current.accept(message, {
+        membershipId: peerMembershipId,
+        channel,
+      });
+      if (!decision.accepted) return;
+      strokesRef.current.apply(decision.message);
+      setStrokes(strokesRef.current.strokes());
     });
 
     channels.on(CHANNEL_INPUT, (message) => {
@@ -113,6 +183,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
 
     let cancelled = false;
     let session: Session | undefined;
+    let diagnosticsTimer: ReturnType<typeof setInterval> | undefined;
     const cleanups: Array<() => void> = [];
 
     // ICE servers and the relay policy come from the control plane, so a
@@ -133,6 +204,15 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
         });
         sessionRef.current = session;
         session.setPresenter(presenterRef.current);
+
+        // Route and RTT are read from live stats, not renegotiated - a relay
+        // can appear or clear mid-call and nothing else would tell us. Only
+        // starts once a session exists; there is nothing to poll before that.
+        diagnosticsTimer = setInterval(() => {
+          void session?.diagnostics().then((next) => {
+            if (!cancelled) setDiagnostics(next);
+          });
+        }, DIAGNOSTICS_POLL_MS);
 
         cleanups.push(
           window.layup.signal.onReceived(({ type, message }) => {
@@ -174,6 +254,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
 
     return () => {
       cancelled = true;
+      if (diagnosticsTimer !== undefined) clearInterval(diagnosticsTimer);
       for (const cleanup of cleanups) cleanup();
       cursorSenderRef.current?.stop();
       cursorSenderRef.current = undefined;
@@ -181,8 +262,11 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       wiredPeers.current.clear();
       session?.close('leaving the layup');
       sessionRef.current = undefined;
+      strokesRef.current.clear();
       setRemotes([]);
       setScopes([]);
+      setDiagnostics({});
+      setStrokes([]);
     };
   }, [layupId, membershipId]);
 
@@ -195,19 +279,40 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
 
   // Connect to everybody else. Perfect negotiation settles who offers, so both
   // sides doing this is not a race.
+  // Who is a guest, from every layup state update. This is the only place the
+  // renderer can learn it - the data channels carry membership ids and nothing
+  // else - and it is read live by the drawing guard.
+  useEffect(() => {
+    const guests = guestsRef.current;
+    guests.clear();
+    for (const participant of participants ?? []) {
+      if (participant.isGuest) guests.add(participant.membershipId);
+    }
+  }, [participants]);
+
   useEffect(() => {
     const session = sessionRef.current;
     if (!session || !participants) return;
     identityBook.current.sync(participants);
-    for (const participant of participants) {
-      if (participant.membershipId === membershipId) continue;
-      session.connect(participant.membershipId);
-      wire(participant.membershipId);
-    }
+    // The departed go first. Otherwise a membership the control plane has
+    // marked as left is reconnected to on this very pass and closed again on
+    // the next - which is what left a guest's tile "reconnecting…" for ever.
     for (const gone of identityBook.current.retired()) {
       session.disconnect(gone, 'they left the layup');
       wiredPeers.current.delete(gone);
       receiverRef.current.remove(gone);
+      strokesRef.current.clear(gone);
+      setStrokes(strokesRef.current.strokes());
+    }
+    for (const participant of participants) {
+      if (participant.membershipId === membershipId) continue;
+      // `leftAt` is the difference between somebody whose connection is
+      // struggling and somebody who is not in the room any more. Only the
+      // first is worth a connection; the second is a departure, and the tile
+      // goes with them.
+      if (participant.leftAt) continue;
+      session.connect(participant.membershipId);
+      wire(participant.membershipId);
     }
   }, [participants, membershipId, remotes.length, wire]);
 
@@ -248,6 +353,37 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
     else session.unpublishScreen();
   }, [localScreen, remotes.length]);
 
+  const refreshDevices = useCallback(async () => {
+    const next = await listDevices();
+    setDevices(next);
+    return next;
+  }, []);
+
+  // Devices come and go mid-call - a headset is unplugged, a dock is pulled.
+  // A chosen device that has gone would leave a dead track publishing silence,
+  // so the default takes over instead.
+  useEffect(() => {
+    const media = typeof navigator === 'undefined' ? undefined : navigator.mediaDevices;
+    void refreshDevices();
+    if (!media?.addEventListener) return;
+
+    const onDeviceChange = () => {
+      void refreshDevices().then((next) => {
+        const state = avRef.current.state();
+        if (!includesDevice(next.microphones, state.microphoneId)) {
+          void avRef.current.setMicrophoneDevice(undefined);
+        }
+        if (!includesDevice(next.cameras, state.cameraId)) {
+          void avRef.current.setCameraDevice(undefined);
+        }
+        if (!includesDevice(next.speakers, state.speakerId)) avRef.current.setSpeaker(undefined);
+      });
+    };
+
+    media.addEventListener('devicechange', onDeviceChange);
+    return () => media.removeEventListener('devicechange', onDeviceChange);
+  }, [refreshDevices]);
+
   const moveCursor = useCallback(
     (input: { x: number; y: number; width: number; height: number }) => {
       if (!sharedSourceId) return;
@@ -261,20 +397,82 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
     (enabled: boolean) => void avRef.current.setMicrophone(enabled),
     [],
   );
+  const setMicrophoneDevice = useCallback(
+    (deviceId?: string) => void avRef.current.setMicrophoneDevice(deviceId),
+    [],
+  );
+  const setCameraDevice = useCallback(
+    (deviceId?: string) => void avRef.current.setCameraDevice(deviceId),
+    [],
+  );
+  const setSpeaker = useCallback((deviceId?: string) => void avRef.current.setSpeaker(deviceId), []);
+
+  /**
+   * The peers, with the names the roster already knows.
+   *
+   * The session deals in membership ids - that is all the wire carries - so
+   * nothing downstream of it had a name to show and every face read "Someone",
+   * a guest's most of all: they are in no directory, and the roster's
+   * `displayName` (the server's own `guestStore` fallback) is the only place
+   * their chosen name exists. Read through the same identity book the cursors
+   * and strokes are labelled from, so one person is never two names at once.
+   */
+  const names = useMemo(() => {
+    const book = new Map<string, string>();
+    for (const participant of participants ?? []) {
+      if (participant.displayName) book.set(participant.membershipId, participant.displayName);
+    }
+    return book;
+  }, [participants]);
+
+  const named = useMemo(
+    () =>
+      remotes.map((remote) => ({
+        ...remote,
+        // Read from the roster rather than from the identity book, which is
+        // filled in an effect: a name that lands a render later than the peer
+        // did would otherwise be stuck at "Someone" until something else
+        // happened to re-render.
+        displayName: remote.displayName ?? names.get(remote.membershipId) ?? 'Someone',
+      })),
+    [remotes, names],
+  );
 
   return useMemo(
     () => ({
-      remotes,
+      remotes: named,
       av,
       setCamera,
       setMicrophone,
+      devices,
+      refreshDevices: () => void refreshDevices(),
+      setMicrophoneDevice,
+      setCameraDevice,
+      setSpeaker,
       sampleCursors: () => receiverRef.current.sample(),
+      strokes,
       identify: (id: string) => identityBook.current.identify(id),
       moveCursor,
       scopes,
+      diagnostics,
       ...(inputSenderRef.current ? { input: inputSenderRef.current } : {}),
       ...(sharedSourceId ? { targetDisplayId: sharedSourceId } : {}),
     }),
-    [remotes, av, setCamera, setMicrophone, scopes, moveCursor, sharedSourceId],
+    [
+      named,
+      av,
+      setCamera,
+      setMicrophone,
+      devices,
+      refreshDevices,
+      setMicrophoneDevice,
+      setCameraDevice,
+      setSpeaker,
+      scopes,
+      strokes,
+      moveCursor,
+      sharedSourceId,
+      diagnostics,
+    ],
   );
 }

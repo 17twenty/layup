@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   LayupStateResponse,
+  PermissionsResponse,
   RemoteControlStateResponse,
   ShareStateResponse,
 } from '../../shared/ipc';
 import { CapturePicker } from '../capture/CapturePicker';
 import { useLocalCapture } from '../capture/useLocalCapture';
 import { CompactBar } from '../shell/CompactBar';
+import { nextMode } from '../shell/mode';
 import { useWindowMode } from '../shell/useWindowMode';
 import { CursorOverlay } from './CursorOverlay';
-import { FaceTiles } from './FaceTiles';
+import { DrawingOverlay } from './DrawingOverlay';
 import { RemoteControlIndicator } from './RemoteControlIndicator';
 import { RemoteControlPanel } from './RemoteControlPanel';
 import { SharedScreen } from './SharedScreen';
@@ -24,6 +26,10 @@ import { useLayupRoom } from './useLayupRoom';
  * control. On a viewer's side it shows the screen and, once they have been
  * given control, forwards their clicks and keys to the presenter - where they
  * are judged again before anything happens (ADR-0005, ADR-0006).
+ *
+ * There is one room and it is never taken down. The window's mode decides what
+ * is laid over it - a screen to watch, a sheet to choose one - and never
+ * whether the call exists, because the tiles underneath carry the audio.
  */
 export interface LayupRoomProps {
   layup: LayupStateResponse;
@@ -38,11 +44,25 @@ const emptyControl: RemoteControlStateResponse = {
   anyoneHasControl: false,
 };
 
+/** A stream's first video track, tolerating stand-ins that are not real
+ * MediaStreams - tests carry `{}` where a stream would be. */
+function firstVideoTrack(stream: MediaStream | undefined): MediaStreamTrack | undefined {
+  return typeof stream?.getVideoTracks === 'function' ? stream.getVideoTracks()[0] : undefined;
+}
+
 export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
   const [share, setShare] = useState<ShareStateResponse>(emptyShare);
   const [control, setControl] = useState<RemoteControlStateResponse>(emptyControl);
   const [error, setError] = useState<string | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The live invitation URL, once somebody has asked for one. `revoked` is
+  // kept separately because "there is no link" and "the link you sent no
+  // longer works" are different things to be told.
+  const [inviteLink, setInviteLink] = useState<string | undefined>();
+  const [inviteRevoked, setInviteRevoked] = useState(false);
+  // Only Accessibility is read here, and only while presenting: it is the one
+  // whose absence makes the switches below a lie.
+  const [permissions, setPermissions] = useState<PermissionsResponse | undefined>();
   const capture = useLocalCapture();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
 
@@ -68,6 +88,23 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
     };
   }, [layup.layup?.id]);
 
+  useEffect(() => {
+    // Asked when the switches are about to be shown, and again whenever this
+    // machine starts presenting: a grant can be revoked between calls, and the
+    // helper's answer is the only one that counts.
+    if (!presenting) return;
+    let cancelled = false;
+    void window.layup.permissions
+      .all()
+      .then((next) => {
+        if (!cancelled) setPermissions(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [presenting]);
+
   const run = useCallback(async (action: () => Promise<unknown>) => {
     setError(undefined);
     try {
@@ -80,12 +117,51 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
   const startSharing = useCallback(
     async (sourceId: string) => {
       const source = capture.sources.find((entry) => entry.id === sourceId);
-      if (!source) return;
+      if (!source) {
+        // Never silently. A click that does nothing and says nothing is
+        // indistinguishable from a broken application, and was read as one.
+        setError('That screen is no longer available. Refresh the list and choose it again.');
+        return;
+      }
       setPickerOpen(false);
-      await capture.start(source);
+      const started = await capture.start(source);
+      if (!started.ok) {
+        // A refused getUserMedia used to close the picker and announce a share
+        // with no video in it - the layup was told somebody was presenting a
+        // black rectangle. The refusal is almost always a permission, so it is
+        // said out loud and nothing is announced.
+        setError(started.reason);
+        return;
+      }
       await run(() => window.layup.share.start(sourceId));
     },
     [capture, run],
+  );
+
+  // One press, mid-conversation: mint the link, put it on the clipboard, and
+  // show it - because a copy you cannot see is a copy you cannot trust.
+  const invite = useCallback(
+    () =>
+      run(async () => {
+        const { url } = await window.layup.layup.link();
+        // Shown before it is copied, deliberately. A clipboard write can be
+        // refused, and a refused copy must still leave a URL on screen to
+        // read out or select by hand rather than nothing at all.
+        setInviteRevoked(false);
+        setInviteLink(url);
+        await navigator.clipboard?.writeText(url);
+      }),
+    [run],
+  );
+
+  const revokeInvite = useCallback(
+    () =>
+      run(async () => {
+        await window.layup.layup.revokeLink();
+        setInviteLink(undefined);
+        setInviteRevoked(true);
+      }),
+    [run],
   );
 
   const stopSharing = useCallback(async () => {
@@ -108,12 +184,17 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
 
   const controlling = room.scopes.length > 0 && Boolean(room.targetDisplayId);
 
+  const hasIncomingScreen = room.remotes.some((remote) => Boolean(remote.screen));
+
   // Small unless there is a reason: choosing a screen, or watching one.
-  const mode = useWindowMode({
-    inLayup: true,
-    pickerOpen,
-    hasIncomingScreen: room.remotes.some((remote) => Boolean(remote.screen)),
-  });
+  const mode = useWindowMode({ inLayup: true, pickerOpen, hasIncomingScreen });
+
+  // What the picker is laid over. The room underneath is whatever it would be
+  // with the picker shut, because the picker is a layer and never a
+  // replacement: the faces below it are the call, and the remote ones are the
+  // audio. Unmounting them to choose a window is how a screen picker came to
+  // hang up on somebody.
+  const base = nextMode({ inLayup: true, pickerOpen: false, hasIncomingScreen });
 
   const onPointerMove = useCallback(
     (event: React.PointerEvent) => {
@@ -202,82 +283,81 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
       displayName: participant.displayName ?? 'Someone',
     }));
 
+  /**
+   * One readout row per peer, named.
+   *
+   * `room.diagnostics` is keyed by membership and always has been; what was
+   * missing was anything that said *whose* a given reading was, so a single
+   * one was picked and the panel could report a healthy link while somebody
+   * else was on a broken one. Built from the roster so a peer who has not
+   * produced a sample yet still gets a row saying so, and from the diagnostics
+   * as well so a peer the roster has not caught up with is not invisible.
+   */
+  const diagnosticsPeers = [
+    ...others.map((participant) => ({
+      membershipId: participant.membershipId,
+      label: participant.displayName,
+      ...(room.diagnostics[participant.membershipId]
+        ? { diagnostics: room.diagnostics[participant.membershipId]! }
+        : {}),
+    })),
+    ...Object.entries(room.diagnostics)
+      .filter(([membershipId]) => !others.some((other) => other.membershipId === membershipId))
+      .map(([membershipId, diagnostics]) => ({ membershipId, label: 'Someone', diagnostics })),
+  ];
+
+  // Whichever incoming video is actually on screen: the shared desktop when
+  // there is one to watch, otherwise a camera - resolution and framerate
+  // describe what the tester is looking at, not a track that never rendered.
+  const incomingVideoTrack =
+    room.remotes.map((remote) => firstVideoTrack(remote.screen)).find((track): track is MediaStreamTrack => Boolean(track)) ??
+    room.remotes.map((remote) => firstVideoTrack(remote.camera)).find((track): track is MediaStreamTrack => Boolean(track));
+
   const errorLine = error ? (
     <p className="room__error" role="alert" data-testid="room-error">
       {error}
     </p>
   ) : null;
 
-  // Choosing a screen. The window grows for exactly as long as this is open.
-  if (mode === 'picker') {
-    return (
-      <section className="room room--picker" aria-label="Choose a screen to share">
-        <header className="room__sheet-header">
-          <h2>Share a screen</h2>
-          <button
-            type="button"
-            className="tile__action--secondary"
-            onClick={() => setPickerOpen(false)}
-            data-testid="cancel-picker"
-          >
-            Cancel
-          </button>
-        </header>
-        <CapturePicker onPicked={(source) => void startSharing(source.id)} />
-        {errorLine}
-      </section>
-    );
-  }
+  const controlPanel = presenting ? (
+    <RemoteControlPanel
+      state={control}
+      participants={others}
+      onSetAllowed={(scope, allowed) => void run(() => window.layup.control.allow(scope, allowed))}
+      onStop={(target) => void run(() => window.layup.control.stop(target))}
+      onResume={(target) => void run(() => window.layup.control.resume(target))}
+      {...(permissions ? { accessibility: permissions.accessibility } : {})}
+      onOpenAccessibilitySettings={() =>
+        void window.layup.permissions.openSettings('accessibility')
+      }
+    />
+  ) : null;
 
-  // Nobody's screen to look at: the pill, and nothing else.
-  if (mode === 'compact') {
-    return (
-      <>
-        {/* The presenter is the one who needs to know, and the presenter is
-            the one in the pill. */}
-        <RemoteControlIndicator
-          state={control}
-          {...(control.shortcut ? { shortcut: control.shortcut } : {})}
-          onStopAll={() => void run(() => window.layup.control.stopAll())}
-        />
-        <CompactBar
-          local={room.av}
-          remotes={room.remotes}
-          {...(selfName ? { selfName } : {})}
-          presenting={presenting}
-          onToggleCamera={room.setCamera}
-          onToggleMicrophone={room.setMicrophone}
-          onShare={() => setPickerOpen(true)}
-          onStopSharing={() => void stopSharing()}
-          onLeave={() => onLeave?.()}
-        />
-        {presenting ? (
-          <RemoteControlPanel
-            state={control}
-            participants={others}
-            onSetAllowed={(scope, allowed) => void run(() => window.layup.control.allow(scope, allowed))}
-            onStop={(target) => void run(() => window.layup.control.stop(target))}
-            onResume={(target) => void run(() => window.layup.control.resume(target))}
-          />
-        ) : null}
-        {share.notice ? (
-          <p className="room__notice" role="status" data-testid="share-notice">
-            {share.notice.text}
-          </p>
-        ) : null}
-        {errorLine}
-      </>
-    );
-  }
-
-  // Watching somebody's screen: the one thing worth a large window.
+  // One room, for the whole life of the layup. Every mode is something laid
+  // over it - a screen to watch, a sheet to choose one - and none of them
+  // replaces it, so the cameras and the microphones below never stop.
   return (
-    <section className="room" aria-label="Layup">
+    <div className={`room room--${base}`} data-testid="room">
       <RemoteControlIndicator
         state={control}
         {...(control.shortcut ? { shortcut: control.shortcut } : {})}
         onStopAll={() => void run(() => window.layup.control.stopAll())}
       />
+
+      {/* Shown, not just copied: somebody about to paste a key to their call
+          into a chat window deserves to see exactly what it is. */}
+      {inviteLink ? (
+        <p className="room__notice" role="status">
+          Link copied. Anyone with it can join as a guest:{' '}
+          <code data-testid="invite-link">{inviteLink}</code>
+        </p>
+      ) : null}
+
+      {inviteRevoked ? (
+        <p className="room__notice" role="status" data-testid="invite-revoked">
+          That link no longer works. Everybody already here stays.
+        </p>
+      ) : null}
 
       {share.notice ? (
         <p className="room__notice" role="status" data-testid="share-notice">
@@ -285,77 +365,119 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
         </p>
       ) : null}
 
-      <div
-        ref={surfaceRef}
-        className="room__surface"
-        data-testid="room-surface"
-        // Focusable so keystrokes can be forwarded only when the shared screen
-        // is deliberately in focus.
-        tabIndex={controlling ? 0 : -1}
-        onPointerMove={onPointerMove}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onWheel={onWheel}
-        onKeyDown={onKeyDown}
-        onKeyUp={onKeyUp}
-        onContextMenu={(event) => event.preventDefault()}
-      >
-        <SharedScreen
-          remotes={room.remotes}
-          {...(capture.stream ? { localScreen: capture.stream } : {})}
-          overlay={<CursorOverlay sample={room.sampleCursors} identify={room.identify} />}
-        />
-      </div>
-
-      <div className="room__actions">
-        <FaceTiles
-          variant="compact"
-          local={room.av}
-          remotes={room.remotes}
-          {...(selfName ? { selfName } : {})}
-          onToggleCamera={room.setCamera}
-          onToggleMicrophone={room.setMicrophone}
-        />
-        {presenting ? (
-          <button type="button" onClick={() => void stopSharing()} data-testid="stop-sharing">
-            Stop sharing
-          </button>
-        ) : (
-          <>
-            <button type="button" onClick={() => setPickerOpen(true)} data-testid="share-screen">
-              Share a screen
-            </button>
-            {share.share ? (
-              // Only meaningful where taking the screen is refused; the server
-              // says so plainly if it is not.
-              <button
-                type="button"
-                onClick={() => void run(() => window.layup.share.ask())}
-                data-testid="ask-to-share"
-              >
-                Ask to share
-              </button>
-            ) : null}
-          </>
-        )}
-        {controlling ? (
-          <span className="room__hint" data-testid="controlling-hint">
-            You can use this screen ({room.scopes.join(' + ')}). Click it first, then type.
-          </span>
-        ) : null}
-      </div>
-
-      {presenting ? (
-        <RemoteControlPanel
-          state={control}
-          participants={others}
-          onSetAllowed={(scope, allowed) => void run(() => window.layup.control.allow(scope, allowed))}
-          onStop={(target) => void run(() => window.layup.control.stop(target))}
-          onResume={(target) => void run(() => window.layup.control.resume(target))}
-        />
+      {/* Somebody's screen: the one thing worth a large window. It appears
+          above the call and pushes nothing else out. */}
+      {base === 'viewer' ? (
+        <div
+          ref={surfaceRef}
+          className="room__surface"
+          data-testid="room-surface"
+          // Focusable so keystrokes can be forwarded only when the shared
+          // screen is deliberately in focus.
+          tabIndex={controlling ? 0 : -1}
+          onPointerMove={onPointerMove}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onWheel={onWheel}
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <SharedScreen
+            remotes={room.remotes}
+            {...(capture.stream ? { localScreen: capture.stream } : {})}
+            {...(room.av.speakerId ? { speakerId: room.av.speakerId } : {})}
+            overlay={
+              <>
+                {/* Strokes first, cursors over them: a pointer belongs on top
+                    of what it drew. Nothing a guest sends is in either - both
+                    are judged on arrival (core/annotation-guard.ts). */}
+                <DrawingOverlay strokes={room.strokes} identify={room.identify} />
+                <CursorOverlay sample={room.sampleCursors} identify={room.identify} />
+              </>
+            }
+          />
+        </div>
       ) : null}
 
-      {errorLine}
-    </section>
+      {/* The call: the faces, and the four things you do to a call. Mounted
+          once, in one place, in every mode - a remote tile is unmuted, so it
+          is the other person's voice as much as their face. */}
+      <CompactBar
+        local={room.av}
+        remotes={room.remotes}
+        {...(selfName ? { selfName } : {})}
+        presenting={presenting}
+        onToggleCamera={room.setCamera}
+        onToggleMicrophone={room.setMicrophone}
+        onShare={() => setPickerOpen(true)}
+        onStopSharing={() => void stopSharing()}
+        onLeave={() => onLeave?.()}
+        onInvite={() => void invite()}
+        onRevokeInvite={() => void revokeInvite()}
+        hasInviteLink={Boolean(inviteLink)}
+        {...(diagnosticsPeers.length ? { diagnosticsPeers } : {})}
+        {...(incomingVideoTrack ? { diagnosticsVideoTrack: incomingVideoTrack } : {})}
+        devices={room.devices}
+        onSelectMicrophone={room.setMicrophoneDevice}
+        onSelectCamera={room.setCameraDevice}
+        onSelectSpeaker={room.setSpeaker}
+        onOpenDevices={room.refreshDevices}
+      />
+
+      {base === 'viewer' ? (
+        <div className="room__actions">
+          {!presenting && share.share ? (
+            // Only meaningful where taking the screen is refused; the server
+            // says so plainly if it is not.
+            <button
+              type="button"
+              onClick={() => void run(() => window.layup.share.ask())}
+              data-testid="ask-to-share"
+            >
+              Ask to share
+            </button>
+          ) : null}
+          {controlling ? (
+            <span className="room__hint" data-testid="controlling-hint">
+              You can use this screen ({room.scopes.join(' + ')}). Click it first, then type.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {controlPanel}
+
+      {/* Choosing a screen, over the top. The window grows for exactly as long
+          as this is open; the call underneath carries on. */}
+      {mode === 'picker' ? (
+        <section className="room__overlay" aria-label="Choose a screen to share">
+          <header className="room__sheet-header">
+            <h2>Share a screen</h2>
+            <button
+              type="button"
+              className="tile__action--secondary"
+              onClick={() => setPickerOpen(false)}
+              data-testid="cancel-picker"
+            >
+              Cancel
+            </button>
+          </header>
+          {/* The room's capture, not a second one: the list drawn here is the
+              same list a click is resolved against. */}
+          <CapturePicker
+            sources={capture.sources}
+            refresh={capture.refresh}
+            error={capture.error}
+            onPicked={(source) => void startSharing(source.id)}
+          />
+          {/* The sheet covers the room, so the room's error line would be
+              behind it. It belongs where the click that caused it was. */}
+          {errorLine}
+        </section>
+      ) : null}
+
+      {mode === 'picker' ? null : errorLine}
+    </div>
   );
 }

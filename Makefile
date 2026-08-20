@@ -2,6 +2,16 @@
 SHELL := /bin/bash
 
 CONTROL_DIR := services/control
+# The version being released, read from the one file that decides it. Release
+# and publish name artifacts by version rather than globbing: a stale build
+# left in release/ made `Layup-*-universal.dmg` match two files, and
+# notarize-dmg.sh dutifully signed and stapled the older one while the new
+# DMG went out unsigned. Nothing failed; the feed simply described a build
+# Gatekeeper would refuse.
+VERSION := $(shell node -p "require('./package.json').version")
+RELEASE_DIR := apps/desktop/release
+DMG := $(RELEASE_DIR)/Layup-$(VERSION)-universal.dmg
+UPDATE_ZIP := $(RELEASE_DIR)/Layup-$(VERSION)-universal-mac.zip
 # The task tooling needs PyYAML. A repo-local venv is used when present, so the
 # host python is never modified (many are externally managed).
 PYTHON := $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
@@ -40,6 +50,29 @@ build-js: ## Build the protocol binding and desktop bundles
 .PHONY: build-go
 build-go: ## Build every Go module in the workspace
 	@for m in $(GO_MODULES); do echo "==> build $$m"; (cd $$m && go build ./...) || exit 1; done
+
+.PHONY: build-web
+build-web: ## Build the web guest client
+	npm run build --workspace apps/web
+
+.PHONY: build-helper
+build-helper: ## Build the input helper as a universal macOS binary
+	bash native/input-helper/build.sh
+
+.PHONY: package
+package: build-helper ## Build the macOS app, unsigned
+	npm run package --workspace apps/desktop
+
+.PHONY: release
+release: build-helper ## Build, sign and notarise the macOS app
+	@test -n "$$APPLE_API_KEY" || (echo "set APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER" && exit 1)
+	npm run package --workspace apps/desktop
+	@# electron-builder staples the .app, then builds the DMG around it, leaving
+	@# the DMG itself unsigned and ticketless. The DMG is what gets downloaded.
+	bash scripts/notarize-dmg.sh $(DMG)
+	@# Signing and stapling changed the DMG after electron-builder measured it,
+	@# so the feed now describes a file that no longer exists.
+	node scripts/restamp-feed.mjs $(RELEASE_DIR)/latest-mac.yml
 
 .PHONY: typecheck
 typecheck: ## Typecheck TypeScript workspaces
@@ -83,6 +116,10 @@ bench: ## Run every benchmark scenario and write result JSON
 test-bench: ## Unit-test the benchmark harness itself
 	node --test test/latency/harness.test.mjs
 
+.PHONY: test-restamp-feed
+test-restamp-feed: ## Unit-test the release-feed restamping script
+	node --test scripts/restamp-feed.test.mjs
+
 .PHONY: test-e2e
 test-e2e: ## End-to-end tests against a real control service (wire contract only)
 	node --test test/e2e/*.test.mjs
@@ -95,16 +132,20 @@ test-webrtc: ## Prove real WebRTC connectivity in an Electron window
 test-turn: ## Prove forced relay through a real coturn (needs Docker)
 	node test/network/turn-relay.mjs
 
+.PHONY: test-turn-remote
+test-turn-remote: ## Prove forced relay through the deployed coturn (needs make deploy first)
+	node test/network/turn-remote.mjs
+
 .PHONY: fmt-check
 fmt-check: ## Fail if any Go file needs gofmt
 	@unformatted="$$(gofmt -l $(GO_MODULES))"; \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed for:"; echo "$$unformatted"; exit 1; fi
 
 .PHONY: verify
-verify: check test-bench test-smoke test-e2e test-boundary test-webrtc ## check + every real-boundary proof (add test-turn for coturn)
+verify: check test-bench test-restamp-feed test-smoke test-e2e test-boundary test-webrtc ## check + every real-boundary proof (add test-turn for coturn)
 
 .PHONY: ci
-ci: validate-tasks fmt-check check test-bench ## Everything the fast CI jobs run, locally
+ci: validate-tasks fmt-check check test-bench test-restamp-feed ## Everything the fast CI jobs run, locally
 
 .PHONY: check
 check: typecheck lint test build ## Full local gate: typecheck, lint, test, build
@@ -120,3 +161,88 @@ validate-tasks: ## Validate every task graph (PLAN-1 and PLAN-1.5)
 .PHONY: plan-status
 plan-status: ## Progress across both plans and their gates
 	$(PYTHON) scripts/ralph.py status
+
+LAYUP_DEPLOY_HOST ?= root@157.20.113.124
+LAYUP_DEPLOY_DOMAIN ?= layup.blah.au
+export LAYUP_DEPLOY_DOMAIN
+
+.PHONY: publish
+publish: build-web ## Upload the web guest client, the DMG, the update zip and the feed manifest
+	@test -f $(DMG) || (echo "no $(DMG): run 'make release' first" && exit 1)
+	@# Squirrel.Mac cannot update from a DMG. No zip means a download page and
+	@# no update path, which looks identical until nobody ever gets a fix.
+	@test -f $(UPDATE_ZIP) || (echo "no update zip: check mac.target in electron-builder.yml" && exit 1)
+	@# The manifest *is* the feed. Without it nothing ever updates, and it looks
+	@# exactly like it is working.
+	@test -f $(RELEASE_DIR)/latest-mac.yml || (echo "no latest-mac.yml: check the publish block in electron-builder.yml" && exit 1)
+	@# The DMG people download must be the one Apple notarised. A DMG that was
+	@# never stapled looks identical here and is refused on their machine.
+	xcrun stapler validate $(DMG)
+	ssh $(LAYUP_DEPLOY_HOST) 'install -d -m 0755 /srv/layup/public/download /srv/layup/public/j'
+	@# The web guest client. Uploaded first: a link somebody already holds
+	@# should start working before the download page mentions a new build.
+	@# --delete so a bundle's old hashed assets do not accumulate for ever;
+	@# scp cannot express that. bootstrap.sh installs rsync on the VM for this.
+	rsync -a --delete apps/web/dist/ $(LAYUP_DEPLOY_HOST):/srv/layup/public/j/
+	@# Under their own versioned names, because latest-mac.yml names them.
+	@# By version, never by glob: a stale build in release/ must not ride
+	@# along, and must never become the one the feed points at.
+	scp $(DMG) $(UPDATE_ZIP) $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
+	@# Blockmaps make an update a delta instead of a full download. Their
+	@# absence only costs bandwidth, so a missing one is not a failed publish.
+	-scp $(DMG).blockmap $(UPDATE_ZIP).blockmap $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/
+	@# And again under the stable name the download page links to.
+	scp $(DMG) $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/Layup.dmg
+	@# Last: until the manifest lands the feed still describes the previous
+	@# release, which is the only thing it is safe for it to describe.
+	scp $(RELEASE_DIR)/latest-mac.yml $(LAYUP_DEPLOY_HOST):/srv/layup/public/download/latest-mac.yml
+	@echo "https://$(LAYUP_DEPLOY_DOMAIN)/download/Layup.dmg"
+	@echo "guest client: https://$(LAYUP_DEPLOY_DOMAIN)/j/"
+	@echo "feed: https://$(LAYUP_DEPLOY_DOMAIN)/download/latest-mac.yml"
+	@curl -fsS https://$(LAYUP_DEPLOY_DOMAIN)/download/latest-mac.yml | head -3
+
+.PHONY: deploy-build
+deploy-build: ## Cross-compile the control service for the dev VM
+	cd $(CONTROL_DIR) && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+		go build -trimpath -o ../../dist/layup-control ./cmd/control
+
+.PHONY: deploy
+deploy: deploy-build ## Ship the control service to the dev VM and restart it
+	scp dist/layup-control $(LAYUP_DEPLOY_HOST):/usr/local/bin/layup-control.new
+	ssh $(LAYUP_DEPLOY_HOST) 'install -m 0755 /usr/local/bin/layup-control.new /usr/local/bin/layup-control \
+		&& rm -f /usr/local/bin/layup-control.new \
+		&& systemctl enable --now layup-control \
+		&& systemctl restart layup-control'
+	@echo "deployed; verifying"
+	@node test/network/remote-health.mjs
+
+.PHONY: deploy-config
+deploy-config: ## Ship deploy/vm configuration and re-run bootstrap
+	# scp -r into an already-existing remote directory nests instead of
+	# overwriting, so a stale bootstrap.sh would silently keep running.
+	ssh $(LAYUP_DEPLOY_HOST) 'rm -rf /tmp/layup-vm'
+	scp -r deploy/vm $(LAYUP_DEPLOY_HOST):/tmp/layup-vm
+	ssh $(LAYUP_DEPLOY_HOST) 'bash /tmp/layup-vm/bootstrap.sh'
+
+.PHONY: deploy-status
+deploy-status: ## Show service state on the dev VM
+	ssh $(LAYUP_DEPLOY_HOST) 'systemctl --no-pager --lines=0 status layup-control caddy coturn nftables || true'
+
+.PHONY: deploy-logs
+deploy-logs: ## Tail the control service log on the dev VM
+	ssh $(LAYUP_DEPLOY_HOST) 'journalctl -u layup-control -n 100 -f'
+
+.PHONY: reset-identities
+reset-identities: ## DESTRUCTIVE: wipe every identity on the dev VM - logs EVERYBODY out
+	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	@echo "!! DESTRUCTIVE"
+	@echo "!! This deletes EVERY registered identity on $(LAYUP_DEPLOY_DOMAIN)"
+	@echo "!! and restarts layup-control. It logs EVERYBODY out - every"
+	@echo "!! desktop's token stops working, and re-registering (Add a"
+	@echo "!! server, same join code) is the only way back in."
+	@echo "!!"
+	@echo "!! Only run this immediately before a fresh pairing session, with"
+	@echo "!! nobody depending on the server staying up right now."
+	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	ssh $(LAYUP_DEPLOY_HOST) 'rm -f /var/lib/layup/identities.json && systemctl restart layup-control'
+	@echo "identities wiped; layup-control restarted with an empty directory"

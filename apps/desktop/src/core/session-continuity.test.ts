@@ -180,3 +180,113 @@ describe('a layup with no screen', () => {
     expect(store.state().notice?.kind).toBe('takeover');
   });
 });
+
+/**
+ * A guest closing their browser tab is one peer's business (SPEC.md §7.1).
+ *
+ * This is the shape of the 0.3.1 report: a guest left, and the presenter's
+ * screen stopped going anywhere while the border still said "You are sharing
+ * this screen". The cause was that a peer's departure was applied to
+ * *session-wide* state - the peers map and the `screenSenders`/`cameraSenders`
+ * maps that `publishScreen`, `unpublishScreen` and `replaceCameraTrack` all
+ * iterate - without the per-peer teardown `disconnect()` does, and without
+ * telling anybody. So a departed peer's dead sender stayed inside the loop
+ * carrying the presenter's screen, and one throw from it abandoned the loop
+ * before the live peer was reached.
+ */
+class ClosingPeer extends FakePeer {
+  /** A closed RTCPeerConnection throws InvalidStateError from addTrack. */
+  override addTrack(track: MediaStreamTrack) {
+    if (this.closed) throw new Error('InvalidStateError: RTCPeerConnection is closed');
+    return super.addTrack(track);
+  }
+}
+
+function closingHarness() {
+  FakePeer.instances = [];
+  const sent: Array<{ type: string; payload: SignalMessage }> = [];
+  const rosters: string[][] = [];
+  const session = createSession({
+    layupId: 'lay_abc12345',
+    localMembershipId: 'mem_local',
+    sendSignal: (type, payload) => sent.push({ type, payload }),
+    createRTCPeerConnection: () => new ClosingPeer() as unknown as RTCPeerConnection,
+    onChange: (peers) => rosters.push(peers.map((peer) => peer.membershipId)),
+  });
+  return { session, sent, rosters, peers: () => FakePeer.instances };
+}
+
+describe('a guest walks out of a layup that is being presented to', () => {
+  it('closes that peer and nothing else, and keeps the screen on the others', async () => {
+    const { session, peers } = closingHarness();
+    session.connect('mem_karl');
+    session.connect('mem_guest');
+    session.publishCamera(streamOf(fakeTrack('video'), fakeTrack('audio')));
+    session.publishScreen(streamOf(fakeTrack('video')));
+    const karl = peers()[0]!;
+
+    await session.handleSignal(SIGNAL_BYE, {
+      layupId: 'lay_abc12345',
+      fromMembershipId: 'mem_guest',
+    } as SignalMessage);
+
+    expect(peers()[1]!.closed).toBe(true);
+    // The layup outlives one guest: Karl's connection, camera and screen are
+    // exactly where they were.
+    expect(karl.closed).toBe(false);
+    expect(session.localScreen()).toBeDefined();
+    expect(karl.senders.filter((sender) => sender.track !== null)).toHaveLength(3);
+    expect(session.remotes().map((peer) => peer.membershipId)).toEqual(['mem_karl']);
+  });
+
+  it('tells the room, so the tile leaves with them', async () => {
+    const { session, rosters } = closingHarness();
+    session.connect('mem_karl');
+    session.connect('mem_guest');
+    rosters.length = 0;
+
+    await session.handleSignal(SIGNAL_BYE, {
+      layupId: 'lay_abc12345',
+      fromMembershipId: 'mem_guest',
+    } as SignalMessage);
+
+    // Without this the UI never hears about the departure and the tile sits
+    // at "reconnecting…" for ever.
+    expect(rosters.at(-1)).toEqual(['mem_karl']);
+  });
+
+  it('takes its senders with it, so a session-wide swap never touches a closed peer', async () => {
+    const { session, peers } = closingHarness();
+    session.connect('mem_karl');
+    session.connect('mem_guest');
+    session.publishCamera(streamOf(fakeTrack('video'), fakeTrack('audio')));
+    session.publishScreen(streamOf(fakeTrack('video')));
+    const guestSenders = peers()[1]!.senders;
+
+    await session.handleSignal(SIGNAL_BYE, {
+      layupId: 'lay_abc12345',
+      fromMembershipId: 'mem_guest',
+    } as SignalMessage);
+    guestSenders.forEach((sender) => sender.replaceTrack.mockClear());
+
+    // Changing a microphone, and stopping the share, are session-wide loops.
+    // Neither may reach into a connection that has been closed.
+    await session.replaceCameraTrack(fakeTrack('audio'));
+    session.unpublishScreen();
+
+    for (const sender of guestSenders) expect(sender.replaceTrack).not.toHaveBeenCalled();
+  });
+
+  it('does not let one dead peer abandon the publish loop', () => {
+    const { session, peers } = closingHarness();
+    session.connect('mem_guest');
+    session.connect('mem_karl');
+    // A peer whose connection Chromium has already closed underneath us. The
+    // presenter's screen still has to reach everybody after it in the loop.
+    (peers()[0] as ClosingPeer).closed = true;
+
+    expect(() => session.publishScreen(streamOf(fakeTrack('video')))).not.toThrow();
+    expect(() => session.publishCamera(streamOf(fakeTrack('video'), fakeTrack('audio')))).not.toThrow();
+    expect(peers()[1]!.senders.filter((sender) => sender.track !== null)).toHaveLength(3);
+  });
+});

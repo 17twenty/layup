@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createControlClient } from './control-client';
+import { ControlRequestError, createControlClient, isCredentialRejection } from './control-client';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -11,7 +11,6 @@ function jsonResponse(body: unknown, status = 200): Response {
 const healthyBody = {
   status: 'ok',
   protocolVersion: 1,
-  environment: 'dev',
   uptimeSeconds: 3,
   build: { version: '0.1.0', goVersion: 'go1.26.4', platform: 'darwin/arm64' },
 };
@@ -32,7 +31,6 @@ describe('control client probe', () => {
     expect(state.status).toBe('connected');
     expect(state.serverProtocolVersion).toBe(1);
     expect(state.serverVersion).toBe('0.1.0');
-    expect(state.environment).toBe('dev');
     expect(state.latencyMs).toBe(12);
     expect(state.detail).toBeUndefined();
     expect(client.baseUrl).toBe('http://127.0.0.1:8787');
@@ -161,5 +159,142 @@ describe('a refusal from the control plane', () => {
     });
 
     await expect(client.apiGet('/api/layups')).rejects.toThrow(/failed with HTTP 500/);
+  });
+});
+
+describe('control client identity', () => {
+  it('sends the bearer token when it has one', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    const client = createControlClient({ baseUrl: 'https://layup.blah.au', token: 't0ken', fetchImpl: fetchMock });
+    await client.me().catch(() => undefined);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    const headers = new Headers(init.headers);
+    expect(headers.get('authorization')).toBe('Bearer t0ken');
+  });
+
+  it('falls back to the dev header when there is no token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    const client = createControlClient({ baseUrl: 'https://layup.blah.au', devUser: 'nick', fetchImpl: fetchMock });
+    await client.me().catch(() => undefined);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    const headers = new Headers(init.headers);
+    expect(headers.get('x-layup-dev-user')).toBe('nick');
+    expect(headers.get('authorization')).toBeNull();
+  });
+});
+
+/**
+ * A link is a key to somebody's call, so where it travels matters as much as
+ * what it opens. Nothing here may put one in a URL: Caddy's access-log filter
+ * redacts query strings but not paths, and the server moved redemption into
+ * the request body for exactly that reason (`httpapi/links.go`).
+ */
+describe('invitation links', () => {
+  it('mints one for a layup you are in', async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const client = createControlClient({
+      baseUrl: 'https://layup.blah.au',
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method });
+        return jsonResponse({
+          v: 1,
+          type: 'layup.link',
+          payload: { token: 'tok_abc', expiresAt: '2026-08-18T09:00:00Z' },
+        });
+      },
+    });
+
+    const link = await client.createLink('lay_abc12345');
+
+    expect(link.token).toBe('tok_abc');
+    expect(calls[0]).toEqual({
+      url: 'https://layup.blah.au/api/layups/lay_abc12345/link',
+      method: 'POST',
+    });
+  });
+
+  it('takes one back out of circulation', async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const client = createControlClient({
+      baseUrl: 'https://layup.blah.au',
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method });
+        return jsonResponse({ v: 1, type: 'layup.link.revoked', payload: { layupId: 'lay_abc12345' } });
+      },
+    });
+
+    await client.revokeLink('lay_abc12345');
+
+    expect(calls[0]).toEqual({
+      url: 'https://layup.blah.au/api/layups/lay_abc12345/link',
+      method: 'DELETE',
+    });
+  });
+
+  it('redeems one from the request body, never from the path', async () => {
+    const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
+    const client = createControlClient({
+      baseUrl: 'https://layup.blah.au',
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method, body: init?.body });
+        return jsonResponse({
+          v: 1,
+          type: 'layup.joined',
+          payload: {
+            layup: {
+              id: 'lay_abc12345',
+              organisationId: 'org_devlayup',
+              visibility: 'LINK',
+              active: true,
+              createdAt: '2026-08-17T09:00:00Z',
+              hasCreatorAuthority: false,
+              participants: [],
+            },
+            yourMembershipId: 'mem_1',
+          },
+        });
+      },
+    });
+
+    await client.joinByLink('tok_abc');
+
+    expect(calls[0]?.url).toBe('https://layup.blah.au/api/links/join');
+    expect(calls[0]?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0]?.body))).toEqual({ token: 'tok_abc' });
+    // The thing that must never be true: the token in the URL.
+    expect(calls[0]?.url).not.toContain('tok_abc');
+  });
+});
+
+/**
+ * The one distinction the whole recovery hangs on (0.3.1, item 6).
+ *
+ * A server that says "I do not know this token" and a server that cannot be
+ * reached look the same from a distance and could not be less alike in
+ * consequence: the first means this desktop's credential is dead and the
+ * config has to go, the second means wait. Flaky wifi must never log somebody
+ * out, so anything that is not an explicit refusal of the credential is not
+ * one.
+ */
+describe('telling a dead credential from a server that is not there', () => {
+  it('is a rejection only when the server refused the credential itself', () => {
+    expect(isCredentialRejection(new ControlRequestError('unauthenticated', 401))).toBe(true);
+    expect(isCredentialRejection(new ControlRequestError('forbidden', 403))).toBe(true);
+  });
+
+  it('is not a rejection for anything that might come back', () => {
+    // The server is up but broken, or overloaded.
+    expect(isCredentialRejection(new ControlRequestError('boom', 500))).toBe(false);
+    expect(isCredentialRejection(new ControlRequestError('gateway', 502))).toBe(false);
+    expect(isCredentialRejection(new ControlRequestError('busy', 503))).toBe(false);
+    // Offline, DNS failure, timeout: no HTTP status at all.
+    expect(isCredentialRejection(new TypeError('fetch failed'))).toBe(false);
+    expect(isCredentialRejection(new Error('getaddrinfo ENOTFOUND layup.example'))).toBe(false);
+    expect(isCredentialRejection(new ControlRequestError('aborted', 0))).toBe(false);
+    expect(isCredentialRejection(undefined)).toBe(false);
+    // 404 is a route that is not there, not a credential that is not ours.
+    expect(isCredentialRejection(new ControlRequestError('not found', 404))).toBe(false);
   });
 });

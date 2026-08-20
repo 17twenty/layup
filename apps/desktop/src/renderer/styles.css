@@ -37,6 +37,31 @@ body {
   font-size: 12px;
 }
 
+/* Footer chrome, deliberately: an update is never a dialog over a call. */
+.update {
+  font-size: 12px;
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+
+.update--error {
+  color: var(--warn, #d98c3f);
+}
+
+.update__restart {
+  background: none;
+  border: 1px solid #3a3f4b;
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 4px 10px;
+}
+
+.update__restart:hover {
+  border-color: var(--accent);
+}
+
 .status {
   font-size: 13px;
   margin: 0 0 16px;
@@ -219,6 +244,18 @@ body {
 .requests {
   display: grid;
   gap: 8px;
+  /* Pinned to the top of whatever it sits in, and above whatever scrolls
+     underneath it, so a card is reachable the instant it arrives no matter
+     how small the window is or how far down the page you happen to be. */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  padding-bottom: 8px;
+  /* A pile of requests grows the section internally rather than pushing its
+     own buttons off the window - never clip a card, scroll instead. */
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .request {
@@ -545,10 +582,52 @@ body {
   font-size: 12px;
 }
 
-/* The live layup: shared screen, cursors and the control surfaces */
+/* The live layup: shared screen, cursors and the control surfaces.
+
+   One column, top to bottom, for the whole life of the layup. What the modes
+   change is what is in it and what is over it - never whether it is there,
+   because taking it down takes the cameras and the microphones with it. */
 .room {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The call takes whatever the rest of the room leaves it. */
+.room .call {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Watching a screen is what the window grew for, so the screen takes the room
+   and the faces step down to a strip under it. */
+.room--viewer {
+  padding: 28px 12px 12px;
+}
+
+.room--viewer .room__surface {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.room--viewer .call {
+  flex: 0 0 auto;
+  height: auto;
+  background: transparent;
+}
+
+.room--viewer .call__stage {
+  padding: 0;
+}
+
+.room--viewer .faces--stage {
+  grid-auto-flow: column;
+  grid-auto-columns: 104px;
+  height: 68px;
 }
 
 .room__surface {
@@ -671,6 +750,15 @@ body {
   color: #ffb4bf;
 }
 
+/* A device fell back to the default rather than leaving a dead track - a
+   notice, not an error: the call is fine, just not on the device you picked. */
+.faces__notice {
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--warn, #d98c3f);
+}
+
 /* ---- A call: the people fill the window, controls sit under them ---- */
 
 /* One stable full-bleed drag layer. A drag strip that changes shape as faces
@@ -692,13 +780,59 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* The strip behind the traffic lights (trafficLightPosition {x:12,y:12} in
+   main/index.ts), present in every view because it is rendered once by the
+   shell (TitleBar.tsx) rather than by whichever view happens to be on
+   screen. Tall enough that the lights - and their hit-test area - sit
+   entirely inside it. */
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+}
+
+.titlebar__mute {
+  background: none;
+  border: none;
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.titlebar__mute:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .shell--layup {
-  display: block;
+  display: flex;
+  flex-direction: column;
   padding: 0;
   gap: 0;
   height: 100vh;
   min-height: 0;
-  overflow: hidden;
+  /* An invitation arriving mid-call must never be clipped: the room below it
+     shrinks to make room (.shell--layup .room, below) and, failing that,
+     this scrolls rather than cutting the card's buttons off. */
+  overflow-y: auto;
+}
+
+/* In a layup, the call still owns the window - it only yields the space an
+   invitation actually needs, instead of both insisting on 100vh at once. */
+.shell--layup .room {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .call {
@@ -747,7 +881,8 @@ body {
   font-size: 11px;
 }
 
-.faces--stage .faces__error {
+.faces--stage .faces__error,
+.faces--stage .faces__notice {
   position: absolute;
   inset: auto 8px 8px 8px;
 }
@@ -803,6 +938,277 @@ body {
   color: #ff4d64;
 }
 
+/* ---- Which microphone, which camera, which speaker ---- */
+
+/* The caret sits on the button it belongs to, so "which microphone?" is asked
+   where the microphone already is, mid-call, without going anywhere. */
+.callbar__group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.callbar__caret {
+  display: grid;
+  place-items: center;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #8b93a5;
+  cursor: pointer;
+}
+
+.callbar__caret:hover,
+.callbar__caret[aria-expanded='true'] {
+  background: #1b1f28;
+  color: var(--fg);
+}
+
+.callbar__caret svg {
+  width: 12px;
+  height: 12px;
+}
+
+.device-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+/* Anchored to the scrim, which is the window: the pill is 280px at its
+   narrowest, so a menu hung off the caret itself would fall out of the
+   window. It opens upwards because the bar is at the bottom. */
+.device-menu {
+  position: absolute;
+  bottom: 46px;
+  left: 8px;
+  min-width: 220px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 6px;
+  background: #161a21;
+  border: 1px solid #23262e;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+}
+
+.device-menu__group + .device-menu__group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #23262e;
+}
+
+.device-menu__title {
+  margin: 0 0 2px;
+  padding: 0 8px;
+  color: #8b93a5;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.device-menu__item {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #cfd6e4;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.device-menu__item:hover {
+  background: #23262e;
+}
+
+.device-menu__item[aria-checked='true'] {
+  color: var(--fg);
+}
+
+.device-menu__tick {
+  color: #38d39f;
+}
+
+/* Blank labels are a permission problem, not a hardware one - say which. */
+.device-menu__hint {
+  margin: 0;
+  padding: 6px 8px;
+  color: #8b93a5;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* ---- The connection readout: what a laggy call is actually doing ---- */
+
+/* Pinned to the left of the bar; the auto margin absorbs the space the
+   `justify-content: space-evenly` above would otherwise put around it, so the
+   four call buttons stay evenly spaced among themselves. */
+.connection-readout {
+  position: relative;
+  margin-right: auto;
+}
+
+.connection-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #1b1f28;
+  border: 1px solid #23262e;
+  border-radius: 999px;
+  color: #cfd6e4;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.connection-chip:hover {
+  background: #23262e;
+}
+
+.connection-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38d39f;
+}
+
+.connection-chip__rtt {
+  color: #8b93a3;
+}
+
+/* Relayed is not an error, but it explains the latency - and a tester needs
+   to notice it without opening the panel. */
+.connection-chip--relay {
+  border-color: #e0b452;
+}
+
+.connection-chip--relay .connection-chip__dot {
+  background: #e0b452;
+}
+
+.connection-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 25;
+  width: 220px;
+  padding: 10px 12px;
+  background: #161a21;
+  border: 1px solid #23262e;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  font-size: 11px;
+}
+
+.connection-panel dl {
+  margin: 0;
+}
+
+.connection-panel__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.connection-panel__row dt {
+  color: #8b93a3;
+}
+
+.connection-panel__row dd {
+  margin: 0;
+  color: #cfd6e4;
+  text-align: right;
+}
+
+.connection-chip__count {
+  padding-left: 6px;
+  border-left: 1px solid #2c3140;
+  color: #8b93a3;
+}
+
+/* One block per person, because "whose link is bad" is the question. The name
+   is the heading rather than another row: it is what the numbers under it are
+   about, not one of them. */
+.connection-panel__peer + .connection-panel__peer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #23262e;
+}
+
+.connection-panel__who {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #eef1f6;
+}
+
+.connection-panel__empty {
+  margin: 0;
+  color: #8b93a3;
+}
+
+/* Resolution and frame rate come from the local track, so they describe what
+   is on screen rather than any one link - separated from the links above. */
+.connection-panel__video {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #23262e;
+}
+
+.connection-panel__relay-note {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #23262e;
+  color: #e0b452;
+}
+
+/* The right-click entrance: a scrim to catch the outside click, one item. */
+.context-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.context-menu {
+  position: fixed;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #161a21;
+  border: 1px solid #23262e;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+}
+
+.context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #cfd6e4;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu__item:hover {
+  background: #23262e;
+}
+
 /* Smaller tiles, in a row, under a shared screen. */
 .faces--compact {
   gap: 6px;
@@ -821,12 +1227,19 @@ body {
   gap: 4px;
 }
 
-/* The picker sheet: the window grows for exactly as long as this is open. */
-.room--picker {
+/* The picker sheet: the window grows for exactly as long as this is open, and
+   the sheet is laid *over* the call rather than put in its place. Choosing a
+   window is not a reason to hang up on somebody. */
+.room__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
-  align-content: start;
   padding: 28px 12px 12px;
+  background: rgb(11 13 17 / 97%);
+  overflow: auto;
 }
 
 .room__sheet-header {
@@ -839,4 +1252,191 @@ body {
 .room__sheet-header h2 {
   margin: 0;
   font-size: 15px;
+}
+
+/* The first-run screen: three fields and a button, centred and alone. */
+.onboarding {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 32px;
+  -webkit-app-region: drag;
+}
+
+.onboarding__card {
+  width: min(420px, 100%);
+  -webkit-app-region: no-drag;
+}
+
+.onboarding__card h1 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.onboarding__form {
+  display: grid;
+  gap: 6px;
+  margin-top: 20px;
+}
+
+.onboarding__form label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.onboarding__form input {
+  background: #171a21;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  color: var(--fg);
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.onboarding__form input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.onboarding__connect {
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #0b0d12;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  margin-top: 18px;
+  padding: 11px 16px;
+}
+
+.onboarding__connect:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* The server's own words, verbatim: they say what to fix. */
+.onboarding__error {
+  color: #f0805a;
+  font-size: 13px;
+  margin: 14px 0 0;
+}
+
+/* The first paint, before the privileged side has said whether there is a
+   server. Empty on purpose: a spinner here would be a guess about what comes
+   next, and what comes next is decided by a file on disk. */
+.shell--waiting {
+  min-height: 100vh;
+}
+
+/* The permissions screen: four rows, each with a verdict and one thing to do.
+   Wider than the add-server card because a row carries a sentence, not a
+   field. */
+.onboarding__card--wide {
+  width: min(560px, 100%);
+}
+
+.permissions {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.permissions__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #23262e;
+}
+
+.permissions__what {
+  display: grid;
+  gap: 2px;
+}
+
+.permissions__name {
+  font-weight: 600;
+}
+
+.permissions__purpose {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* What to actually do, in the OS's own words for the pane it lives in. */
+.permissions__guidance {
+  color: #d98c3f;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.permissions__status {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.permissions__status--granted,
+.permissions__status--not-required {
+  color: #6fbf7f;
+}
+
+.permissions__status--denied,
+.permissions__status--restricted {
+  color: #f0805a;
+}
+
+.permissions__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* The way back to the permissions screen. Chrome, in the footer, next to the
+   other things a tester reads back to us. */
+.shell__footer-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+  margin: 0 0 6px;
+}
+
+/* Inline with the sentence it belongs to, rather than on its own line: it is
+   the answer to what that sentence just said. */
+.identity .shell__footer-link {
+  display: inline;
+  margin: 0;
+}
+
+/* The credential is dead and this is the only thing on screen that helps.
+   Loud enough to be found without reading the rest of the footer. */
+.shell__footer-link--urgent {
+  color: #f0805a;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Shown in place of the remote-control switches when macOS will discard every
+   event anyway. A switch here would be the silent failure with a nicer face. */
+.control__blocked {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.control__blocked p {
+  margin: 0;
+  color: #f0805a;
 }

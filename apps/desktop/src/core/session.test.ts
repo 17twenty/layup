@@ -243,6 +243,67 @@ describe('camera and microphone on the session', () => {
     expect(h.peers()[1]?.senders).toHaveLength(2);
   });
 
+  it('swaps one capture track in place, in the sender already carrying that kind', async () => {
+    const h = harness();
+    h.session.connect('mem_a');
+    h.session.connect('mem_b');
+
+    const video = fakeTrack('video');
+    const audio = fakeTrack('audio');
+    h.session.publishCamera({
+      getTracks: () => [video, audio],
+      getVideoTracks: () => [video],
+      getAudioTracks: () => [audio],
+    } as unknown as MediaStream);
+
+    const replacement = fakeTrack('audio');
+    await h.session.replaceCameraTrack(replacement);
+
+    for (const pc of h.peers()) {
+      // Changing a device must never add an m-line - two senders before, two
+      // senders after, and the audio landed in the audio one.
+      expect(pc.senders).toHaveLength(2);
+      const microphone = pc.senders[1]!;
+      expect(microphone.replaceTrack).toHaveBeenCalledWith(replacement);
+      expect(pc.senders[0]!.replaceTrack).not.toHaveBeenCalled();
+    }
+  });
+
+  it('has nothing to swap when nothing is published', async () => {
+    const h = harness();
+    h.session.connect('mem_a');
+    await expect(h.session.replaceCameraTrack(fakeTrack('audio'))).resolves.toBeUndefined();
+    expect(h.peers()[0]?.senders).toHaveLength(0);
+  });
+
+  it('re-publishing the same stream matches senders by kind, not by order', () => {
+    const h = harness();
+    h.session.connect('mem_a');
+    const video = fakeTrack('video');
+    const audio = fakeTrack('audio');
+    const stream = {
+      getTracks: () => [video, audio],
+      getVideoTracks: () => [video],
+      getAudioTracks: () => [audio],
+    } as unknown as MediaStream;
+    h.session.publishCamera(stream);
+
+    // A device swap leaves the same stream with its tracks in a new order.
+    const swappedAudio = fakeTrack('audio');
+    const reordered = {
+      getTracks: () => [swappedAudio, video],
+      getVideoTracks: () => [video],
+      getAudioTracks: () => [swappedAudio],
+    } as unknown as MediaStream;
+    h.session.publishCamera(reordered);
+
+    const pc = h.peers()[0]!;
+    expect(pc.senders).toHaveLength(2);
+    // Not the video sender: audio in a video m-line is a broken call.
+    expect(pc.senders[0]!.replaceTrack).not.toHaveBeenCalled();
+    expect(pc.senders[1]!.replaceTrack).toHaveBeenCalledWith(swappedAudio);
+  });
+
   it('classifies incoming video by who the domain says is presenting', () => {
     const h = harness();
     h.session.connect('mem_remote');

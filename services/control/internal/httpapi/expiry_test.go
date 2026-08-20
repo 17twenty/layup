@@ -17,7 +17,10 @@ import (
 // serverWithClock builds a server whose request clock the test controls.
 func serverWithClock(t *testing.T, ttl time.Duration) (*httptest.Server, *Server, func(time.Duration)) {
 	t.Helper()
-	cfg, err := config.Load(func(string) string { return "" })
+	// LAYUP_ENV=dev for the same reason as testServer (server_test.go): these
+	// callers declare an identity rather than proving one.
+	env := map[string]string{config.EnvPrefix + "ENV": "dev"}
+	cfg, err := config.Load(func(key string) string { return env[key] })
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}

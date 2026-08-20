@@ -7,6 +7,7 @@ describe('preload bridge surface', () => {
     const api = createLayupApi(async () => ({}));
     expect(Object.keys(api).sort()).toEqual([
       'app',
+      'attention',
       'capture',
       'control',
       'ice',
@@ -14,12 +15,16 @@ describe('preload bridge surface', () => {
       'input',
       'layup',
       'people',
+      'permissions',
+      'preferences',
       'protocolVersion',
       'realtime',
       'requests',
+      'server',
       'share',
       'signal',
       'ui',
+      'update',
     ]);
     expect(Object.keys(api.app)).toEqual(['info']);
     const serialised = JSON.stringify(api, (_key, value) =>

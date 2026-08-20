@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Join Layup</title>
+<!--
+  Plain HTML, no build step: bootstrap.sh copies this directory onto the VM
+  with a bare `cp -r` (deploy/vm/bootstrap.sh), so nothing here can depend on
+  a templating step or a bundler.
+
+  The join code itself is never baked into this file - the file is
+  committed to a git repository and LAYUP_JOIN_CODE is the one thing standing
+  between a stranger and an identity on this server (see deploy/vm/README.md
+  and services/control's Hosted directory). Instead this page is a plain
+  invite that the code rides on: whoever already has a code appends it as
+  `?code=...` (matching the same query-string shape as the `layup://` deep
+  link below) when they hand this link to somebody, so the code lives in the
+  message they send, never in source control.
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101216;
+    --fg: #e8eaf0;
+    --muted: #8c93a3;
+    --accent: #5b8def;
+    --panel: #181b21;
+    --border: #262b34;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 32px 16px;
+  }
+  main {
+    width: 100%;
+    max-width: 480px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+  p.tagline {
+    color: var(--accent);
+    margin: 0 0 28px;
+  }
+  .buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .button {
+    display: block;
+    text-align: center;
+    padding: 12px 20px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: 600;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .button--primary {
+    background: var(--accent);
+    color: #0a0e16;
+  }
+  .button--secondary {
+    background: transparent;
+    color: var(--fg);
+    border-color: var(--border);
+  }
+  .button[disabled],
+  .button[aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .code-panel {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .code-panel__label {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 6px;
+  }
+  .code-panel__value {
+    font: 20px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.04em;
+    word-break: break-all;
+    margin: 0;
+  }
+  /*
+    Normal-sized text on purpose - this is the sentence that matters most to
+    the person reading it, not a footnote. A first click on "Open in Layup"
+    doing nothing is the expected, correct behaviour before Layup is
+    installed, and saying so here is what keeps that silence from reading as
+    broken.
+  */
+  p.explainer {
+    font-size: 16px;
+    color: var(--fg);
+    margin: 0;
+  }
+  p.explainer strong {
+    color: var(--accent);
+  }
+  .no-code {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 0;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Join Layup</h1>
+  <p class="tagline">Somebody who is already here sent you this link.</p>
+
+  <div class="buttons">
+    <!--
+      Wired in plan 03 (packaging): the app is signed, notarised, stapled and
+      published; this points straight at the DMG (deploy/vm/README.md,
+      `make publish`).
+    -->
+    <a class="button button--secondary" href="/download/Layup.dmg" download>
+      Download Layup
+    </a>
+    <a id="open-in-layup" class="button button--primary" aria-disabled="true">
+      Open in Layup
+    </a>
+  </div>
+
+  <div id="code-section">
+    <!-- Filled in by the script below once the code is known. -->
+  </div>
+
+  <script>
+    (function () {
+      var SERVER = 'layup.blah.au';
+
+      function readCode() {
+        var params = new URLSearchParams(window.location.search);
+        var fromQuery = params.get('code');
+        if (fromQuery) return fromQuery.trim();
+        // Also accept /join/<code>, in case a future link is shaped that way.
+        var parts = window.location.pathname.split('/').filter(Boolean);
+        if (parts.length >= 2 && parts[0] === 'join') {
+          return decodeURIComponent(parts[1]).trim();
+        }
+        return '';
+      }
+
+      var code = readCode();
+      var openButton = document.getElementById('open-in-layup');
+      var codeSection = document.getElementById('code-section');
+
+      if (code) {
+        var deepLink =
+          'layup://join?server=' + encodeURIComponent(SERVER) + '&code=' + encodeURIComponent(code);
+        openButton.setAttribute('href', deepLink);
+        openButton.removeAttribute('aria-disabled');
+
+        var panel = document.createElement('div');
+        panel.className = 'code-panel';
+        panel.innerHTML =
+          '<p class="code-panel__label">Your join code</p>' +
+          '<p class="code-panel__value"></p>';
+        panel.querySelector('.code-panel__value').textContent = code;
+        codeSection.appendChild(panel);
+
+        var explainer = document.createElement('p');
+        explainer.className = 'explainer';
+        explainer.innerHTML =
+          'If <strong>Open in Layup</strong> did nothing just now, that’s normal — ' +
+          'it means Layup isn’t installed on this Mac yet. Once it is, open it, choose ' +
+          '<strong>Add a server</strong>, and paste in <strong>' + SERVER + '</strong> and the ' +
+          'code above by hand.';
+        codeSection.appendChild(explainer);
+      } else {
+        var missing = document.createElement('p');
+        missing.className = 'no-code';
+        missing.textContent =
+          "This link didn't carry a join code. Ask whoever sent it for the full link, " +
+          'or for the code on its own to paste into Add server.';
+        codeSection.appendChild(missing);
+      }
+    })();
+  </script>
+</main>
+</body>
+</html>

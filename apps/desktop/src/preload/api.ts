@@ -6,6 +6,7 @@ import {
   type ChannelSpec,
   type EventName,
   type EventPayload,
+  type PermissionKind,
   type RequestOf,
   type ResponseOf,
 } from '../shared/ipc';
@@ -59,6 +60,24 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
     app: {
       info: () => invoke('app:info', undefined),
     },
+    server: {
+      /** Whether a server has been added, and which one. Never the token. */
+      state: () => invoke('server:state', undefined),
+      /**
+       * Joins a server with its join code. The token it returns is written by
+       * the privileged side and never comes back across this bridge.
+       */
+      add: (input: { serverUrl: string; code: string; displayName: string }) =>
+        invoke('server:add', input),
+      /** Forgets the server and the token that went with it. */
+      forget: () => invoke('server:forget', undefined),
+      /** Subscribe to server changes. Returns unsubscribe. */
+      onChanged: (handler: (state: EventPayload<'server:changed'>) => void) =>
+        subscribe('server:changed', handler),
+      /** Subscribe to a join link arriving. Returns unsubscribe. */
+      onPrefill: (handler: (link: EventPayload<'server:prefill'>) => void) =>
+        subscribe('server:prefill', handler),
+    },
     capture: {
       /** Screens and windows that could be shared. */
       sources: () => invoke('capture:sources', undefined),
@@ -66,6 +85,18 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       permission: () => invoke('capture:permission', undefined),
       /** Opens the OS screen-recording settings page. */
       openSettings: () => invoke('capture:openSettings', undefined),
+    },
+    permissions: {
+      /** Camera, microphone, screen recording and accessibility, all at once. */
+      all: () => invoke('permissions:all', undefined),
+      /**
+       * Raises the real OS prompt, where there is one. Answers whether the
+       * permission is granted now - false for the two macOS only grants in
+       * System Settings, so the caller offers the settings pane instead.
+       */
+      request: (kind: PermissionKind) => invoke('permissions:request', { kind }),
+      /** Opens the exact settings pane this permission is granted in. */
+      openSettings: (kind: PermissionKind) => invoke('permissions:openSettings', { kind }),
     },
     control: {
       /** Current connection state of the Go control plane. */
@@ -149,8 +180,10 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       leave: () => invoke('layup:leave', undefined),
       /** Organisation-open layups you could walk into. */
       open: () => invoke('layup:open', undefined),
-      /** Mints an opaque invitation link for the layup you are in. */
+      /** The URL to hand somebody, for the layup you are in. */
       link: () => invoke('layup:link', undefined),
+      /** Takes that URL out of circulation. Nobody already inside is removed. */
+      revokeLink: () => invoke('layup:revokeLink', undefined),
       /** Joins using an invitation link token. */
       joinLink: (token: string) => invoke('layup:joinLink', { token }),
       /** Subscribe to layup state changes. Returns unsubscribe. */
@@ -185,12 +218,37 @@ export function createLayupApi(invoker: Invoker, subscriber: Subscriber = () => 
       /** The mode actually in effect. Returns unsubscribe. */
       onMode: (handler: (payload: EventPayload<'ui:mode'>) => void) => subscribe('ui:mode', handler),
     },
+    update: {
+      /** Whether a newer Layup is waiting, and how far along it is. */
+      state: () => invoke('update:state', undefined),
+      /**
+       * Asks to restart into a downloaded update. Answers false when there is
+       * nothing to install or a layup is live - the privileged side decides.
+       */
+      install: () => invoke('update:install', undefined),
+      /** Subscribe to update-state changes. Returns unsubscribe. */
+      onChanged: (handler: (state: EventPayload<'update:changed'>) => void) =>
+        subscribe('update:changed', handler),
+    },
     realtime: {
       /** Current realtime connection state. */
       status: () => invoke('realtime:status', undefined),
       /** Subscribe to realtime connection-state changes. Returns unsubscribe. */
       onState: (handler: (state: EventPayload<'realtime:state'>) => void) =>
         subscribe('realtime:state', handler),
+    },
+    preferences: {
+      /** Small preferences with no server of their own - currently just the mute toggle. */
+      get: () => invoke('preferences:get', undefined),
+      set: (next: { soundsMuted: boolean }) => invoke('preferences:set', next),
+    },
+    attention: {
+      /**
+       * Fires exactly when the dock/taskbar alerts for a newly arrived
+       * request (main/attention.ts's `alerted` set) - never on a repeat and
+       * never on a request going away. Returns unsubscribe.
+       */
+      onAlert: (handler: () => void) => subscribe('attention:alert', () => handler()),
     },
   } as const;
 }

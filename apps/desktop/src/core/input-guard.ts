@@ -50,7 +50,8 @@ export type RefusalReason =
   | 'stopped'
   | 'scope-off'
   | 'wrong-display'
-  | 'replayed';
+  | 'replayed'
+  | 'guest';
 
 export type InputDecision =
   | { allowed: true; message: InputMessage }
@@ -73,6 +74,20 @@ export interface InputGuardOptions {
    * should not depend on a bookkeeping step having run correctly.
    */
   allowsScope?: (scope: ControlScope) => boolean;
+  /**
+   * Whether a membership belongs to a guest: a browser visitor who arrived by
+   * link, never someone with an account (the web-guests design, §8). A guest
+   * is refused regardless of what the room-wide switches say - sharing
+   * control with "the room" never meant a stranger holding a URL - and this
+   * is the client-side half of that refusal. The server independently
+   * refuses to ever issue the grant in the first place
+   * (`httpapi/share_settings.go`); this exists in case one arrives anyway.
+   *
+   * The desktop client only ever sees membership ids on the wire, never user
+   * ids, so it cannot answer this on its own - the caller supplies it from
+   * `ParticipantDTO.isGuest`, which the server marks.
+   */
+  isGuestMembership?: (membershipId: string) => boolean;
   now?: () => number;
   newGrantId?: () => string;
 }
@@ -137,6 +152,9 @@ export function createInputGuard(options: InputGuardOptions): InputGuard {
 
     allows(membershipId, scope) {
       if (membershipId === options.localMembershipId) return false;
+      // A guest is never part of "the room" for control purposes, whatever
+      // the room-wide switch says.
+      if (options.isGuestMembership?.(membershipId)) return false;
       if (!sharedDisplay()) return false;
       if (!scopeShared(scope)) return false;
       return !stops.has(key(membershipId, scope));
@@ -171,6 +189,13 @@ export function createInputGuard(options: InputGuardOptions): InputGuard {
 
       // Everything below acts on this machine.
       if (!options.isPresenting()) return refuse('not-presenting');
+
+      // A guest is refused before anything else here: not a stop, not a
+      // scope check, and not something a room-wide "shared" switch can ever
+      // undo. Checked here rather than folded into a scope check because a
+      // guest must be refused even if a future scope needs no room-wide
+      // switch at all.
+      if (options.isGuestMembership?.(message.membershipId)) return refuse('guest');
 
       const scope = isLeaseMessage(message) ? message.scope : scopeOf(message);
       if (!scope) return refuse('malformed');

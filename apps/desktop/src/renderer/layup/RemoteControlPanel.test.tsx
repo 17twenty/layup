@@ -89,3 +89,118 @@ describe('sharing control of this machine', () => {
     expect(text).not.toContain('admin');
   });
 });
+
+/**
+ * The switch that appears to work (task 9).
+ *
+ * Without macOS Accessibility, `CGEventPost` silently discards every event -
+ * the helper's own source calls this the worst possible failure. A switch that
+ * flips on and changes nothing is that failure with a nicer face on it, so the
+ * switch is not offered at all.
+ */
+const accessibilityMissing = {
+  status: 'denied' as const,
+  ok: false,
+  guidance:
+    'macOS is not letting Layup control this Mac, so remote control does nothing at all. ' +
+    'Open Privacy & Security → Accessibility, tick Layup, then restart it.',
+  canOpenSettings: true,
+  canRequest: false,
+};
+
+describe('when macOS will not let anything be posted', () => {
+  it('shows the guidance instead of a switch that does nothing', () => {
+    const onOpenAccessibilitySettings = vi.fn();
+    render(
+      <RemoteControlPanel
+        state={off}
+        participants={participants}
+        onSetAllowed={vi.fn()}
+        onStop={vi.fn()}
+        onResume={vi.fn()}
+        accessibility={accessibilityMissing}
+        onOpenAccessibilitySettings={onOpenAccessibilitySettings}
+      />,
+    );
+
+    expect(screen.getByTestId('control-accessibility')).toHaveTextContent(
+      /Privacy & Security.*Accessibility/,
+    );
+    // The switches are gone, not merely disabled-looking: a checkbox that
+    // flips and changes nothing is exactly the silent failure.
+    expect(screen.queryByTestId('allow-pointer')).toBeNull();
+    expect(screen.queryByTestId('allow-keyboard')).toBeNull();
+  });
+
+  it('offers the settings pane, which is the only thing that fixes it', async () => {
+    const onOpenAccessibilitySettings = vi.fn();
+    render(
+      <RemoteControlPanel
+        state={off}
+        participants={participants}
+        onSetAllowed={vi.fn()}
+        onStop={vi.fn()}
+        onResume={vi.fn()}
+        accessibility={accessibilityMissing}
+        onOpenAccessibilitySettings={onOpenAccessibilitySettings}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('open-accessibility-settings'));
+    expect(onOpenAccessibilitySettings).toHaveBeenCalled();
+  });
+
+  it('never claims the room can use a machine macOS is blocking', () => {
+    render(
+      <RemoteControlPanel
+        state={{ allowed: { pointer: true, keyboard: true }, stopped: [], anyoneHasControl: true }}
+        participants={participants}
+        onSetAllowed={vi.fn()}
+        onStop={vi.fn()}
+        onResume={vi.fn()}
+        accessibility={accessibilityMissing}
+      />,
+    );
+
+    // A stale grant from before the permission was revoked must not become
+    // "Everyone here can use your mouse and keyboard", which would be a lie.
+    expect(screen.queryByTestId('control-summary')).toBeNull();
+  });
+
+  it('leaves the switches alone once macOS is happy', () => {
+    render(
+      <RemoteControlPanel
+        state={off}
+        participants={participants}
+        onSetAllowed={vi.fn()}
+        onStop={vi.fn()}
+        onResume={vi.fn()}
+        accessibility={{ ...accessibilityMissing, status: 'granted', ok: true, guidance: '' }}
+      />,
+    );
+
+    expect(screen.getByTestId('allow-pointer')).toBeInTheDocument();
+    expect(screen.queryByTestId('control-accessibility')).toBeNull();
+  });
+
+  it('does not block the switches on a platform with no such permission', () => {
+    render(
+      <RemoteControlPanel
+        state={off}
+        participants={participants}
+        onSetAllowed={vi.fn()}
+        onStop={vi.fn()}
+        onResume={vi.fn()}
+        accessibility={{
+          status: 'not-required',
+          ok: true,
+          guidance: '',
+          canOpenSettings: false,
+          canRequest: false,
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('allow-pointer')).toBeInTheDocument();
+  });
+});

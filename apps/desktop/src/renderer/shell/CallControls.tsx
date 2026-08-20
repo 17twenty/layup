@@ -1,3 +1,8 @@
+import type { DeviceList } from '../../core/devices';
+import { NO_DEVICES } from '../../core/devices';
+import { ConnectionReadout, type ConnectionPeer } from '../layup/ConnectionReadout';
+import { DevicePicker } from './DevicePicker';
+
 /**
  * The bar along the bottom of a call.
  *
@@ -7,6 +12,18 @@
  *
  * Share is the accented one - it is why the application exists - and Leave is
  * the only red thing in the window.
+ *
+ * The microphone and the camera each carry a caret, because "which
+ * microphone?" is asked mid-call, by somebody who has just been told they
+ * cannot be heard - and choosing there swaps the track in place rather than
+ * renegotiating, so nobody's audio drops while they do it. The speaker lives
+ * under the microphone's caret: it is the same question about the same
+ * conversation.
+ *
+ * The connection chip rides along here too - it is the discoverable entrance
+ * to the same readout the call surface's right-click menu opens (route,
+ * candidate types, resolution, framerate). A laggy call is otherwise a mystery:
+ * relayed, on a bad link, or the encoder, and nobody testing it can tell which.
  */
 export interface CallControlsProps {
   microphoneEnabled: boolean;
@@ -17,6 +34,32 @@ export interface CallControlsProps {
   onShare: () => void;
   onStopSharing: () => void;
   onLeave: () => void;
+  /**
+   * Hands out a URL for this call and copies it. Absent means this surface
+   * cannot invite anybody - there is no button rather than a dead one.
+   */
+  onInvite?: () => void;
+  /** Takes that URL back. Shown only while there is a live one to take back. */
+  onRevokeInvite?: () => void;
+  /** True once a link has been handed out and not yet revoked. */
+  hasInviteLink?: boolean;
+  /** One entry per peer: who the link goes to, and what it is doing. */
+  diagnosticsPeers?: readonly ConnectionPeer[];
+  /** The incoming video track, for resolution and framerate. */
+  diagnosticsVideoTrack?: MediaStreamTrack;
+  diagnosticsExpanded: boolean;
+  onToggleDiagnostics: () => void;
+  /** What this machine has. Absent means no carets - nothing to choose from. */
+  devices?: DeviceList;
+  /** The devices in use; undefined means the system default. */
+  microphoneId?: string;
+  cameraId?: string;
+  speakerId?: string;
+  onSelectMicrophone?: (deviceId: string) => void;
+  onSelectCamera?: (deviceId: string) => void;
+  onSelectSpeaker?: (deviceId: string) => void;
+  /** Opening a list is when the devices are worth re-reading. */
+  onOpenDevices?: () => void;
 }
 
 export function CallControls({
@@ -28,30 +71,131 @@ export function CallControls({
   onShare,
   onStopSharing,
   onLeave,
+  onInvite,
+  onRevokeInvite,
+  hasInviteLink = false,
+  diagnosticsPeers,
+  diagnosticsVideoTrack,
+  diagnosticsExpanded,
+  onToggleDiagnostics,
+  devices = NO_DEVICES,
+  microphoneId,
+  cameraId,
+  speakerId,
+  onSelectMicrophone,
+  onSelectCamera,
+  onSelectSpeaker,
+  onOpenDevices,
 }: CallControlsProps) {
   return (
     <footer className="callbar no-drag" aria-label="Call controls">
-      <button
-        type="button"
-        className="callbar__button"
-        aria-pressed={!microphoneEnabled}
-        onClick={() => onToggleMicrophone(!microphoneEnabled)}
-        data-testid="toggle-microphone"
-      >
-        <MicrophoneIcon muted={!microphoneEnabled} />
-        <span>{microphoneEnabled ? 'Mute' : 'Unmute'}</span>
-      </button>
+      <ConnectionReadout
+        {...(diagnosticsPeers ? { peers: diagnosticsPeers } : {})}
+        {...(diagnosticsVideoTrack ? { videoTrack: diagnosticsVideoTrack } : {})}
+        expanded={diagnosticsExpanded}
+        onToggle={onToggleDiagnostics}
+      />
 
-      <button
-        type="button"
-        className="callbar__button"
-        aria-pressed={!cameraEnabled}
-        onClick={() => onToggleCamera(!cameraEnabled)}
-        data-testid="toggle-camera"
-      >
-        <CameraIcon off={!cameraEnabled} />
-        <span>{cameraEnabled ? 'Stop video' : 'Start video'}</span>
-      </button>
+      <div className="callbar__group">
+        <button
+          type="button"
+          className="callbar__button"
+          aria-pressed={!microphoneEnabled}
+          onClick={() => onToggleMicrophone(!microphoneEnabled)}
+          data-testid="toggle-microphone"
+        >
+          <MicrophoneIcon muted={!microphoneEnabled} />
+          <span>{microphoneEnabled ? 'Mute' : 'Unmute'}</span>
+        </button>
+        {onSelectMicrophone || onSelectSpeaker ? (
+          <DevicePicker
+            label="Choose microphone and speaker"
+            testId="choose-microphone"
+            labelsHidden={devices.labelsHidden}
+            {...(onOpenDevices ? { onOpen: onOpenDevices } : {})}
+            choices={[
+              ...(onSelectMicrophone
+                ? [
+                    {
+                      title: 'Microphone',
+                      devices: devices.microphones,
+                      ...(microphoneId ? { selectedId: microphoneId } : {}),
+                      onSelect: onSelectMicrophone,
+                    },
+                  ]
+                : []),
+              ...(onSelectSpeaker
+                ? [
+                    {
+                      title: 'Speaker',
+                      devices: devices.speakers,
+                      ...(speakerId ? { selectedId: speakerId } : {}),
+                      onSelect: onSelectSpeaker,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        ) : null}
+      </div>
+
+      <div className="callbar__group">
+        <button
+          type="button"
+          className="callbar__button"
+          aria-pressed={!cameraEnabled}
+          onClick={() => onToggleCamera(!cameraEnabled)}
+          data-testid="toggle-camera"
+        >
+          <CameraIcon off={!cameraEnabled} />
+          <span>{cameraEnabled ? 'Stop video' : 'Start video'}</span>
+        </button>
+        {onSelectCamera ? (
+          <DevicePicker
+            label="Choose camera"
+            testId="choose-camera"
+            labelsHidden={devices.labelsHidden}
+            {...(onOpenDevices ? { onOpen: onOpenDevices } : {})}
+            choices={[
+              {
+                title: 'Camera',
+                devices: devices.cameras,
+                ...(cameraId ? { selectedId: cameraId } : {}),
+                onSelect: onSelectCamera,
+              },
+            ]}
+          />
+        ) : null}
+      </div>
+
+      {/* Inviting somebody who has no Layup and no account. It sits next to
+          Share because it is the same kind of act - opening this call to one
+          more person - and because "I'll send you a link" is said mid-call,
+          not from a settings screen. */}
+      {onInvite ? (
+        <div className="callbar__group">
+          <button
+            type="button"
+            className="callbar__button"
+            onClick={onInvite}
+            data-testid="invite-by-link"
+          >
+            <LinkIcon />
+            <span>{hasInviteLink ? 'Copy link' : 'Invite'}</span>
+          </button>
+          {hasInviteLink && onRevokeInvite ? (
+            <button
+              type="button"
+              className="callbar__caret"
+              onClick={onRevokeInvite}
+              aria-label="Stop this invitation link working"
+              data-testid="revoke-invite-link"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {presenting ? (
         <button
@@ -116,6 +260,20 @@ function CameraIcon({ off }: { off: boolean }) {
       <rect x="3" y="6" width="12" height="12" rx="2" fill="currentColor" />
       <path d="M16 11l5-3v8l-5-3z" fill="currentColor" />
       {off ? <path d="M4 3l16 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /> : null}
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M9.5 14.5 14.5 9.5M10 6.5l1.8-1.8a4 4 0 1 1 5.7 5.7L15.6 12M14 17.5l-1.8 1.8a4 4 0 1 1-5.7-5.7L8.4 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

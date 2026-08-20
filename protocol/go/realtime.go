@@ -23,6 +23,10 @@ const (
 const (
 	QueryProtocolVersion = "v"
 	QueryDevUser         = "devUser"
+	// QueryToken carries a bearer token on the WebSocket handshake. The
+	// browser WebSocket API cannot set headers, so the token travels in the
+	// URL - which is safe only under TLS, and only if it never reaches a log.
+	QueryToken = "token"
 )
 
 // HelloOKPayload tells a freshly connected client what it is connected as.
