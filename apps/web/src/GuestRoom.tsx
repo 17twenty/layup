@@ -78,8 +78,26 @@ export function GuestRoom({ room, scheduleFrame, cancelFrame }: GuestRoomProps) 
 
       <section className="room__faces" aria-label="People">
         {room.remotes.map((remote) => (
-          <Face key={remote.membershipId} stream={remote.camera} label={room.identify(remote.membershipId).label} />
+          <Face
+            key={remote.membershipId}
+            stream={remote.camera}
+            label={remote.displayName ?? room.identify(remote.membershipId).label}
+          />
         ))}
+        {/* Your own face, last, exactly as the desktop's FaceTiles does it:
+            mirrored, because a video of yourself that moves the wrong way is
+            unusable, and muted, because hearing yourself is unbearable. It is
+            here whether or not the camera has opened yet - "am I on, am I in
+            frame, am I lit" is the question, and an absent tile answers none
+            of them. */}
+        <Face
+          {...(room.av.stream ? { stream: room.av.stream } : {})}
+          label="You"
+          testId="face-self"
+          mirrored
+          muted
+          {...(room.av.cameraEnabled ? {} : { notice: 'Your camera is off' })}
+        />
       </section>
 
       <footer className="room__controls">
@@ -95,15 +113,43 @@ export function GuestRoom({ room, scheduleFrame, cancelFrame }: GuestRoomProps) 
   );
 }
 
-function Face({ stream, label }: { stream?: MediaStream; label: string }) {
+function Face({
+  stream,
+  label,
+  mirrored = false,
+  muted = false,
+  notice,
+  testId,
+}: {
+  stream?: MediaStream;
+  label: string;
+  /** Your own tile only: a self-view has to be a mirror to be usable. */
+  mirrored?: boolean;
+  /** Your own tile only, always: never play your own microphone back. */
+  muted?: boolean;
+  /** Said instead of showing a black rectangle nobody can explain. */
+  notice?: string;
+  testId?: string;
+}) {
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream ?? null;
   }, [stream]);
   return (
-    <figure className="face">
-      <video ref={ref} autoPlay playsInline className="face__video" aria-label={label} />
+    <figure className={mirrored ? 'face face--self' : 'face'} {...(testId ? { 'data-testid': testId } : {})}>
+      <video
+        ref={ref}
+        autoPlay
+        playsInline
+        muted={muted}
+        className={mirrored ? 'face__video face__video--mirrored' : 'face__video'}
+        // Inline, not in a class: this bundle carries no stylesheet, and a
+        // self-view that is not actually mirrored is not a self-view.
+        {...(mirrored ? { style: { transform: 'scaleX(-1)' } } : {})}
+        aria-label={label}
+      />
       <figcaption>{label}</figcaption>
+      {notice ? <p className="face__notice">{notice}</p> : null}
     </figure>
   );
 }

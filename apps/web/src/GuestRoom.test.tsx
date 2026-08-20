@@ -89,3 +89,36 @@ describe('the call, in a browser', () => {
     expect(screen.queryByRole('button', { name: /share/i })).toBeNull();
   });
 });
+
+/**
+ * A guest could not see themselves (0.3.1, item 5).
+ *
+ * Their camera was captured and published correctly - the desktop saw them the
+ * whole time - and the one thing missing was the tile that tells you your
+ * camera is on, that you are in frame, and that you are lit. The desktop's
+ * `FaceTiles` has always had one and this had none, so the room mapped
+ * `remotes` and stopped.
+ */
+describe('a guest looking at themselves', () => {
+  it('shows their own camera, mirrored and silent', () => {
+    render(<GuestRoom room={room({ av: { cameraEnabled: true, microphoneEnabled: true, muted: false, stream: fakeStream() } })} />);
+
+    const self = screen.getByTestId('face-self');
+    const video = self.querySelector('video');
+    // Mirrored, because a video of yourself that moves the wrong way is
+    // unusable; muted, because hearing yourself is unbearable.
+    expect(video).toHaveClass('face__video--mirrored');
+    expect(video).toHaveStyle({ transform: 'scaleX(-1)' });
+    expect(video).toHaveProperty('muted', true);
+  });
+
+  it('is there before the camera is, so the tile is not a surprise', () => {
+    render(<GuestRoom room={room()} />);
+    expect(screen.getByTestId('face-self')).toBeInTheDocument();
+  });
+
+  it('says the camera is off rather than showing a black rectangle', () => {
+    render(<GuestRoom room={room({ av: { cameraEnabled: false, microphoneEnabled: true, muted: false, stream: fakeStream() } })} />);
+    expect(screen.getByTestId('face-self')).toHaveTextContent(/camera is off/i);
+  });
+});
