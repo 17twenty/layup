@@ -407,9 +407,40 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
   );
   const setSpeaker = useCallback((deviceId?: string) => void avRef.current.setSpeaker(deviceId), []);
 
+  /**
+   * The peers, with the names the roster already knows.
+   *
+   * The session deals in membership ids - that is all the wire carries - so
+   * nothing downstream of it had a name to show and every face read "Someone",
+   * a guest's most of all: they are in no directory, and the roster's
+   * `displayName` (the server's own `guestStore` fallback) is the only place
+   * their chosen name exists. Read through the same identity book the cursors
+   * and strokes are labelled from, so one person is never two names at once.
+   */
+  const names = useMemo(() => {
+    const book = new Map<string, string>();
+    for (const participant of participants ?? []) {
+      if (participant.displayName) book.set(participant.membershipId, participant.displayName);
+    }
+    return book;
+  }, [participants]);
+
+  const named = useMemo(
+    () =>
+      remotes.map((remote) => ({
+        ...remote,
+        // Read from the roster rather than from the identity book, which is
+        // filled in an effect: a name that lands a render later than the peer
+        // did would otherwise be stuck at "Someone" until something else
+        // happened to re-render.
+        displayName: remote.displayName ?? names.get(remote.membershipId) ?? 'Someone',
+      })),
+    [remotes, names],
+  );
+
   return useMemo(
     () => ({
-      remotes,
+      remotes: named,
       av,
       setCamera,
       setMicrophone,
@@ -428,7 +459,7 @@ export function useLayupRoom({ layup, share, localScreen }: UseLayupRoomOptions)
       ...(sharedSourceId ? { targetDisplayId: sharedSourceId } : {}),
     }),
     [
-      remotes,
+      named,
       av,
       setCamera,
       setMicrophone,
