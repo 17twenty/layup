@@ -283,11 +283,28 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
       displayName: participant.displayName ?? 'Someone',
     }));
 
-  // PLAN-1 is 1:1, so there is normally exactly one entry - keyed by the
-  // other participant when known, falling back to whichever peer answered
-  // rather than showing nothing while that lines up.
-  const primaryDiagnostics =
-    (others[0] && room.diagnostics[others[0].membershipId]) ?? Object.values(room.diagnostics)[0];
+  /**
+   * One readout row per peer, named.
+   *
+   * `room.diagnostics` is keyed by membership and always has been; what was
+   * missing was anything that said *whose* a given reading was, so a single
+   * one was picked and the panel could report a healthy link while somebody
+   * else was on a broken one. Built from the roster so a peer who has not
+   * produced a sample yet still gets a row saying so, and from the diagnostics
+   * as well so a peer the roster has not caught up with is not invisible.
+   */
+  const diagnosticsPeers = [
+    ...others.map((participant) => ({
+      membershipId: participant.membershipId,
+      label: participant.displayName,
+      ...(room.diagnostics[participant.membershipId]
+        ? { diagnostics: room.diagnostics[participant.membershipId]! }
+        : {}),
+    })),
+    ...Object.entries(room.diagnostics)
+      .filter(([membershipId]) => !others.some((other) => other.membershipId === membershipId))
+      .map(([membershipId, diagnostics]) => ({ membershipId, label: 'Someone', diagnostics })),
+  ];
 
   // Whichever incoming video is actually on screen: the shared desktop when
   // there is one to watch, otherwise a camera - resolution and framerate
@@ -399,7 +416,7 @@ export function LayupRoom({ layup, onLeave }: LayupRoomProps) {
         onInvite={() => void invite()}
         onRevokeInvite={() => void revokeInvite()}
         hasInviteLink={Boolean(inviteLink)}
-        {...(primaryDiagnostics ? { diagnostics: primaryDiagnostics } : {})}
+        {...(diagnosticsPeers.length ? { diagnosticsPeers } : {})}
         {...(incomingVideoTrack ? { diagnosticsVideoTrack: incomingVideoTrack } : {})}
         devices={room.devices}
         onSelectMicrophone={room.setMicrophoneDevice}

@@ -94,8 +94,22 @@ describe('the connection readout, reachable in a call', () => {
 
   it('marks a relayed route as distinct from a direct one', () => {
     const relayed: RouteDiagnostics = { route: 'relay', relayed: true, rttMs: 120 };
-    renderPill({ diagnostics: relayed });
+    renderPill({ diagnosticsPeers: [{ membershipId: 'm-karl', label: 'Karl', diagnostics: relayed }] });
     expect(screen.getByTestId('connection-chip')).toHaveClass('connection-chip--relay');
+  });
+
+  it('names whose link each row describes', async () => {
+    const direct: RouteDiagnostics = { route: 'direct', relayed: false, rttMs: 12 };
+    const relayed: RouteDiagnostics = { route: 'relay', relayed: true, rttMs: 120 };
+    renderPill({
+      diagnosticsPeers: [
+        { membershipId: 'm-karl', label: 'Karl', diagnostics: direct },
+        { membershipId: 'm-guest', label: 'Sam', diagnostics: relayed },
+      ],
+    });
+    await userEvent.click(screen.getByTestId('connection-chip'));
+    expect(screen.getByTestId('connection-peer-m-karl')).toHaveTextContent('Karl');
+    expect(screen.getByTestId('connection-peer-m-guest')).toHaveTextContent('Sam');
   });
 
   it('expands the panel when the chip is clicked', async () => {

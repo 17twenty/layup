@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { AvState } from '../../core/av';
 import type { DeviceList } from '../../core/devices';
-import type { RouteDiagnostics } from '../../core/ice-diagnostics';
+import type { ConnectionPeer } from '../layup/ConnectionReadout';
 import type { RemoteMedia } from '../../core/session';
 import { FaceTiles } from '../layup/FaceTiles';
 import { CallControls } from './CallControls';
@@ -36,8 +36,8 @@ export interface CompactBarProps {
   onInvite?: () => void;
   onRevokeInvite?: () => void;
   hasInviteLink?: boolean;
-  /** This call's route, RTT and candidate types, or undefined before the first sample lands. */
-  diagnostics?: RouteDiagnostics;
+  /** One entry per peer, so the panel can say whose link is which. */
+  diagnosticsPeers?: readonly ConnectionPeer[];
   /** The incoming video track, for resolution and framerate. */
   diagnosticsVideoTrack?: MediaStreamTrack;
   /** The microphones, cameras and speakers this machine has, for the carets. */
@@ -63,7 +63,7 @@ export function CompactBar({
   onInvite,
   onRevokeInvite,
   hasInviteLink,
-  diagnostics,
+  diagnosticsPeers,
   diagnosticsVideoTrack,
   devices,
   onSelectMicrophone,
@@ -114,7 +114,7 @@ export function CompactBar({
         {...(onInvite ? { onInvite } : {})}
         {...(onRevokeInvite ? { onRevokeInvite } : {})}
         {...(hasInviteLink === undefined ? {} : { hasInviteLink })}
-        {...(diagnostics ? { diagnostics } : {})}
+        {...(diagnosticsPeers ? { diagnosticsPeers } : {})}
         {...(diagnosticsVideoTrack ? { diagnosticsVideoTrack } : {})}
         diagnosticsExpanded={diagnosticsExpanded}
         onToggleDiagnostics={() => setDiagnosticsExpanded((value) => !value)}

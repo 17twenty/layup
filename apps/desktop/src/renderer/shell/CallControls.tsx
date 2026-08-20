@@ -1,7 +1,6 @@
 import type { DeviceList } from '../../core/devices';
 import { NO_DEVICES } from '../../core/devices';
-import type { RouteDiagnostics } from '../../core/ice-diagnostics';
-import { ConnectionReadout } from '../layup/ConnectionReadout';
+import { ConnectionReadout, type ConnectionPeer } from '../layup/ConnectionReadout';
 import { DevicePicker } from './DevicePicker';
 
 /**
@@ -44,8 +43,8 @@ export interface CallControlsProps {
   onRevokeInvite?: () => void;
   /** True once a link has been handed out and not yet revoked. */
   hasInviteLink?: boolean;
-  /** This call's route, RTT and candidate types, or undefined before the first sample lands. */
-  diagnostics?: RouteDiagnostics;
+  /** One entry per peer: who the link goes to, and what it is doing. */
+  diagnosticsPeers?: readonly ConnectionPeer[];
   /** The incoming video track, for resolution and framerate. */
   diagnosticsVideoTrack?: MediaStreamTrack;
   diagnosticsExpanded: boolean;
@@ -75,7 +74,7 @@ export function CallControls({
   onInvite,
   onRevokeInvite,
   hasInviteLink = false,
-  diagnostics,
+  diagnosticsPeers,
   diagnosticsVideoTrack,
   diagnosticsExpanded,
   onToggleDiagnostics,
@@ -91,7 +90,7 @@ export function CallControls({
   return (
     <footer className="callbar no-drag" aria-label="Call controls">
       <ConnectionReadout
-        {...(diagnostics ? { diagnostics } : {})}
+        {...(diagnosticsPeers ? { peers: diagnosticsPeers } : {})}
         {...(diagnosticsVideoTrack ? { videoTrack: diagnosticsVideoTrack } : {})}
         expanded={diagnosticsExpanded}
         onToggle={onToggleDiagnostics}
