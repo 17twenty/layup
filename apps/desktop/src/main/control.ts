@@ -1,4 +1,9 @@
-import { createControlClient, type ControlClient, type ControlConnectionState } from '../core/control-client';
+import {
+  createControlClient,
+  isCredentialRejection,
+  type ControlClient,
+  type ControlConnectionState,
+} from '../core/control-client';
 import type { Logger } from './logging';
 
 /** Where the control plane lives. Overridable for self-hosted deployments. */
@@ -21,6 +26,13 @@ export interface IdentityState {
   organisationName?: string;
   /** Why the identity could not be resolved, when resolved is false. */
   detail?: string;
+  /**
+   * Set when the server refused this desktop's credential outright (401/403),
+   * as opposed to not answering at all. The two need opposite responses -
+   * throw the config away, or keep it and wait - so they are two fields and
+   * not one.
+   */
+  credentialsRejected?: boolean;
 }
 
 export interface ControlSupervisorOptions {
@@ -31,6 +43,12 @@ export interface ControlSupervisorOptions {
   minIntervalMs?: number;
   now?: () => number;
   devUser?: string;
+  /**
+   * Called when the server says it does not recognise this desktop's
+   * credential. Called once per rejection, so the caller can clear the stored
+   * config and stop trying rather than reconnecting into a refusal for ever.
+   */
+  onCredentialsRejected?: () => void;
 }
 
 export interface ControlSupervisor {
@@ -79,8 +97,16 @@ export function createControlSupervisor(options: ControlSupervisorOptions): Cont
         });
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        // An unresolved identity is a normal state while the server is down.
-        identityState = { devUser, resolved: false, detail };
+        const rejected = isCredentialRejection(error);
+        // An unresolved identity is a normal state while the server is down,
+        // and nothing to act on. A *refused credential* is the opposite: this
+        // desktop's token will never work again, and carrying on with it is
+        // the reconnect loop that had to be fixed by deleting config.json.
+        identityState = { devUser, resolved: false, detail, ...(rejected ? { credentialsRejected: true } : {}) };
+        if (rejected) {
+          options.log.warn('the server does not recognise this desktop', { devUser, detail });
+          options.onCredentialsRejected?.();
+        }
       }
       return identityState;
     },

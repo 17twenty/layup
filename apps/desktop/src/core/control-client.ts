@@ -281,6 +281,20 @@ export class ControlRequestError extends Error {
 }
 
 /**
+ * Did the server refuse *this credential*, or could it just not be asked?
+ *
+ * This is the whole of the difference between "your token is dead, add the
+ * server again" and "wait". Only an explicit 401 or 403 is the first: a
+ * network error, a DNS failure, a timeout, a 5xx and a 404 are all things that
+ * can be true of a server this desktop is perfectly entitled to talk to, and
+ * treating any of them as a rejection means flaky wifi logs somebody out of
+ * the call they are sitting in. When in doubt, keep the credential.
+ */
+export function isCredentialRejection(error: unknown): boolean {
+  return error instanceof ControlRequestError && (error.status === 401 || error.status === 403);
+}
+
+/**
  * What went wrong, in the server's words where it gave any.
  *
  * The server explains its refusals in sentences meant for people - "ask the

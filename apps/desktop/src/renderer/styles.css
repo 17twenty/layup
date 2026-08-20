@@ -1413,6 +1413,21 @@ body {
   margin: 0 0 6px;
 }
 
+/* Inline with the sentence it belongs to, rather than on its own line: it is
+   the answer to what that sentence just said. */
+.identity .shell__footer-link {
+  display: inline;
+  margin: 0;
+}
+
+/* The credential is dead and this is the only thing on screen that helps.
+   Loud enough to be found without reading the rest of the footer. */
+.shell__footer-link--urgent {
+  color: #f0805a;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 /* Shown in place of the remote-control switches when macOS will discard every
    event anyway. A switch here would be the silent failure with a nicer face. */
 .control__blocked {

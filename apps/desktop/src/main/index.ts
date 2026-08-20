@@ -124,6 +124,10 @@ function buildControlSupervisor() {
     devUser,
     client: controlClient,
     log: log.with({ component: 'control-client' }),
+    // A credential the server has stopped recognising is not a connectivity
+    // problem to wait out: keeping it produced a permanently broken window
+    // whose only cure was deleting config.json by hand.
+    onCredentialsRejected: () => forgetServer('the server no longer recognises this desktop'),
   });
 }
 
@@ -444,8 +448,36 @@ function applyServerConfig() {
   realtime.stop();
   liveControlClient = createControlClient(controlClientOptions());
   control = buildControlSupervisor();
-  realtime.start();
+  // Only connect when there is somewhere to connect *as*. Without this, a
+  // desktop whose token has just been thrown away goes straight back to
+  // reconnecting - against the same server, with no credential - and the
+  // window shows "Realtime: reconnecting (attempt N)" for ever behind the
+  // add-a-server screen. A development URL is an explicit instruction to
+  // connect anyway, so it still does.
+  if (config || process.env.LAYUP_CONTROL_URL) realtime.start();
   broadcast('server:changed', serverState());
+}
+
+/**
+ * Forgets the stored server: the way back to a working application.
+ *
+ * Reached two ways, and they mean the same thing. Somebody presses "Forget
+ * this server", or the server refuses this desktop's credential - and once it
+ * has, there is nothing to keep. A config is only worth having if it works,
+ * which is the thing the add-a-server decision was never asking.
+ *
+ * Deliberately *not* reached by a server that cannot be answered for: a
+ * timeout, a DNS failure, an offline laptop and a 5xx are all temporary, and
+ * throwing the token away for one of those would log somebody out for walking
+ * into a lift.
+ */
+function forgetServer(reason: string) {
+  if (!config) return;
+  configStore.clear();
+  config = undefined;
+  // Never the token, never the URL's credentials: the reason and nothing else.
+  log.warn('server forgotten', { reason });
+  applyServerConfig();
 }
 
 function buildHandlers(): Handlers {
@@ -478,10 +510,7 @@ function buildHandlers(): Handlers {
       return { ok: true };
     },
     'server:forget': () => {
-      configStore.clear();
-      config = undefined;
-      log.info('server forgotten');
-      applyServerConfig();
+      forgetServer('asked to, from the window');
       return serverState();
     },
     'capture:sources': () => capture.listSources().then((sources) => ({ sources })),
@@ -665,7 +694,9 @@ app.whenReady().then(() => {
   });
 
   createMainWindow();
-  realtime.start();
+  // Same rule as applyServerConfig: nothing to connect as means nothing to
+  // connect. The window shows the add-a-server screen, not a reconnect counter.
+  if (config || process.env.LAYUP_CONTROL_URL) realtime.start();
 
   // A development run has no feed and no signature to check against, so asking
   // would only produce an error nobody caused.

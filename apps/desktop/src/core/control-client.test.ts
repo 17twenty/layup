@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createControlClient } from './control-client';
+import { ControlRequestError, createControlClient, isCredentialRejection } from './control-client';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -265,5 +265,36 @@ describe('invitation links', () => {
     expect(JSON.parse(String(calls[0]?.body))).toEqual({ token: 'tok_abc' });
     // The thing that must never be true: the token in the URL.
     expect(calls[0]?.url).not.toContain('tok_abc');
+  });
+});
+
+/**
+ * The one distinction the whole recovery hangs on (0.3.1, item 6).
+ *
+ * A server that says "I do not know this token" and a server that cannot be
+ * reached look the same from a distance and could not be less alike in
+ * consequence: the first means this desktop's credential is dead and the
+ * config has to go, the second means wait. Flaky wifi must never log somebody
+ * out, so anything that is not an explicit refusal of the credential is not
+ * one.
+ */
+describe('telling a dead credential from a server that is not there', () => {
+  it('is a rejection only when the server refused the credential itself', () => {
+    expect(isCredentialRejection(new ControlRequestError('unauthenticated', 401))).toBe(true);
+    expect(isCredentialRejection(new ControlRequestError('forbidden', 403))).toBe(true);
+  });
+
+  it('is not a rejection for anything that might come back', () => {
+    // The server is up but broken, or overloaded.
+    expect(isCredentialRejection(new ControlRequestError('boom', 500))).toBe(false);
+    expect(isCredentialRejection(new ControlRequestError('gateway', 502))).toBe(false);
+    expect(isCredentialRejection(new ControlRequestError('busy', 503))).toBe(false);
+    // Offline, DNS failure, timeout: no HTTP status at all.
+    expect(isCredentialRejection(new TypeError('fetch failed'))).toBe(false);
+    expect(isCredentialRejection(new Error('getaddrinfo ENOTFOUND layup.example'))).toBe(false);
+    expect(isCredentialRejection(new ControlRequestError('aborted', 0))).toBe(false);
+    expect(isCredentialRejection(undefined)).toBe(false);
+    // 404 is a route that is not there, not a credential that is not ours.
+    expect(isCredentialRejection(new ControlRequestError('not found', 404))).toBe(false);
   });
 });

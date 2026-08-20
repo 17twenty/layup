@@ -58,6 +58,13 @@ export const identityResponse = isObject({
   organisationId: optional(isString),
   organisationName: optional(isString),
   detail: optional(isString),
+  /**
+   * The server refused this desktop's credential, rather than failing to
+   * answer. It is on the wire because the window says different things about
+   * the two: one is "waiting for the server", the other is "this desktop has
+   * been signed out and the server has to be added again".
+   */
+  credentialsRejected: optional(isBoolean),
 });
 export type IdentityResponse = ReturnType<typeof identityResponse>;
 
