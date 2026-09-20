@@ -15,7 +15,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected defaults to be valid: %v", err)
 	}
-	if cfg.ListenAddr != "127.0.0.1:8787" || cfg.LogFormat != "json" || cfg.Environment != "dev" {
+	if cfg.ListenAddr != "127.0.0.1:8787" || cfg.LogFormat != "json" || cfg.Environment != "selfhosted" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.ShutdownTimeout != 5*time.Second {
@@ -61,5 +61,85 @@ func TestLoadFailsFastWithUsefulError(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error should name %s: %v", want, err)
 		}
+	}
+}
+
+func TestJoinCodeAndStateDirAreLoaded(t *testing.T) {
+	cfg, err := Load(env(map[string]string{
+		"LAYUP_JOIN_CODE": "LAYUP-7K2M",
+		"LAYUP_STATE_DIR": "/var/lib/layup",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.JoinCode != "LAYUP-7K2M" {
+		t.Errorf("JoinCode = %q, want LAYUP-7K2M", cfg.JoinCode)
+	}
+	if cfg.StateDir != "/var/lib/layup" {
+		t.Errorf("StateDir = %q, want /var/lib/layup", cfg.StateDir)
+	}
+}
+
+// An unset join code must not silently mean "anyone may register".
+func TestJoinCodeDefaultsToEmptyWhichForbidsRegistration(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.JoinCode != "" {
+		t.Errorf("JoinCode = %q, want empty", cfg.JoinCode)
+	}
+}
+
+// The environment label decides whether a declared X-Layup-Dev-User is
+// believed from a remote caller (httpapi/auth.go). Defaulting it to "dev"
+// would mean a dropped line in control.env silently reopens impersonation, so
+// the default has to be the closed one.
+func TestEnvironmentDefaultsToSelfhostedNotDev(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Environment == "dev" {
+		t.Fatal("the default environment must not be dev: that accepts X-Layup-Dev-User from anywhere")
+	}
+	if cfg.Environment != "selfhosted" {
+		t.Errorf("Environment = %q, want selfhosted", cfg.Environment)
+	}
+}
+
+// A public deployment claiming to be a laptop. Refuse to start rather than
+// run with real registered identities and a header that impersonates them.
+func TestDevEnvironmentIsRefusedAlongsideHostedConfiguration(t *testing.T) {
+	for name, vars := range map[string]map[string]string{
+		"join code": {"LAYUP_ENV": "dev", "LAYUP_JOIN_CODE": "LAYUP-7K2M"},
+		"state dir": {"LAYUP_ENV": "dev", "LAYUP_STATE_DIR": "/var/lib/layup"},
+		"both":      {"LAYUP_ENV": "dev", "LAYUP_JOIN_CODE": "LAYUP-7K2M", "LAYUP_STATE_DIR": "/var/lib/layup"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(env(vars))
+			if err == nil {
+				t.Fatal("expected LAYUP_ENV=dev alongside hosted configuration to be refused")
+			}
+			if !strings.Contains(err.Error(), "LAYUP_ENV=dev is refused") {
+				t.Errorf("the error should say what to do, got: %v", err)
+			}
+			if !strings.Contains(err.Error(), "selfhosted") {
+				t.Errorf("the error should name the remedy, got: %v", err)
+			}
+		})
+	}
+}
+
+// A genuine laptop run sets neither, and must still be allowed to say "dev" -
+// StateDir has a default, so testing the resolved config instead of the
+// environment would have made local development impossible.
+func TestDevEnvironmentIsAllowedOnItsOwn(t *testing.T) {
+	cfg, err := Load(env(map[string]string{"LAYUP_ENV": "dev"}))
+	if err != nil {
+		t.Fatalf("a plain dev run must still load: %v", err)
+	}
+	if cfg.Environment != "dev" {
+		t.Errorf("Environment = %q, want dev", cfg.Environment)
 	}
 }

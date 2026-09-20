@@ -18,7 +18,10 @@ import (
 
 func realtimeServer(t *testing.T) (*httptest.Server, *Server) {
 	t.Helper()
-	cfg, err := config.Load(func(string) string { return "" })
+	// LAYUP_ENV=dev: these handshakes carry devUser=, not a token. The token
+	// handshake is covered in auth_test.go under "selfhosted".
+	env := map[string]string{config.EnvPrefix + "ENV": "dev"}
+	cfg, err := config.Load(func(key string) string { return env[key] })
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}

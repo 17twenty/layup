@@ -33,6 +33,7 @@ type Server struct {
 	presence  *domain.PresenceService
 	requests  *domain.RequestService
 	links     *linkStore
+	guests    *guestStore
 	feed      *presencefeed.Feed
 	// heartbeatInterval is overridable so tests do not wait seconds.
 	heartbeatInterval time.Duration
@@ -100,6 +101,7 @@ func New(cfg config.Config, opts Options) *Server {
 		presence:          presence,
 		requests:          requests,
 		links:             newLinkStore(func() time.Time { return now() }),
+		guests:            newGuestStore(func() time.Time { return now() }),
 		heartbeatInterval: heartbeat,
 	}
 	s.feed = presencefeed.New(hub, presence, dir, log)
@@ -127,6 +129,14 @@ func (s *Server) routes() {
 	// Versioned but unauthenticated: how a client learns what we speak.
 	public := http.NewServeMux()
 	public.HandleFunc("GET /api/protocol", s.handleProtocolInfo)
+	// Registration is how a client gets a credential, so it cannot itself
+	// require one. The join code is the gate.
+	public.HandleFunc("POST /api/register", s.handleRegister)
+	// Redeeming an invitation link as a browser guest is how someone with no
+	// account gets a credential at all, so it cannot itself require one. The
+	// link token is the gate, and what it buys is deliberately small: a
+	// session scoped to one layup (guest_auth.go).
+	public.HandleFunc("POST /api/guest/join", s.handleGuestJoin)
 
 	// The realtime endpoint authenticates itself (handshake on the query
 	// string), so it sits beside the versioned REST routes.
@@ -148,7 +158,11 @@ func (s *Server) routes() {
 	authed.HandleFunc("POST /api/layups/{id}/share/settings", s.handleShareSettings)
 	authed.HandleFunc("GET /api/layups/{id}/share/drawing", s.handleDrawingCheck)
 	authed.HandleFunc("POST /api/layups/{id}/link", s.handleCreateLink)
-	authed.HandleFunc("POST /api/links/{token}/join", s.handleJoinByLink)
+	authed.HandleFunc("DELETE /api/layups/{id}/link", s.handleRevokeLink)
+	// The token travels in the JSON body, never the path: Caddy's access-log
+	// filter redacts query strings but not paths, so a path-based token would
+	// be written to /var/log/caddy/layup.log in cleartext on every join.
+	authed.HandleFunc("POST /api/links/join", s.handleJoinByLink)
 	authed.HandleFunc("GET /api/turn", s.handleTurnCredentials)
 	authed.HandleFunc("GET /api/requests", s.handleListRequests)
 	authed.HandleFunc("POST /api/requests", s.handleCreateRequest)
@@ -166,10 +180,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // HealthResponse is the payload of GET /healthz.
+//
+// It deliberately does not name the deployment environment. /healthz is
+// unauthenticated by design - a load balancer has no credential - so anything
+// in it is public, and the environment label is exactly the thing an attacker
+// wants to know before trying the X-Layup-Dev-User header: "dev" is the one
+// value that would make it work. The label is still in the startup log, where
+// an operator can read it and a stranger cannot.
 type HealthResponse struct {
 	Status          string         `json:"status"`
 	ProtocolVersion int            `json:"protocolVersion"`
-	Environment     string         `json:"environment"`
 	UptimeSeconds   float64        `json:"uptimeSeconds"`
 	Build           buildinfo.Info `json:"build"`
 }
@@ -178,7 +198,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
 		Status:          "ok",
 		ProtocolVersion: protocol.Version,
-		Environment:     s.cfg.Environment,
 		UptimeSeconds:   s.now().Sub(s.startedAt).Seconds(),
 		Build:           buildinfo.Get(),
 	})

@@ -61,7 +61,21 @@ describe('native helper protocol', () => {
     // The helper answers honestly about what this build can do rather than
     // claiming an ability it does not have.
     expect(capabilities?.platform).toBe(process.platform);
-    expect(typeof capabilities?.detail).toBe('string');
+
+    // `detail` explains why something is missing, so it is present exactly when
+    // something is missing. Asserting it is always a string only passes on a
+    // machine that cannot inject, which quietly inverts the test: the greener
+    // the machine's permissions, the redder the suite.
+    const injects =
+      capabilities?.pointerMove === true &&
+      capabilities?.pointerButton === true &&
+      capabilities?.pointerWheel === true &&
+      capabilities?.keyboard === true;
+    if (injects) {
+      expect(capabilities?.detail).toBeUndefined();
+    } else {
+      expect(typeof capabilities?.detail).toBe('string');
+    }
 
     client.close();
   }, 30_000);

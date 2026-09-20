@@ -28,6 +28,7 @@ const sharedLayup = {
       displayName: 'Nick',
       joinedAt: '2026-08-14T09:00:00Z',
       isCreatorMembership: true,
+      isGuest: false,
     },
   ],
   activeShare: {
@@ -60,6 +61,53 @@ describe('a layup with somebody sharing', () => {
     const { activeShare: _omitted, ...quiet } = sharedLayup;
     expect(() => layupShape(quiet, 'layup.state')).not.toThrow();
     expect(layupShape(quiet, 'layup.state').activeShare).toBeUndefined();
+  });
+
+  it('refuses a participant with no isGuest, on both sides of the boundary', () => {
+    // Fail closed, loudly. isGuest is what input-guard.ts and
+    // annotation-guard.ts key off; a missing one used to read as "not a
+    // guest", which is indistinguishable from a layup with no guests in it.
+    // A server that stops sending it, or a version skew that drops it, must
+    // be a validation error and not a quietly softened refusal.
+    const layup = {
+      ...sharedLayup,
+      participants: sharedLayup.participants.map(({ isGuest: _dropped, ...rest }) => rest),
+    };
+
+    expect(() => layupShape(layup, 'layup.state')).toThrow(/isGuest.*expected boolean/);
+    expect(() =>
+      layupStateResponse(
+        { layup, membershipId: 'mem_creator1', youAreCreatorMembership: true },
+        'layup:changed',
+      ),
+    ).toThrow(/isGuest.*expected boolean/);
+  });
+
+  it('carries a guest across the boundary rather than dropping the update', () => {
+    // The renderer cannot tell a guest's stroke from a member's without this,
+    // and unknown properties are rejected - so a shape that did not know
+    // isGuest threw the whole layup away every time one was in it.
+    const withGuest = {
+      ...sharedLayup,
+      participants: [
+        ...sharedLayup.participants,
+        {
+          membershipId: 'mem_guest1',
+          userId: 'usr_gvisitor',
+          displayName: 'Sam',
+          joinedAt: '2026-08-14T09:05:00Z',
+          isCreatorMembership: false,
+          isGuest: true,
+        },
+      ],
+    };
+
+    const state = layupStateResponse(
+      { layup: withGuest, membershipId: 'mem_creator1', youAreCreatorMembership: true },
+      'layup:changed',
+    );
+    expect(state.layup?.participants.map((entry) => entry.isGuest)).toEqual([false, true]);
+    expect(layupShape(withGuest, 'layup.state').participants[1]?.isGuest).toBe(true);
   });
 
   it('still refuses a property neither side knows', () => {

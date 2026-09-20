@@ -14,6 +14,11 @@ const GUEST = 'm-guest';
 const OTHER = 'm-other';
 const PRESENTER = 'm-presenter';
 const DISPLAY = 'display-1';
+// A membership held by a stranger who arrived by link, never someone with an
+// account (SPEC.md's web-guests design §8). Named distinctly from GUEST
+// above, which in the rest of this file just means "the other participant"
+// and has nothing to do with the web-guests feature.
+const LINK_GUEST = 'm-link-guest';
 
 let presenting = true;
 let sharedDisplay: string | undefined = DISPLAY;
@@ -49,6 +54,7 @@ beforeEach(() => {
     sharedDisplayId: () => sharedDisplay,
     presenterMembershipId: () => PRESENTER,
     allowsScope: (scope) => shared.has(scope),
+    isGuestMembership: (membershipId) => membershipId === LINK_GUEST,
   });
 });
 
@@ -209,6 +215,32 @@ describe('remote input guard', () => {
     expect(guard.accept(click({ seq: 1, type: TYPE_POINTER_DOWN }), fromGuest)).toMatchObject({
       allowed: true,
     });
+  });
+
+  it('refuses a guest membership even while the scope is shared with the room', () => {
+    // Sharing control is a mode, not a permissions list - but a guest is
+    // never part of "the room" for this purpose, whatever the room-wide
+    // switch says. Refused twice over: this is the client-side half (the
+    // server's refusal to ever issue the grant is the other), so it must
+    // hold even for a message that should never have been sendable at all.
+    shared.add('pointer');
+    shared.add('keyboard');
+
+    expect(
+      guard.accept(click({ membershipId: LINK_GUEST }), { membershipId: LINK_GUEST, channel: CHANNEL_INPUT }),
+    ).toMatchObject({ allowed: false, reason: 'guest' });
+    expect(
+      guard.accept(
+        { type: TYPE_KEY_DOWN, v: INPUT_PROTOCOL_VERSION, membershipId: LINK_GUEST, code: 'KeyA', seq: 1 },
+        { membershipId: LINK_GUEST, channel: CHANNEL_INPUT },
+      ),
+    ).toMatchObject({ allowed: false, reason: 'guest' });
+    expect(guard.allows(LINK_GUEST, 'pointer')).toBe(false);
+    expect(guard.allows(LINK_GUEST, 'keyboard')).toBe(false);
+
+    // Nobody else is affected: this is about the one membership, not a
+    // change to the room-wide switch.
+    expect(guard.accept(click(), fromGuest)).toMatchObject({ allowed: true });
   });
 
   it('reports a refusal without echoing what was refused', () => {

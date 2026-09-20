@@ -15,6 +15,11 @@ export const TYPE_HEARTBEAT_ACK = 'heartbeat.ack';
 /** Handshake travels on the URL: the desktop's WebSocket cannot set headers. */
 export const QUERY_PROTOCOL_VERSION = 'v';
 export const QUERY_DEV_USER = 'devUser';
+/**
+ * A bearer token on the handshake URL. Safe only under TLS, and only while it
+ * never reaches a log.
+ */
+export const QUERY_TOKEN = 'token';
 
 export const helloOkPayload = isObject({
   connectionId: isString,

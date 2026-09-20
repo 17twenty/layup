@@ -20,7 +20,7 @@ import {
   type SignalMessage,
 } from './peer-connection';
 import type { RouteDiagnostics } from './ice-diagnostics';
-import { createDataChannels, type DataChannelSet } from './data-channels';
+import { createDataChannels, type ChannelName, type DataChannelSet } from './data-channels';
 
 /** Everything a peer publishes to us, or we publish to them. */
 export interface RemoteMedia {
@@ -38,7 +38,8 @@ export interface SessionPeer {
   membershipId: string;
   peer: PeerConnection;
   media: RemoteMedia;
-  /** cursor-fast / annotation-fast / input-reliable for this peer (ADR-0008). */
+  /** cursor-fast / annotation-fast / input-reliable for this peer (ADR-0008),
+   *  minus any this client asked not to open. */
   channels: DataChannelSet;
 }
 
@@ -49,6 +50,11 @@ export interface SessionOptions {
   createRTCPeerConnection: (config: RTCConfiguration) => RTCPeerConnection;
   iceServers?: RTCIceServer[];
   forceRelay?: boolean;
+  /**
+   * Which data channels to open per peer. All three by default; a client with
+   * no business on one leaves it out (see `DataChannelOptions.channels`).
+   */
+  channels?: readonly ChannelName[];
   onChange?: (peers: RemoteMedia[]) => void;
   log?: {
     debug(message: string, fields?: Record<string, unknown>): void;
@@ -66,6 +72,14 @@ export interface Session {
   publishScreen(stream: MediaStream): void;
   /** Publishes camera and microphone to every peer. */
   publishCamera(stream: MediaStream): void;
+  /**
+   * Swaps one published camera or microphone track for another, in place.
+   *
+   * This is how changing a device works: the sender already publishing that
+   * kind takes the new track, so the transceiver, the m-line and the SDP are
+   * all untouched and nothing renegotiates.
+   */
+  replaceCameraTrack(track: MediaStreamTrack): Promise<void>;
   /**
    * Who the control plane says is presenting. Incoming video is classified as
    * the shared desktop only for that membership, so the domain decides what a
@@ -94,7 +108,10 @@ export function createSession(options: SessionOptions): Session {
   // One sender per peer, so re-sharing replaces the track instead of adding a
   // second one - exactly one shared desktop exists per layup (ADR-0007).
   const screenSenders = new Map<string, RTCRtpSender>();
-  const cameraSenders = new Map<string, RTCRtpSender[]>();
+  // Kept with the kind they were created for: a sender's own `track` is null
+  // while it is being swapped, and matching by index breaks the moment the
+  // stream's track order changes under a device switch.
+  const cameraSenders = new Map<string, Array<{ kind: string; sender: RTCRtpSender }>>();
   let localScreen: MediaStream | undefined;
   let localCamera: MediaStream | undefined;
   let presenterMembershipId: string | undefined;
@@ -147,10 +164,11 @@ export function createSession(options: SessionOptions): Session {
       },
     });
 
-    // The three semantic channels are negotiated up front, so both sides have
-    // them the moment the connection opens.
+    // The semantic channels are negotiated up front, so both sides have them
+    // the moment the connection opens.
     const channels = createDataChannels({
       createDataChannel: (label, init) => peer.createDataChannel(label, init),
+      ...(options.channels ? { channels: options.channels } : {}),
       log,
     });
 
@@ -158,8 +176,8 @@ export function createSession(options: SessionOptions): Session {
     peers.set(membershipId, entry);
 
     // Whoever is already publishing keeps publishing to a peer that arrives later.
-    if (localScreen) attachScreen(entry, localScreen);
-    if (localCamera) attachCamera(entry, localCamera);
+    if (localScreen) perPeer(entry, 'screen', () => attachScreen(entry, localScreen!));
+    if (localCamera) perPeer(entry, 'camera', () => attachCamera(entry, localCamera!));
     if (connectOptions.initiate) void peer.negotiate();
 
     publish();
@@ -172,23 +190,94 @@ export function createSession(options: SessionOptions): Session {
     const sender = screenSenders.get(entry.membershipId);
     if (sender) {
       // Replacing the track keeps the same m-line and avoids renegotiation.
-      void sender.replaceTrack(track);
+      swap(sender, track, entry.membershipId, 'screen');
       return;
     }
     screenSenders.set(entry.membershipId, entry.peer.addTrack(track, stream));
   }
 
+  /**
+   * One sender's track swap, with its rejection accounted for.
+   *
+   * `void sender.replaceTrack(...)` is the shape that hid a whole class of
+   * failure: a sender whose connection has gone rejects, nothing catches it,
+   * and the session carries on believing it is publishing.
+   */
+  function swap(
+    sender: RTCRtpSender,
+    track: MediaStreamTrack | null,
+    membershipId: string,
+    kind: string,
+  ) {
+    void sender.replaceTrack(track).catch((error: unknown) => {
+      log.warn('could not swap a track for one peer', {
+        membershipId,
+        kind,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  /**
+   * Runs one peer's share of a session-wide job, and keeps the others.
+   *
+   * Every publish path here is a loop over peers, and an exception from one of
+   * them used to abandon the rest: a closed RTCPeerConnection throws
+   * InvalidStateError from `addTrack`, so one departed guest could stop the
+   * presenter's screen ever reaching the peers after them in the map - and,
+   * with the throw escaping into a React effect, take the room down with it.
+   * A peer that cannot be published to is that peer's problem.
+   */
+  function perPeer(entry: SessionPeer, what: string, job: () => void) {
+    try {
+      job();
+    } catch (error) {
+      log.warn('could not publish to one peer', {
+        membershipId: entry.membershipId,
+        what,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   function attachCamera(entry: SessionPeer, stream: MediaStream) {
     const existing = cameraSenders.get(entry.membershipId);
     if (existing) {
-      // Replace in place: swapping devices must not renegotiate.
-      stream.getTracks().forEach((track, index) => void existing[index]?.replaceTrack(track));
+      // Replace in place, matched by kind: swapping devices must not
+      // renegotiate, and audio must never land in the video sender.
+      for (const track of stream.getTracks()) {
+        const held = existing.find((item) => item.kind === track.kind);
+        if (held && held.sender.track !== track) {
+          swap(held.sender, track, entry.membershipId, track.kind);
+        }
+      }
       return;
     }
     cameraSenders.set(
       entry.membershipId,
-      stream.getTracks().map((track) => entry.peer.addTrack(track, stream)),
+      stream.getTracks().map((track) => ({ kind: track.kind, sender: entry.peer.addTrack(track, stream) })),
     );
+  }
+
+  /**
+   * One peer, gone: closed, forgotten, and announced.
+   *
+   * Every way a peer can leave ends here, so there is one answer to "what
+   * else was holding something of theirs?" - their channels, and their entries
+   * in the two sender maps that the session-wide publish loops iterate. The
+   * `publish()` is not decoration: it is how the room learns the tile has to
+   * go, and its absence is why departed guests sat at "reconnecting…".
+   */
+  function dropPeer(membershipId: string, reason?: string) {
+    const entry = peers.get(membershipId);
+    if (!entry) return;
+    entry.channels.close();
+    entry.peer.close(reason ?? 'they left the layup');
+    peers.delete(membershipId);
+    screenSenders.delete(membershipId);
+    cameraSenders.delete(membershipId);
+    log.info('peer left', { membershipId, reason: reason ?? 'they left the layup' });
+    publish();
   }
 
   return {
@@ -204,9 +293,31 @@ export function createSession(options: SessionOptions): Session {
 
     publishCamera(stream) {
       localCamera = stream;
-      for (const entry of peers.values()) attachCamera(entry, stream);
+      for (const entry of peers.values()) perPeer(entry, 'camera', () => attachCamera(entry, stream));
       log.info('publishing camera and microphone', { peers: peers.size });
       publish();
+    },
+
+    async replaceCameraTrack(track) {
+      // Only the sender already carrying this kind, and only replaceTrack.
+      // Adding one would fire negotiationneeded, and a renegotiation mid-call
+      // is what took the media elements - and the audio - down before.
+      const swaps: Array<Promise<unknown>> = [];
+      for (const [membershipId, held] of cameraSenders) {
+        const target = held.find((entry) => entry.kind === track.kind);
+        if (!target) continue;
+        swaps.push(target.sender.replaceTrack(track));
+        log.debug('swapped a capture track in place', { membershipId, kind: track.kind });
+      }
+      // allSettled, not all: one peer whose connection has gone must not be
+      // reported as everybody's device change failing.
+      const results = await Promise.allSettled(swaps);
+      const failed = results.filter((result) => result.status === 'rejected').length;
+      log.info('capture device changed without renegotiating', {
+        kind: track.kind,
+        peers: results.length,
+        ...(failed ? { failed } : {}),
+      });
     },
 
     async handleSignal(type, message) {
@@ -216,12 +327,17 @@ export function createSession(options: SessionOptions): Session {
       // callee never initiates, so a glare needs no extra rule here.
       const entry = peers.get(from) ?? connect(from);
       await entry.peer.accept(type, message);
-      if (type === SIGNAL_BYE) peers.delete(from);
+      // A bye is a departure, and a departure is exactly one thing: that
+      // peer's teardown. `peers.delete` alone left the channels open, left
+      // their senders in the session-wide maps below, and told nobody - so
+      // the tile stayed at "reconnecting…" and the presenter's screen was
+      // still being swapped into a connection that had gone.
+      if (type === SIGNAL_BYE) dropPeer(from, message.reason);
     },
 
     publishScreen(stream) {
       localScreen = stream;
-      for (const entry of peers.values()) attachScreen(entry, stream);
+      for (const entry of peers.values()) perPeer(entry, 'screen', () => attachScreen(entry, stream));
       log.info('publishing shared desktop', { peers: peers.size });
       publish();
     },
@@ -231,7 +347,7 @@ export function createSession(options: SessionOptions): Session {
       for (const [membershipId, sender] of screenSenders) {
         // Null keeps the transceiver in place, so re-sharing does not have to
         // renegotiate from scratch.
-        void sender.replaceTrack(null);
+        swap(sender, null, membershipId, 'screen');
         log.debug('stopped publishing to peer', { membershipId });
       }
       log.info('stopped sharing the desktop');
@@ -247,13 +363,7 @@ export function createSession(options: SessionOptions): Session {
     },
 
     disconnect(membershipId, reason) {
-      const entry = peers.get(membershipId);
-      if (!entry) return;
-      entry.channels.close();
-      entry.peer.close(reason ?? 'they left the layup');
-      peers.delete(membershipId);
-      screenSenders.delete(membershipId);
-      publish();
+      dropPeer(membershipId, reason);
     },
 
     close(reason) {
@@ -261,6 +371,7 @@ export function createSession(options: SessionOptions): Session {
         entry.channels.close();
         entry.peer.close(reason ?? 'leaving the layup');
         screenSenders.delete(membershipId);
+        cameraSenders.delete(membershipId);
       }
       peers.clear();
       localScreen = undefined;

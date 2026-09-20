@@ -31,6 +31,9 @@ const idleControl = {
 
 const goodHandlers: Handlers = {
   'app:info': () => ({ appVersion: '0.1.0', protocolVersion: 1, platform: 'darwin' }),
+  'server:state': () => ({ configured: false }),
+  'server:add': () => ({ ok: false, message: 'no server in this fixture' }),
+  'server:forget': () => ({ configured: false }),
   'capture:sources': () => ({ sources: [] }),
   'capture:permission': () => ({
     status: 'granted' as const,
@@ -40,6 +43,23 @@ const goodHandlers: Handlers = {
     platform: 'darwin',
   }),
   'capture:openSettings': () => true,
+  'permissions:all': () => {
+    const granted = {
+      status: 'granted' as const,
+      ok: true,
+      guidance: '',
+      canOpenSettings: true,
+      canRequest: false,
+    };
+    return {
+      camera: granted,
+      microphone: granted,
+      screen: granted,
+      accessibility: granted,
+    };
+  },
+  'permissions:request': () => true,
+  'permissions:openSettings': () => true,
   'control:status': () => controlState,
   'control:remote': () => ({ helperRunning: false, pointer: false, keyboard: false }),
   'identity:current': () => ({ devUser: 'nick', resolved: false }),
@@ -51,7 +71,8 @@ const goodHandlers: Handlers = {
   'layup:leave': () => ({ youAreCreatorMembership: false }),
   'layup:open': () => ({ layups: [] }),
   'ice:config': () => ({ iceServers: [], expiresAt: '2026-08-14T09:00:00Z', forceRelay: false }),
-  'layup:link': () => ({ token: 'tok', expiresAt: '2026-08-14T09:00:00Z' }),
+  'layup:link': () => ({ url: 'https://layup.blah.au/j/#tok' }),
+  'layup:revokeLink': () => undefined,
   'layup:joinLink': () => ({ youAreCreatorMembership: false }),
   'requests:list': () => ({ incoming: [], outgoing: [] }),
   'requests:invite': () => ({
@@ -87,6 +108,10 @@ const goodHandlers: Handlers = {
   'control:stopAll': () => idleControl,
   'input:offer': () => ({ injected: false, reason: 'stopped' }),
   'ui:mode': () => ({ mode: 'compact' as const }),
+  'update:state': () => ({ status: 'idle' as const }),
+  'update:install': () => false,
+  'preferences:get': () => ({ soundsMuted: false }),
+  'preferences:set': (input) => input,
 };
 
 describe('main IPC boundary', () => {
@@ -105,9 +130,15 @@ describe('main IPC boundary', () => {
     registerIpcHandlers(ipc.target, goodHandlers);
     expect([...ipc.registered.keys()]).toEqual([
       'app:info',
+      'server:state',
+      'server:add',
+      'server:forget',
       'capture:sources',
       'capture:permission',
       'capture:openSettings',
+      'permissions:all',
+      'permissions:request',
+      'permissions:openSettings',
       'control:status',
       'control:remote',
       'identity:current',
@@ -120,6 +151,7 @@ describe('main IPC boundary', () => {
       'layup:open',
       'ice:config',
       'layup:link',
+      'layup:revokeLink',
       'layup:joinLink',
       'requests:list',
       'requests:invite',
@@ -139,6 +171,10 @@ describe('main IPC boundary', () => {
       'control:stopAll',
       'input:offer',
       'ui:mode',
+      'update:state',
+      'update:install',
+      'preferences:get',
+      'preferences:set',
     ]);
   });
 

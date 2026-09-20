@@ -49,7 +49,7 @@ export function ControlStatus({ pollMs = 5000 }: { pollMs?: number }) {
 
   const label =
     state.status === 'connected'
-      ? `connected · protocol v${state.serverProtocolVersion} · ${state.environment ?? 'unknown env'}${
+      ? `connected · protocol v${state.serverProtocolVersion}${
           state.latencyMs === undefined ? '' : ` · ${Math.round(state.latencyMs)}ms`
         }`
       : `${state.status} — ${state.detail ?? 'no detail'}`;

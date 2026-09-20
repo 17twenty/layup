@@ -25,7 +25,6 @@ describe('control status view', () => {
       baseUrl: 'http://127.0.0.1:8787',
       clientProtocolVersion: 1,
       serverProtocolVersion: 1,
-      environment: 'dev',
       latencyMs: 4.2,
       checkedAtMs: 1,
     }));
@@ -33,7 +32,7 @@ describe('control status view', () => {
     render(<ControlStatus />);
     await waitFor(() => {
       expect(screen.getByRole('status').textContent).toMatch(
-        /connected · protocol v1 · dev · 4ms.*127\.0\.0\.1:8787/,
+        /connected · protocol v1 · 4ms.*127\.0\.0\.1:8787/,
       );
     });
   });

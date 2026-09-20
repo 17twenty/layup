@@ -1,0 +1,84 @@
+#!/usr/bin/env node
+/**
+ * Forced-relay verification against the *deployed* coturn.
+ *
+ *   node test/network/turn-remote.mjs
+ *
+ * The containerised sibling (turn-relay.mjs) proves coturn works. This proves
+ * the deployment works: that the control service and coturn agree about the
+ * shared secret, that 3478 and the relay range are reachable from here, and
+ * that a relay-only session connects *through* the real server.
+ *
+ * It fetches credentials from the deployed /api/turn rather than deriving
+ * them locally - that is what actually proves the control service and coturn
+ * agree about the secret, which is the failure this test exists to catch.
+ *
+ * It reuses the same Electron harness and the same three environment
+ * variables as turn-relay.mjs, so the scenario being run is identical - only
+ * the TURN server differs.
+ */
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { resolveToken } from './identity.mjs';
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const desktop = join(repoRoot, 'apps', 'desktop');
+const domain = process.env.LAYUP_DEPLOY_DOMAIN || 'layup.blah.au';
+// protocol/VERSION is the single source of truth (README), the same way
+// remote-health.mjs beside this reads it. A literal here would drift silently
+// the day the version moves.
+const PROTOCOL_VERSION = readFileSync(join(repoRoot, 'protocol', 'VERSION'), 'utf8').trim();
+
+// X-Layup-Dev-User is no longer accepted from off-host, so /api/turn needs a
+// real token: LAYUP_TOKEN if set, otherwise one registered here and now with
+// LAYUP_JOIN_CODE (test/network/identity.mjs).
+const token = await resolveToken({
+  domain,
+  protocolVersion: PROTOCOL_VERSION,
+  displayName: 'turn-remote harness',
+}).catch((error) => {
+  console.error(error.message);
+  process.exit(1);
+});
+const authHeaders = { Authorization: `Bearer ${token}` };
+
+const response = await fetch(`https://${domain}/api/turn`, {
+  headers: { 'X-Layup-Protocol-Version': PROTOCOL_VERSION, ...authHeaders },
+});
+if (!response.ok) {
+  console.error(`GET /api/turn returned ${response.status}`);
+  process.exit(1);
+}
+const envelope = await response.json();
+// The wire shape is the shared protocol envelope: {v, type, payload}
+// (protocol/go/envelope.go). GET /api/turn's payload is TurnDTO
+// (services/control/internal/httpapi/turn.go): {iceServers, expiresAt,
+// forceRelay}. There is no top-level `iceServers` and no `data` wrapper.
+const iceServers = envelope.payload?.iceServers ?? [];
+const turn = iceServers.find((server) =>
+  [].concat(server.urls).some((url) => String(url).startsWith('turn:')),
+);
+if (!turn) {
+  console.error('the control service issued no TURN server; check LAYUP_TURN_URLS and LAYUP_TURN_SECRET');
+  console.error(`envelope: ${JSON.stringify(envelope)}`);
+  process.exit(1);
+}
+
+const url = [].concat(turn.urls).find((u) => String(u).startsWith('turn:'));
+console.log(`issued credentials for ${url} (username ${turn.username})`);
+
+execFileSync('npm', ['run', 'build:webrtc'], { cwd: desktop, stdio: 'ignore' });
+execFileSync(join(repoRoot, 'node_modules', '.bin', 'electron'), ['test/webrtc/main.cjs'], {
+  cwd: desktop,
+  stdio: 'inherit',
+  env: {
+    ...process.env,
+    LAYUP_TEST_TURN_URL: url,
+    LAYUP_TEST_TURN_USERNAME: turn.username,
+    LAYUP_TEST_TURN_CREDENTIAL: turn.credential,
+  },
+});
+console.log('TURN REMOTE OK');

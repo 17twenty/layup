@@ -75,7 +75,18 @@ export function createRequestsSupervisor(options: RequestsSupervisorOptions): Re
 
   const handle = (map: Map<string, JoinRequest>, label: string) => (message: { payload?: unknown }) => {
     try {
-      upsert(map, joinRequestShape(message.payload, label));
+      const request = joinRequestShape(message.payload, label);
+      upsert(map, request);
+      // Never log the note or a bearer token: only the shape needed to trace
+      // a request through accept/decline without reading its content.
+      log.info('request received', {
+        type: label,
+        requestId: request.id,
+        requestType: request.type,
+        fromUserId: request.fromUserId,
+        expiresAt: request.expiresAt,
+        state: request.state,
+      });
       publish();
     } catch (error) {
       log.warn('rejected request payload', {
@@ -133,22 +144,72 @@ export function createRequestsSupervisor(options: RequestsSupervisorOptions): Re
     },
 
     async accept(requestId) {
-      const result = await client.acceptRequest(requestId);
+      log.info('accept attempted', { requestId });
+      let result: AcceptResult;
+      try {
+        result = await client.acceptRequest(requestId);
+      } catch (error) {
+        log.warn('accept failed', {
+          requestId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
       incoming.delete(requestId);
       outgoing.delete(requestId);
       log.info('request accepted', { requestId, layupId: result.layup.id });
-      options.onAccepted?.(result);
+
+      // The join that follows acceptance: this is a separate step from the
+      // server saying yes, and a desktop that accepted but never actually
+      // entered the layup looks, from the outside, exactly like "nothing
+      // happened when I hit Join".
+      try {
+        options.onAccepted?.(result);
+        log.info('layup join after accept', {
+          requestId,
+          layupId: result.layup.id,
+          membershipId: result.yourMembershipId,
+          outcome: 'ok',
+        });
+      } catch (error) {
+        log.error('layup join after accept failed', {
+          requestId,
+          layupId: result.layup.id,
+          membershipId: result.yourMembershipId,
+          outcome: 'failed',
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
       publish();
     },
 
     async decline(requestId) {
-      await client.declineRequest(requestId);
+      log.info('decline attempted', { requestId });
+      try {
+        await client.declineRequest(requestId);
+      } catch (error) {
+        log.warn('decline failed', {
+          requestId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
       incoming.delete(requestId);
       publish();
     },
 
     async cancel(requestId) {
-      await client.cancelRequest(requestId);
+      log.info('cancel attempted', { requestId });
+      try {
+        await client.cancelRequest(requestId);
+      } catch (error) {
+        log.warn('cancel failed', {
+          requestId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
       outgoing.delete(requestId);
       publish();
     },

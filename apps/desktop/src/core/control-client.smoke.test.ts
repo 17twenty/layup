@@ -51,7 +51,9 @@ describe('desktop -> control smoke path', () => {
 
     expect(state.status).toBe('connected');
     expect(state.serverProtocolVersion).toBe(state.clientProtocolVersion);
-    expect(state.environment).toBe('smoke');
+    // /healthz deliberately does not name the deployment environment: it is
+    // unauthenticated, and "dev" is the one label worth probing for.
+    expect('environment' in state).toBe(false);
     expect(state.latencyMs).toBeGreaterThanOrEqual(0);
   }, 30_000);
 

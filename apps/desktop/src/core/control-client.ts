@@ -30,7 +30,6 @@ export interface ControlConnectionState {
   /** Present once the server has answered at least the health endpoint. */
   serverProtocolVersion?: number;
   serverVersion?: string;
-  environment?: string;
   latencyMs?: number;
   /** Human-readable reason when the status is not `connected`. */
   detail?: string;
@@ -40,7 +39,6 @@ export interface ControlConnectionState {
 const healthShape = isObject({
   status: isString,
   protocolVersion: isInteger({ min: 1 }),
-  environment: optional(isString),
   // Fractional: the server reports real uptime, not whole seconds.
   uptimeSeconds: optional(isFiniteNumber),
   build: optional(
@@ -63,8 +61,12 @@ export interface ControlClientOptions {
    * PLAN-1 development identity: a handle ("karl") or user id. There is no
    * password or token yet - the server resolves it against its directory and
    * decides the organisation itself.
+   *
+   * Ignored once a `token` is present.
    */
   devUser?: string;
+  /** Bearer token from the desktop's config store. Takes priority over `devUser`. */
+  token?: string;
 }
 
 /** Header carrying the PLAN-1 development identity. */
@@ -118,6 +120,21 @@ const participantShape = isObject({
   joinedAt: isString,
   leftAt: optional(isString),
   isCreatorMembership: isBoolean,
+  /**
+   * Whether this membership is a browser visitor who arrived by link.
+   *
+   * Required, not optional, and that is the whole point. This is what
+   * `input-guard.ts` and `annotation-guard.ts` key off, and it is the only
+   * thing standing between a stranger holding a URL and somebody's mouse.
+   * Absent used to read as "not a guest" - which is exactly what a layup with
+   * no guests in it looks like, so a server that stopped sending it, or a
+   * version skew that dropped it, would have softened the refusal silently.
+   *
+   * A missing one is now a loud validation error instead: the shape already
+   * rejects a property nobody knows about, and it should be at least as
+   * strict about a missing one a security check depends on.
+   */
+  isGuest: isBoolean,
 });
 
 const activeShareShape = isObject({
@@ -264,6 +281,20 @@ export class ControlRequestError extends Error {
 }
 
 /**
+ * Did the server refuse *this credential*, or could it just not be asked?
+ *
+ * This is the whole of the difference between "your token is dead, add the
+ * server again" and "wait". Only an explicit 401 or 403 is the first: a
+ * network error, a DNS failure, a timeout, a 5xx and a 404 are all things that
+ * can be true of a server this desktop is perfectly entitled to talk to, and
+ * treating any of them as a rejection means flaky wifi logs somebody out of
+ * the call they are sitting in. When in doubt, keep the credential.
+ */
+export function isCredentialRejection(error: unknown): boolean {
+  return error instanceof ControlRequestError && (error.status === 401 || error.status === 403);
+}
+
+/**
  * What went wrong, in the server's words where it gave any.
  *
  * The server explains its refusals in sentences meant for people - "ask the
@@ -321,6 +352,8 @@ export interface ControlClient {
   apiGet<T>(path: string): Promise<T>;
   /** Versioned API command. Throws ControlRequestError on a non-2xx response. */
   apiPost<T>(path: string, body?: unknown): Promise<T>;
+  /** Versioned API deletion. Throws ControlRequestError on a non-2xx response. */
+  apiDelete<T>(path: string): Promise<T>;
   /** Who the control plane thinks this desktop is. */
   me(): Promise<MeSnapshot>;
   /** The people in this organisation. */
@@ -346,6 +379,14 @@ export interface ControlClient {
   turnCredentials(): Promise<IceConfiguration>;
   /** Mints an opaque invitation link for a layup you are in. */
   createLink(layupId: string): Promise<InvitationLink>;
+  /**
+   * Takes a layup's link out of circulation.
+   *
+   * The answer to "I pasted that in the wrong channel". Nobody new can join
+   * with it from that moment; everybody already inside stays inside, because
+   * revoking a link is not a way to remove a person.
+   */
+  revokeLink(layupId: string): Promise<void>;
   /** Joins a layup using an invitation link token. */
   joinByLink(token: string): Promise<MembershipResult>;
   /** Sends an invitation or knock. */
@@ -382,7 +423,11 @@ export function createControlClient(options: ControlClientOptions): ControlClien
       [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
       Accept: 'application/json',
     };
-    if (options.devUser) headers[DEV_USER_HEADER] = options.devUser;
+    if (options.token) {
+      headers.Authorization = `Bearer ${options.token}`;
+    } else if (options.devUser) {
+      headers[DEV_USER_HEADER] = options.devUser;
+    }
     return headers;
   }
 
@@ -436,7 +481,6 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         clientProtocolVersion: PROTOCOL_VERSION,
         serverProtocolVersion: health.protocolVersion,
         serverVersion: health.build?.version,
-        environment: health.environment,
         latencyMs,
         checkedAtMs: startedAt,
       };
@@ -568,10 +612,16 @@ export function createControlClient(options: ControlClientOptions): ControlClien
       return invitationLinkShape(envelope.payload, 'layup.link');
     },
 
+    async revokeLink(layupId: string): Promise<void> {
+      await this.apiDelete(`/api/layups/${encodeURIComponent(layupId)}/link`);
+    },
+
     async joinByLink(token: string): Promise<MembershipResult> {
-      const envelope = await this.apiPost<{ payload?: unknown }>(
-        `/api/links/${encodeURIComponent(token)}/join`,
-      );
+      // In the body, never in the path. Caddy's access-log filter redacts
+      // query strings but not paths, so a token in the URL would land in
+      // cleartext in the log on every redemption - and a log is exactly the
+      // place a working key to somebody's call must not be.
+      const envelope = await this.apiPost<{ payload?: unknown }>('/api/links/join', { token });
       return membershipResultShape(envelope.payload, 'layup.joined');
     },
 
@@ -605,6 +655,23 @@ export function createControlClient(options: ControlClientOptions): ControlClien
         const code = extractErrorCode(body);
         throw new ControlRequestError(
           describeFailure('GET', path, response.status, body),
+          response.status,
+          code,
+        );
+      }
+      return (await response.json()) as T;
+    },
+
+    async apiDelete<T>(path: string): Promise<T> {
+      const response = await withTimeout(`${baseUrl}${path}`, {
+        method: 'DELETE',
+        headers: apiHeaders(),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => undefined);
+        const code = extractErrorCode(body);
+        throw new ControlRequestError(
+          describeFailure('DELETE', path, response.status, body),
           response.status,
           code,
         );

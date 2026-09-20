@@ -9,6 +9,8 @@ import type { HelperSupervisor } from './helper-supervisor';
 
 const ME = 'mem_me';
 const GUEST = 'mem_guest';
+/** A browser visitor who arrived by link - not somebody with an account. */
+const WEB_GUEST = 'mem_web_guest';
 const SOURCE = 'screen:1:0';
 
 let injected: Array<{ command: string; payload: unknown }>;
@@ -158,6 +160,68 @@ describe('the privileged half of a layup', () => {
     // changing their mind - but nothing of theirs is left holding it.
     expect(session.controlState().anyoneHasControl).toBe(true);
     expect(session.controlState().stopped).toEqual([]);
+  });
+
+  it('never hands a guest the mouse, whatever the room-wide switch says', async () => {
+    // The layup as the control plane describes it: one member, one guest.
+    // This is the only place the desktop can learn the difference - the wire
+    // carries membership ids and nothing else.
+    session.setParticipants([
+      { membershipId: ME, isGuest: false },
+      { membershipId: GUEST, isGuest: false },
+      { membershipId: WEB_GUEST, isGuest: true },
+    ]);
+    session.applyShareEvent(TYPE_SCREEN_STARTED, share);
+    // Shared with the room. "The room" has never meant a stranger holding a URL.
+    session.setAllowed('pointer', true);
+
+    // A member in the same room, under the same switch, is allowed.
+    expect(await session.offer(GUEST, click())).toEqual({ injected: true });
+    injected = [];
+
+    expect(await session.offer(WEB_GUEST, click({ membershipId: WEB_GUEST }))).toEqual({
+      injected: false,
+      reason: 'guest',
+    });
+    expect(injected).toEqual([]);
+  });
+
+  it('refuses a grant that names a guest, even one the presenter typed', async () => {
+    session.setParticipants([
+      { membershipId: ME, isGuest: false },
+      { membershipId: WEB_GUEST, isGuest: true },
+    ]);
+    session.applyShareEvent(TYPE_SCREEN_STARTED, share);
+    session.setAllowed('pointer', true);
+
+    // resume() broadcasts a control.grant naming that membership - the most
+    // direct way a guest could ever be named in a grant on this machine.
+    session.stop(WEB_GUEST);
+    session.resume(WEB_GUEST);
+    expect(broadcastToPeers.at(-1)).toMatchObject({
+      type: 'control.grant',
+      targetMembershipId: WEB_GUEST,
+    });
+
+    // The announcement went out; the authority did not.
+    expect(await session.offer(WEB_GUEST, click({ membershipId: WEB_GUEST }))).toEqual({
+      injected: false,
+      reason: 'guest',
+    });
+    expect(injected).toEqual([]);
+  });
+
+  it('learns who is a guest before it is asked to judge anything', async () => {
+    // A guest who joins mid-call is a guest from that moment: the set is fed
+    // from every layup state update, not only at membership time.
+    session.applyShareEvent(TYPE_SCREEN_STARTED, share);
+    session.setAllowed('pointer', true);
+    session.setParticipants([{ membershipId: WEB_GUEST, isGuest: true }]);
+
+    expect(await session.offer(WEB_GUEST, click({ membershipId: WEB_GUEST }))).toEqual({
+      injected: false,
+      reason: 'guest',
+    });
   });
 
   it('stops the share through the control plane, and revokes with it', async () => {

@@ -102,3 +102,68 @@ describe('camera and microphone', () => {
     }
   });
 });
+
+describe('the devices somebody chose', () => {
+  /** A stream whose tracks can actually be swapped, as a real one can. */
+  function switchableStream(id: string) {
+    let tracks = [fakeTrack('video'), fakeTrack('audio')];
+    return {
+      id,
+      getTracks: () => [...tracks],
+      getVideoTracks: () => tracks.filter((track) => track.kind === 'video'),
+      getAudioTracks: () => tracks.filter((track) => track.kind === 'audio'),
+      addTrack: (track: MediaStreamTrack) => tracks.push(track),
+      removeTrack: (track: MediaStreamTrack) => (tracks = tracks.filter((entry) => entry !== track)),
+    } as unknown as MediaStream & { id: string };
+  }
+
+  it('is remembered across a leave and a rejoin', async () => {
+    const asked: MediaStreamConstraints[] = [];
+    const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
+      asked.push(constraints);
+      return switchableStream('s');
+    });
+    const controller = createAvController({ getUserMedia });
+
+    await controller.start('mem_1', { camera: true, microphone: true });
+    await controller.setMicrophoneDevice('mic_usb');
+    controller.setSpeaker('spk_1');
+    controller.stop();
+    const state = await controller.start('mem_2', { camera: true, microphone: true });
+
+    expect(asked.at(-1)).toEqual({ audio: { deviceId: { exact: 'mic_usb' } }, video: true });
+    expect(state.microphoneId).toBe('mic_usb');
+    // Output too: it is a preference about this machine, not about one call.
+    expect(state.speakerId).toBe('spk_1');
+  });
+
+  it('joins on the default when a remembered device is not plugged in', async () => {
+    let attempt = 0;
+    const asked: MediaStreamConstraints[] = [];
+    const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
+      asked.push(constraints);
+      attempt += 1;
+      // The first call opens the devices; the third is the rejoin, where the
+      // remembered microphone is no longer there.
+      if (attempt === 3) {
+        const error = new Error('gone');
+        error.name = 'OverconstrainedError';
+        throw error;
+      }
+      return switchableStream(`s${attempt}`);
+    });
+    const controller = createAvController({ getUserMedia });
+
+    await controller.start('mem_1', { camera: true, microphone: true });
+    await controller.setMicrophoneDevice('mic_usb');
+    controller.stop();
+    const state = await controller.start('mem_2', { camera: true, microphone: true });
+
+    // Joining with no media at all because of a preference would be worse than
+    // the preference being quietly dropped.
+    expect(state.stream).toBeTruthy();
+    expect(state.error).toBeUndefined();
+    expect(state.microphoneId).toBeUndefined();
+    expect(asked.at(-1)).toEqual({ audio: true, video: true });
+  });
+});

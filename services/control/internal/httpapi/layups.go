@@ -24,6 +24,12 @@ type ParticipantDTO struct {
 	// IsCreatorMembership is true only while this membership still holds
 	// creator authority. After the creator leaves it is false for everyone.
 	IsCreatorMembership bool `json:"isCreatorMembership"`
+	// IsGuest is true for a membership held by a browser visitor who arrived
+	// by link rather than someone this server knows. The client only ever
+	// sees membership ids on the wire, never user ids, so this is the one
+	// place it can tell the two apart - input-guard.ts's refusal to ever hand
+	// a guest the mouse or keyboard depends on it.
+	IsGuest bool `json:"isGuest"`
 }
 
 // LayupDTO is the wire shape of a layup and its participants.
@@ -271,6 +277,21 @@ func (s *Server) mayEnter(view domain.LayupView, identity Identity) error {
 
 // mayObserve decides whether an identity may read a layup's detail.
 func (s *Server) mayObserve(view domain.LayupView, identity Identity) error {
+	if identity.IsGuest() {
+		// A guest is deliberately in no organisation (guest_auth.go), so the
+		// organisation comparison below would refuse them the very layup they
+		// were invited into. Their entitlement is stated separately, and it is
+		// narrower: the one layup their session names, and only while they are
+		// still in it. Nothing about any other layup is answerable to them,
+		// whatever its visibility.
+		if view.Layup.ID != identity.Guest.LayupID {
+			return domain.ErrNotFound
+		}
+		if membershipOf(view, identity.User.ID) == "" {
+			return domain.ErrNotFound
+		}
+		return nil
+	}
 	if view.Layup.OrganisationID != identity.OrganisationID() {
 		return domain.ErrNotFound
 	}
@@ -289,6 +310,16 @@ func (s *Server) mayObserve(view domain.LayupView, identity Identity) error {
 // afterLayupChange republishes everything a membership change affects: the
 // layup state to its participants, and presence/activity to the organisation.
 func (s *Server) afterLayupChange(ctx context.Context, view domain.LayupView, actor domain.User) {
+	// A layup ends when its last participant leaves (domain.LayupService.Leave),
+	// and everything that was a way *into* it must end with it: the link stops
+	// resolving, and every guest session it let in stops authenticating. This
+	// is hooked to the event rather than to a timer, so there is no window in
+	// which a link outlives the room it opened.
+	if !view.Active() {
+		s.links.revoke(view.Layup.ID)
+		s.guests.endLayup(view.Layup.ID)
+	}
+
 	env, err := protocol.NewEnvelope(TypeLayupState, s.layupDTO(view))
 	if err == nil {
 		recipients := make([]domain.UserID, 0, len(view.Participants))
@@ -315,9 +346,15 @@ func (s *Server) afterLayupChange(ctx context.Context, view domain.LayupView, ac
 func (s *Server) layupDTO(view domain.LayupView) LayupDTO {
 	participants := make([]ParticipantDTO, 0, len(view.Participants))
 	for _, participant := range view.Participants {
+		// The directory is the first source and stays that way. It simply has
+		// no answer for a guest - who is in no directory by design - and an
+		// unnamed participant is worse than useless: the people in the call
+		// would see a blank row where a person is.
 		name := ""
 		if user, err := s.directory.UserByID(participant.UserID); err == nil {
 			name = user.DisplayName
+		} else if guestName, ok := s.guests.displayName(participant.UserID); ok {
+			name = guestName
 		}
 		participants = append(participants, ParticipantDTO{
 			MembershipID:        string(participant.MembershipID),
@@ -326,6 +363,7 @@ func (s *Server) layupDTO(view domain.LayupView) LayupDTO {
 			JoinedAt:            participant.JoinedAt,
 			LeftAt:              participant.LeftAt,
 			IsCreatorMembership: participant.IsCreatorMembership,
+			IsGuest:             s.isGuestUser(participant.UserID),
 		})
 	}
 	dto := LayupDTO{

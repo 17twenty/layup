@@ -68,7 +68,8 @@ func TestNobodyAsksWhereTakingIsAllowed(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("mint link: %d", code)
 	}
-	if code := call(t, s, http.MethodPost, "/api/links/"+link.Token+"/join", "karl", nil).Code; code != http.StatusOK {
+	if code := call(t, s, http.MethodPost, "/api/links/join", "karl",
+		map[string]string{"token": link.Token}).Code; code != http.StatusOK {
 		t.Fatalf("join: %d", code)
 	}
 	if _, code := startShare(t, s, "nick", created.Layup.ID, "screen:1:0"); code != http.StatusOK {

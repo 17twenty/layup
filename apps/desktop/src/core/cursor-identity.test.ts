@@ -10,6 +10,7 @@ const participant = (membershipId: string, displayName: string, leftAt?: string)
   displayName,
   joinedAt: '2026-08-14T09:00:00Z',
   isCreatorMembership: false,
+  isGuest: false,
   ...(leftAt ? { leftAt } : {}),
 });
 

@@ -84,6 +84,14 @@ describe('realtime client', () => {
     );
   });
 
+  it('puts the token on the realtime url', () => {
+    expect(realtimeUrl('https://layup.blah.au', '', 't0ken')).toContain('token=t0ken');
+  });
+
+  it('leaves the dev handshake alone when there is no token', () => {
+    expect(realtimeUrl('http://127.0.0.1:8787', 'nick')).toContain('devUser=nick');
+  });
+
   it('reports connected once the server says hello', () => {
     const c = client();
     c.start();

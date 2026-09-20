@@ -9,3 +9,9 @@ coverage/
 !.env.example
 *.local
 .venv/
+
+# Build outputs and signing material. `build/` above is broad; the packaging
+# resources under apps/desktop/build are source and must stay tracked.
+apps/desktop/release/
+!apps/desktop/build/
+*.p8

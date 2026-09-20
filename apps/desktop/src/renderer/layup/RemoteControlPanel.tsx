@@ -1,5 +1,6 @@
 import type { ControlScope } from '@layup/protocol';
 import type { RemoteControlState } from '../../core/remote-control';
+import type { PermissionState } from '../../shared/ipc';
 
 /**
  * Two switches (SPEC.md §7.3, ADR-0005).
@@ -23,6 +24,16 @@ export interface RemoteControlPanelProps {
   onSetAllowed: (scope: ControlScope, allowed: boolean) => void;
   onStop: (membershipId: string) => void;
   onResume: (membershipId: string) => void;
+  /**
+   * macOS Accessibility, as the input helper itself reports it.
+   *
+   * Without it `CGEventPost` discards every event in silence - the guest
+   * clicks and this machine ignores them, which the helper's own source calls
+   * the worst possible failure. So when it is missing, the switches are not
+   * shown at all: a checkbox that flips and changes nothing *is* that failure.
+   */
+  accessibility?: PermissionState;
+  onOpenAccessibilitySettings?: () => void;
 }
 
 const SCOPES: Array<{ scope: ControlScope; label: string }> = [
@@ -36,7 +47,13 @@ export function RemoteControlPanel({
   onSetAllowed,
   onStop,
   onResume,
+  accessibility,
+  onOpenAccessibilitySettings,
 }: RemoteControlPanelProps) {
+  // Only a reported refusal blocks the panel. Unknown - a helper that has not
+  // answered yet - leaves the switches where they were, because "we have not
+  // heard" is not "macOS said no".
+  const blocked = Boolean(accessibility && !accessibility.ok);
   const stopped = new Map(state.stopped.map((entry) => [entry.membershipId, entry.scopes]));
   const sharing = SCOPES.filter(({ scope }) => state.allowed[scope]).map(({ label }) =>
     label.toLowerCase(),
@@ -44,25 +61,46 @@ export function RemoteControlPanel({
 
   return (
     <section className="control" aria-label="Sharing control of this machine">
-      <div className="control__switches">
-        {SCOPES.map(({ scope, label }) => (
-          <label key={scope} className="control__switch">
-            <input
-              type="checkbox"
-              checked={state.allowed[scope]}
-              onChange={(event) => onSetAllowed(scope, event.target.checked)}
-              data-testid={`allow-${scope}`}
-            />
-            <span>{label}</span>
-          </label>
-        ))}
-      </div>
+      {blocked ? (
+        // No switch, and no summary either: a grant left over from before the
+        // permission went away would otherwise read "Everyone here can use
+        // your mouse", which is the exact sentence that is not true.
+        <div className="control__blocked" role="alert" data-testid="control-accessibility">
+          <p>{accessibility?.guidance}</p>
+          {accessibility?.canOpenSettings ? (
+            <button
+              type="button"
+              className="tile__action"
+              onClick={() => onOpenAccessibilitySettings?.()}
+              data-testid="open-accessibility-settings"
+            >
+              Open Settings
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <div className="control__switches">
+            {SCOPES.map(({ scope, label }) => (
+              <label key={scope} className="control__switch">
+                <input
+                  type="checkbox"
+                  checked={state.allowed[scope]}
+                  onChange={(event) => onSetAllowed(scope, event.target.checked)}
+                  data-testid={`allow-${scope}`}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
 
-      <p className="control__summary" data-testid="control-summary">
-        {sharing.length === 0
-          ? 'Only you can use this machine.'
-          : `Everyone here can use your ${sharing.join(' and ')}.`}
-      </p>
+          <p className="control__summary" data-testid="control-summary">
+            {sharing.length === 0
+              ? 'Only you can use this machine.'
+              : `Everyone here can use your ${sharing.join(' and ')}.`}
+          </p>
+        </>
+      )}
 
       {stopped.size > 0 ? (
         <ul className="control__people">
@@ -87,7 +125,7 @@ export function RemoteControlPanel({
 
       {/* Stopping somebody is the exception, so it lives with the people, not
           with the switches - and only while sharing is actually on. */}
-      {sharing.length > 0 && participants.length > 0 ? (
+      {!blocked && sharing.length > 0 && participants.length > 0 ? (
         <details className="control__more">
           <summary>Stop one person</summary>
           <ul className="control__people">

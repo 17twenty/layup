@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { SharedScreen } from './SharedScreen';
 import type { RemoteMedia } from '../../core/session';
 
@@ -49,5 +49,29 @@ describe('shared screen', () => {
       />,
     );
     expect(screen.getByText(/reconnecting…/)).toBeTruthy();
+  });
+});
+
+describe('a shared screen that carries sound', () => {
+  afterEach(() => {
+    delete (HTMLMediaElement.prototype as { setSinkId?: unknown }).setSinkId;
+  });
+
+  it('plays out of the chosen speaker', async () => {
+    const setSinkId = vi.fn(async () => {});
+    Object.defineProperty(HTMLMediaElement.prototype, 'setSinkId', {
+      configurable: true,
+      writable: true,
+      value: setSinkId,
+    });
+
+    render(<SharedScreen remotes={[remote({ screen: stream() })]} speakerId="spk_1" />);
+
+    await waitFor(() => expect(setSinkId).toHaveBeenCalledWith('spk_1'));
+  });
+
+  it('does not throw where setSinkId is not available', async () => {
+    render(<SharedScreen remotes={[remote({ screen: stream() })]} speakerId="spk_1" />);
+    await waitFor(() => expect(screen.getByTestId('shared-screen')).toBeTruthy());
   });
 });

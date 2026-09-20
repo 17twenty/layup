@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Invitations } from './Invitations';
 import type { RequestsResponse } from '../../shared/ipc';
@@ -162,6 +162,100 @@ describe('incoming invitation experience', () => {
     await waitFor(() => expect(screen.getByText('Knocking…')).toBeTruthy());
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(bridge.api.cancel).toHaveBeenCalledWith(invitation.id);
+  });
+
+  it('restores the card and explains when accept itself fails', async () => {
+    // Same shape as the existing decline-failure test, but for the button the
+    // report was actually about. This passed even before the fix (the request
+    // was still valid when it was restored) - it is here as a baseline next to
+    // the case below, which did not.
+    const bridge = stub({ incoming: [invitation], outgoing: [] });
+    bridge.api.accept.mockRejectedValueOnce(new Error('POST failed with HTTP 409'));
+
+    render(<Invitations />);
+    await waitFor(() => expect(screen.getByTestId(`incoming-${invitation.id}`)).toBeTruthy());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Join' }));
+    await waitFor(() => expect(screen.getByText(/HTTP 409/)).toBeTruthy());
+    expect(screen.getByTestId(`incoming-${invitation.id}`)).toBeTruthy();
+  });
+
+  it('surfaces the error even when the round trip outlives the invitation - the bug behind the report', async () => {
+    // This reproduces "I could not hit join": the person clicks Join, the
+    // card is optimistically hidden, and by the time the accept call comes
+    // back (rejected - a conflict, a timeout, anything) the request's own
+    // countdown has also run out. Before the fix, `visible` was empty for
+    // every reason (hidden while resolving, then filtered as expired) and the
+    // component's early return hid the error along with everything else: a
+    // click that produced no card, no message, nothing.
+    vi.useRealTimers();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const bridge = stub({
+      incoming: [{ ...invitation, expiresAt: '2026-08-13T09:00:05.000Z' }], // 5s to live
+      outgoing: [],
+    });
+    let reject: ((error: Error) => void) | undefined;
+    bridge.api.accept.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, rej) => {
+          reject = rej;
+        }),
+    );
+
+    render(<Invitations />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+
+    // The round trip is slow enough that the invitation's own clock runs out
+    // before the server answers.
+    act(() => {
+      vi.setSystemTime(NOW + 7_000);
+      vi.advanceTimersByTime(7_000);
+    });
+
+    await act(async () => {
+      reject?.(new Error('POST failed with HTTP 409'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/HTTP 409/)).toBeTruthy();
+  });
+
+  it('tells the user a request expired instead of letting the card vanish silently', async () => {
+    vi.useRealTimers();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    stub({ incoming: [{ ...invitation, expiresAt: '2026-08-13T09:00:05.000Z' }], outgoing: [] });
+
+    render(<Invitations />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId(`incoming-${invitation.id}`)).toBeTruthy();
+
+    act(() => {
+      vi.setSystemTime(NOW + 6_000);
+      vi.advanceTimersByTime(6_000);
+    });
+
+    expect(screen.queryByTestId(`incoming-${invitation.id}`)).toBeNull();
+    expect(screen.getByText("Nick's invitation expired.")).toBeTruthy();
+  });
+
+  it('accepting still works when the invite arrived while already in another layup', async () => {
+    const bridge = stub({ incoming: [invitation], outgoing: [] });
+    render(<Invitations currentLayupId="lay_current01" />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Join theirs' })).toBeTruthy());
+    await userEvent.click(screen.getByRole('button', { name: 'Join theirs' }));
+
+    expect(bridge.api.accept).toHaveBeenCalledWith(invitation.id);
+    expect(screen.queryByTestId(`incoming-${invitation.id}`)).toBeNull();
   });
 });
 
